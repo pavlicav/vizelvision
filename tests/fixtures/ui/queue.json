@@ -1,0 +1,1325 @@
+{
+ "games": {},
+ "hold": null,
+ "items": [
+  {
+   "after_game_date": null,
+   "after_game_league": null,
+   "after_game_pk": null,
+   "after_game_title": null,
+   "after_program": null,
+   "channel": "NBC",
+   "completed_at": "2026-10-02T00:17:51.469948+00:00",
+   "created_at": "2026-10-01T23:50:01.507873+00:00",
+   "error": {
+    "code": "source_prepare_failed",
+    "message": "The Roku capture device is missing or inaccessible"
+   },
+   "game": {
+    "game_date": "2026-10-01",
+    "game_pk": 849844,
+    "league": "mlb",
+    "title": "Philadelphia Phillies at Atlanta Braves"
+   },
+   "gate_checked_at": "2026-10-02T00:17:51.290173+00:00",
+   "gate_detail": "The Roku capture device is missing or inaccessible",
+   "gate_status": "failed",
+   "hold_end": null,
+   "id": "21d1b99b6eb14d51b7bc06a85106676d",
+   "ident_at": null,
+   "kind": "game",
+   "late": false,
+   "origin": "programming",
+   "position": 0,
+   "prepare_attempts": 2,
+   "prepared_input_id": null,
+   "preroll_attempts": 0,
+   "preroll_retry_at": null,
+   "prerolled_at": null,
+   "program": null,
+   "recovery": false,
+   "release_type": "at_time",
+   "result": null,
+   "retry_at": "2026-10-02T00:17:51.289014+00:00",
+   "run_at": "2026-10-02T00:00:00+00:00",
+   "schedule_id": null,
+   "schedule_key": "2026-10-02T00:00:00+00:00|game|4c61739c27af4efa8961bdcef828f32e|{\"channel_id\": \"NBC\", \"date\": null, \"source_id\": \"youtube-tv\"}",
+   "skip_after": null,
+   "started_at": "2026-10-02T00:17:51.290173+00:00",
+   "status": "blocked",
+   "target": {
+    "channel_id": "NBC",
+    "source_id": "youtube-tv"
+   },
+   "title": "Philadelphia Phillies at Atlanta Braves",
+   "tune_anyway": false
+  },
+  {
+   "after_game_date": null,
+   "after_game_league": null,
+   "after_game_pk": null,
+   "after_game_title": null,
+   "after_program": null,
+   "channel": "401872964",
+   "completed_at": null,
+   "created_at": "2026-10-02T01:00:07.684172+00:00",
+   "error": null,
+   "game": null,
+   "gate_checked_at": null,
+   "gate_detail": null,
+   "gate_status": "waiting",
+   "hold_end": {
+    "game": {
+     "game_date": "2026-10-01",
+     "game_pk": 401872964,
+     "league": "nfl",
+     "title": "Pittsburgh Steelers at Cleveland Browns"
+    }
+   },
+   "id": "d33ae12bfbcb4257ab79c634f851d074",
+   "ident_at": null,
+   "kind": null,
+   "late": false,
+   "origin": null,
+   "position": 1,
+   "prepare_attempts": 0,
+   "prepared_input_id": null,
+   "preroll_attempts": 0,
+   "preroll_retry_at": null,
+   "prerolled_at": null,
+   "program": null,
+   "recovery": false,
+   "release_type": "after_current",
+   "result": null,
+   "retry_at": null,
+   "run_at": null,
+   "schedule_id": null,
+   "schedule_key": null,
+   "skip_after": null,
+   "started_at": null,
+   "status": "queued",
+   "target": {
+    "channel_id": "401872964",
+    "date": "2026-10-01",
+    "source_id": "thursday-night-football"
+   },
+   "title": null,
+   "tune_anyway": false
+  },
+  {
+   "after_game_date": "2026-10-01",
+   "after_game_league": "mlb",
+   "after_game_pk": 849844,
+   "after_game_title": "Philadelphia Phillies at Atlanta Braves",
+   "after_program": null,
+   "channel": "off-air",
+   "completed_at": "2026-10-02T01:00:51.390189+00:00",
+   "created_at": "2026-10-01T23:50:01.535608+00:00",
+   "error": null,
+   "game": null,
+   "gate_checked_at": null,
+   "gate_detail": "Removed from Up next",
+   "gate_status": "waiting",
+   "hold_end": null,
+   "id": "7d79c7f0468d4293b01c6ff7bf055422",
+   "ident_at": null,
+   "kind": "backup",
+   "late": false,
+   "origin": "programming",
+   "position": 2,
+   "prepare_attempts": 0,
+   "prepared_input_id": null,
+   "preroll_attempts": 0,
+   "preroll_retry_at": null,
+   "prerolled_at": null,
+   "program": null,
+   "recovery": false,
+   "release_type": "after_game",
+   "result": null,
+   "retry_at": null,
+   "run_at": "2026-10-02T00:00:00+00:00",
+   "schedule_id": null,
+   "schedule_key": "2026-10-02T00:00:00+00:00|backup|4c61739c27af4efa8961bdcef828f32e:None|{\"channel_id\": \"off-air\", \"date\": null, \"source_id\": \"off-air\"}",
+   "skip_after": "2026-10-02T04:00:00+00:00",
+   "started_at": null,
+   "status": "skipped",
+   "target": {
+    "channel_id": "off-air",
+    "source_id": "off-air"
+   },
+   "title": "OFF AIR",
+   "tune_anyway": false
+  },
+  {
+   "after_game_date": null,
+   "after_game_league": null,
+   "after_game_pk": null,
+   "after_game_title": null,
+   "after_program": null,
+   "channel": "wrc_hd_4_1",
+   "completed_at": "2026-10-02T00:39:28.085469+00:00",
+   "created_at": "2026-10-02T00:38:58.339509+00:00",
+   "error": null,
+   "game": null,
+   "gate_checked_at": "2026-10-02T00:39:00.340256+00:00",
+   "gate_detail": null,
+   "gate_status": "taken",
+   "hold_end": {
+    "program": {
+     "id": "tv-thing-digital:wrc_hd_4_1:5102:1790899200",
+     "title": "2026 MLB Playoffs"
+    },
+    "until": "2026-10-02T03:00:00+00:00"
+   },
+   "id": "54da8aa28483450f8796c966c759d541",
+   "ident_at": null,
+   "kind": null,
+   "late": false,
+   "origin": null,
+   "position": 0,
+   "prepare_attempts": 0,
+   "prepared_input_id": null,
+   "preroll_attempts": 0,
+   "preroll_retry_at": null,
+   "prerolled_at": null,
+   "program": null,
+   "recovery": false,
+   "release_type": "at_time",
+   "result": {
+    "can_prepare": true,
+    "can_take": false,
+    "cleanup_warning": null,
+    "crawl": {
+     "alerts": [],
+     "bulletin": null,
+     "bulletins_ended": [
+      {
+       "at": 1790889512.618684,
+       "how": "done",
+       "key": "transit-cea4ab1cb8"
+      },
+      {
+       "at": 1790889721.332655,
+       "how": "done",
+       "key": "transit-87bd244a7d"
+      },
+      {
+       "at": 1790890124.61116,
+       "how": "done",
+       "key": "dc_alerts-ae78c270af"
+      },
+      {
+       "at": 1790890440.3895202,
+       "how": "done",
+       "key": "coming_up-317dc22b87"
+      },
+      {
+       "at": 1790890792.028462,
+       "how": "done",
+       "key": "transit-c304c465cc"
+      },
+      {
+       "at": 1790900325.3880954,
+       "how": "done",
+       "key": "transit-1b7ddbe6a5"
+      },
+      {
+       "at": 1790900728.9307528,
+       "how": "done",
+       "key": "dc_alerts-2acae03250"
+      },
+      {
+       "at": 1790901045.7519724,
+       "how": "done",
+       "key": "coming_up-4c8f5f5cbe"
+      },
+      {
+       "at": 1790901217.2033677,
+       "how": "done",
+       "key": "transit-c948284953"
+      }
+     ],
+     "eas": {
+      "areas": [
+       "011001"
+      ],
+      "checked_at": 1790901563.085192,
+      "error": null,
+      "url": "http://127.0.0.1:8090/eas"
+     },
+     "error": null,
+     "items": [],
+     "key": null,
+     "kind": null,
+     "label": null,
+     "nws": {
+      "checked_at": 1790901541.6991627,
+      "error": null,
+      "zones": [
+       "DCZ001",
+       "DCC001"
+      ]
+     },
+     "on_air": false,
+     "rotation_alerts": [],
+     "style": null
+    },
+    "error": null,
+    "ident": {
+     "duration_seconds": null,
+     "enabled": true,
+     "error": null,
+     "file": "51165ce03d9bdeb5f370e90df5f73d4e.mp4",
+     "held": false,
+     "on_air": false,
+     "ready": false
+    },
+    "input_tracks": {
+     "on_air": {
+      "audio": {
+       "age_seconds": 0.01,
+       "buffers": 1279,
+       "late_dropped": 0,
+       "max_packet_gap_seconds": 0.0,
+       "packet_age_seconds": null,
+       "rtp_packets": 0
+      },
+      "video": {
+       "age_seconds": 0.014,
+       "buffers": 1660,
+       "late_dropped": 0,
+       "max_packet_gap_seconds": 0.0,
+       "packet_age_seconds": null,
+       "rtp_packets": 0
+      }
+     }
+    },
+    "last_completed": {
+     "at": 1790891914.7723358,
+     "input_id": "3d0cc515ee094491bbadd8fda2213628",
+     "target": {
+      "channel_id": "station-id",
+      "generation": "25238016:1790887834285049490",
+      "id": "3d0cc515ee094491bbadd8fda2213628",
+      "media": {
+       "duration_seconds": 30.0,
+       "position_seconds": 30.0
+      },
+      "source_id": "ident"
+     }
+    },
+    "last_input_failure": {
+     "at": 1790892236.0215504,
+     "error": "Input audio timestamps changed (delta_ms=-52.765853); prepare the source again",
+     "target": {
+      "channel_id": "NBC",
+      "generation": "15d65a9fa8dc4d05960f7868a378a9b2",
+      "id": "6a632b05e9ce45b3ba7e48dbdd67a011",
+      "resolved_source": {
+       "label": "NBC",
+       "provider": "youtube_tv"
+      },
+      "source_id": "youtube-tv"
+     },
+     "tracks": {
+      "audio": {
+       "age_seconds": 0.027,
+       "buffers": 4,
+       "late_dropped": 0,
+       "max_packet_gap_seconds": 2.016,
+       "packet_age_seconds": 0.015,
+       "rtp_packets": 24
+      },
+      "video": {
+       "age_seconds": 0.038,
+       "buffers": 1,
+       "late_dropped": 0,
+       "max_packet_gap_seconds": 2.005,
+       "packet_age_seconds": 0.004,
+       "rtp_packets": 65
+      }
+     },
+     "was_on_air": false
+    },
+    "last_station_id": {
+     "after": {
+      "channel_id": "NBC",
+      "generation": "17547bec269b431496ecee1974220b2d",
+      "id": "a9668e70a7b241efb1a1b38c5035f4f8",
+      "resolved_source": {
+       "label": "NBC",
+       "provider": "youtube_tv"
+      },
+      "source_id": "youtube-tv"
+     },
+     "at": 1790901538.5569098,
+     "file": "sports-65d45ff77e80f0e7.mp4"
+    },
+    "library_enabled": true,
+    "on_air": {
+     "channel_id": "wrc_hd_4_1",
+     "generation": "1790899966456930726-2",
+     "id": "86bb133fa012485facf3a3fefac6303d",
+     "quality": "medium",
+     "shared_with": "VCR",
+     "source_id": "tv-thing-digital"
+    },
+    "operation": {
+     "action": "take",
+     "error": null,
+     "error_code": null,
+     "id": "d59b5c4652154fffbbbecf6a60e08687",
+     "state": "succeeded"
+    },
+    "prepared": null,
+    "production_error": null,
+    "publisher_ready": true,
+    "recovery": null,
+    "roku_enabled": true,
+    "state": "live",
+    "tracks": {
+     "audio": {
+      "age_seconds": 0.015,
+      "backwards": 0,
+      "buffers": 588773,
+      "lag_seconds": 0.231
+     },
+     "video": {
+      "age_seconds": 0.013,
+      "backwards": 0,
+      "buffers": 753629,
+      "lag_seconds": 0.234
+     }
+    },
+    "tv_thing_enabled": true
+   },
+   "retry_at": null,
+   "run_at": "2026-10-02T00:39:00.339393+00:00",
+   "schedule_id": null,
+   "schedule_key": null,
+   "skip_after": null,
+   "started_at": "2026-10-02T00:39:00.340256+00:00",
+   "status": "succeeded",
+   "target": {
+    "channel_id": "wrc_hd_4_1",
+    "quality": "medium",
+    "source_id": "tv-thing-digital"
+   },
+   "title": null,
+   "tune_anyway": false
+  },
+  {
+   "after_game_date": null,
+   "after_game_league": null,
+   "after_game_pk": null,
+   "after_game_title": null,
+   "after_program": null,
+   "channel": "NBC",
+   "completed_at": "2026-10-02T00:38:33.015410+00:00",
+   "created_at": "2026-10-02T00:37:15.183381+00:00",
+   "error": null,
+   "game": {
+    "game_date": "2026-10-01",
+    "game_pk": 849844,
+    "league": "mlb",
+    "title": "Philadelphia Phillies at Atlanta Braves"
+   },
+   "gate_checked_at": "2026-10-02T00:38:32.923119+00:00",
+   "gate_detail": "Prepared early; cuts at 20:37",
+   "gate_status": "taken",
+   "hold_end": {
+    "game": {
+     "game_date": "2026-10-01",
+     "game_pk": 849844,
+     "league": "mlb",
+     "title": "Philadelphia Phillies at Atlanta Braves"
+    }
+   },
+   "id": "36087ba25a604410805e8a4fadf35228",
+   "ident_at": null,
+   "kind": null,
+   "late": false,
+   "origin": null,
+   "position": 0,
+   "prepare_attempts": 0,
+   "prepared_input_id": null,
+   "preroll_attempts": 0,
+   "preroll_retry_at": null,
+   "prerolled_at": "2026-10-02T00:38:32.891964+00:00",
+   "program": null,
+   "recovery": false,
+   "release_type": "at_time",
+   "result": {
+    "can_prepare": true,
+    "can_take": false,
+    "cleanup_warning": null,
+    "crawl": {
+     "alerts": [],
+     "bulletin": null,
+     "bulletins_ended": [
+      {
+       "at": 1790889512.618684,
+       "how": "done",
+       "key": "transit-cea4ab1cb8"
+      },
+      {
+       "at": 1790889721.332655,
+       "how": "done",
+       "key": "transit-87bd244a7d"
+      },
+      {
+       "at": 1790890124.61116,
+       "how": "done",
+       "key": "dc_alerts-ae78c270af"
+      },
+      {
+       "at": 1790890440.3895202,
+       "how": "done",
+       "key": "coming_up-317dc22b87"
+      },
+      {
+       "at": 1790890792.028462,
+       "how": "done",
+       "key": "transit-c304c465cc"
+      },
+      {
+       "at": 1790900325.3880954,
+       "how": "done",
+       "key": "transit-1b7ddbe6a5"
+      },
+      {
+       "at": 1790900728.9307528,
+       "how": "done",
+       "key": "dc_alerts-2acae03250"
+      },
+      {
+       "at": 1790901045.7519724,
+       "how": "done",
+       "key": "coming_up-4c8f5f5cbe"
+      },
+      {
+       "at": 1790901217.2033677,
+       "how": "done",
+       "key": "transit-c948284953"
+      }
+     ],
+     "eas": {
+      "areas": [
+       "011001"
+      ],
+      "checked_at": 1790901507.853392,
+      "error": null,
+      "url": "http://127.0.0.1:8090/eas"
+     },
+     "error": null,
+     "items": [],
+     "key": null,
+     "kind": null,
+     "label": null,
+     "nws": {
+      "checked_at": 1790901481.4400733,
+      "error": null,
+      "zones": [
+       "DCZ001",
+       "DCC001"
+      ]
+     },
+     "on_air": false,
+     "rotation_alerts": [],
+     "style": null
+    },
+    "error": null,
+    "ident": {
+     "duration_seconds": 30.0,
+     "enabled": true,
+     "error": null,
+     "file": "f8d25b67442354d7272a93f6adff8f18.mp4",
+     "held": false,
+     "on_air": false,
+     "ready": true
+    },
+    "input_tracks": {
+     "on_air": {
+      "audio": {
+       "age_seconds": 0.017,
+       "buffers": 173,
+       "late_dropped": 0,
+       "max_packet_gap_seconds": 1.792,
+       "packet_age_seconds": 0.039,
+       "rtp_packets": 56
+      },
+      "video": {
+       "age_seconds": 0.004,
+       "buffers": 222,
+       "late_dropped": 0,
+       "max_packet_gap_seconds": 1.791,
+       "packet_age_seconds": 0.003,
+       "rtp_packets": 2630
+      }
+     }
+    },
+    "last_completed": {
+     "at": 1790891914.7723358,
+     "input_id": "3d0cc515ee094491bbadd8fda2213628",
+     "target": {
+      "channel_id": "station-id",
+      "generation": "25238016:1790887834285049490",
+      "id": "3d0cc515ee094491bbadd8fda2213628",
+      "media": {
+       "duration_seconds": 30.0,
+       "position_seconds": 30.0
+      },
+      "source_id": "ident"
+     }
+    },
+    "last_input_failure": {
+     "at": 1790892236.0215504,
+     "error": "Input audio timestamps changed (delta_ms=-52.765853); prepare the source again",
+     "target": {
+      "channel_id": "NBC",
+      "generation": "15d65a9fa8dc4d05960f7868a378a9b2",
+      "id": "6a632b05e9ce45b3ba7e48dbdd67a011",
+      "resolved_source": {
+       "label": "NBC",
+       "provider": "youtube_tv"
+      },
+      "source_id": "youtube-tv"
+     },
+     "tracks": {
+      "audio": {
+       "age_seconds": 0.027,
+       "buffers": 4,
+       "late_dropped": 0,
+       "max_packet_gap_seconds": 2.016,
+       "packet_age_seconds": 0.015,
+       "rtp_packets": 24
+      },
+      "video": {
+       "age_seconds": 0.038,
+       "buffers": 1,
+       "late_dropped": 0,
+       "max_packet_gap_seconds": 2.005,
+       "packet_age_seconds": 0.004,
+       "rtp_packets": 65
+      }
+     },
+     "was_on_air": false
+    },
+    "last_station_id": {
+     "after": {
+      "channel_id": "tv-recordings/Jeopardy! - 7.1 WJLA - 2026-09-30 1930 (no ads).mp4",
+      "generation": "167538924:1790813215455631523",
+      "id": "cb6a1f3180cd49d6bf2748c0bf5b1fb5",
+      "media": {
+       "duration_seconds": 1153.2,
+       "position_seconds": 1153.2
+      },
+      "source_id": "library"
+     },
+     "at": 1790891884.79012,
+     "file": "520e7637ccaf42fa686ca89616f1318c.mp4"
+    },
+    "library_enabled": true,
+    "on_air": {
+     "channel_id": "NBC",
+     "generation": "17547bec269b431496ecee1974220b2d",
+     "id": "a9668e70a7b241efb1a1b38c5035f4f8",
+     "resolved_source": {
+      "label": "NBC",
+      "provider": "youtube_tv"
+     },
+     "source_id": "youtube-tv"
+    },
+    "operation": {
+     "action": "take",
+     "error": null,
+     "error_code": null,
+     "id": "4607f98f118a4e3b839cf2eea975792a",
+     "state": "succeeded"
+    },
+    "prepared": null,
+    "production_error": null,
+    "publisher_ready": true,
+    "recovery": null,
+    "roku_enabled": true,
+    "state": "live",
+    "tracks": {
+     "audio": {
+      "age_seconds": 0.005,
+      "backwards": 0,
+      "buffers": 586191,
+      "lag_seconds": 0.221
+     },
+     "video": {
+      "age_seconds": 0.004,
+      "backwards": 0,
+      "buffers": 750324,
+      "lag_seconds": 0.225
+     }
+    },
+    "tv_thing_enabled": true
+   },
+   "retry_at": null,
+   "run_at": "2026-10-02T00:37:17.183335+00:00",
+   "schedule_id": null,
+   "schedule_key": null,
+   "skip_after": null,
+   "started_at": "2026-10-02T00:38:32.923119+00:00",
+   "status": "succeeded",
+   "target": {
+    "channel_id": "NBC",
+    "source_id": "youtube-tv"
+   },
+   "title": null,
+   "tune_anyway": false
+  },
+  {
+   "after_game_date": null,
+   "after_game_league": null,
+   "after_game_pk": null,
+   "after_game_title": null,
+   "after_program": null,
+   "channel": "wrc_hd_4_1",
+   "completed_at": "2026-10-02T00:18:14.616445+00:00",
+   "created_at": "2026-10-02T00:18:10.895154+00:00",
+   "error": null,
+   "game": null,
+   "gate_checked_at": "2026-10-02T00:18:12.896414+00:00",
+   "gate_detail": null,
+   "gate_status": "taken",
+   "hold_end": {
+    "program": {
+     "id": "tv-thing-digital:wrc_hd_4_1:5102:1790899200",
+     "title": "2026 MLB Playoffs"
+    },
+    "until": "2026-10-02T03:00:00+00:00"
+   },
+   "id": "21905609331b483bad3e3e1e62b3cef8",
+   "ident_at": null,
+   "kind": null,
+   "late": false,
+   "origin": null,
+   "position": 0,
+   "prepare_attempts": 0,
+   "prepared_input_id": null,
+   "preroll_attempts": 0,
+   "preroll_retry_at": null,
+   "prerolled_at": null,
+   "program": null,
+   "recovery": false,
+   "release_type": "at_time",
+   "result": {
+    "can_prepare": true,
+    "can_take": false,
+    "cleanup_warning": null,
+    "crawl": {
+     "alerts": [],
+     "bulletin": {
+      "key": "loop-off_air",
+      "started": 1790900294.3490224
+     },
+     "bulletins_ended": [
+      {
+       "at": 1790889512.618684,
+       "how": "done",
+       "key": "transit-cea4ab1cb8"
+      },
+      {
+       "at": 1790889721.332655,
+       "how": "done",
+       "key": "transit-87bd244a7d"
+      },
+      {
+       "at": 1790890124.61116,
+       "how": "done",
+       "key": "dc_alerts-ae78c270af"
+      },
+      {
+       "at": 1790890440.3895202,
+       "how": "done",
+       "key": "coming_up-317dc22b87"
+      },
+      {
+       "at": 1790890792.028462,
+       "how": "done",
+       "key": "transit-c304c465cc"
+      }
+     ],
+     "eas": {
+      "areas": [
+       "011001"
+      ],
+      "checked_at": 1790900292.7925363,
+      "error": null,
+      "url": "http://127.0.0.1:8090/eas"
+     },
+     "error": null,
+     "items": [
+      {
+       "heading": "",
+       "tag": "BUS D6X",
+       "text": "Reduced Service. Expect delays until 10:45pm."
+      },
+      {
+       "heading": "",
+       "tag": "BUS D60",
+       "text": "Reduced Service. Expect delays until 10:20pm."
+      },
+      {
+       "heading": "",
+       "tag": "BUS D50",
+       "text": "Expect delays until 10:20pm."
+      },
+      {
+       "heading": "",
+       "tag": "ALERTDC",
+       "text": "National Capital Region (NCR) Flyover: Friday, October 2, 2026: The U.S. Military will conduct an aircraft flyover in the National Capital Region (NCR) over Arlington National Cemetery on Friday, October 2, 2026, at 1:05PM."
+      },
+      {
+       "heading": "",
+       "tag": "ALERTDC",
+       "text": "74th Annual Red Mass (October 4): On Sunday, October 4, 2026, the 74th Annual Red Mass will take place in the District of Columbia. In conjunction with this event, there will be parking restrictions and street closures motorists should take into consideration: On Sunday, October 4, 2026, from 5:00\u2026"
+      },
+      {
+       "heading": "",
+       "tag": "ALERTDC",
+       "text": "Woodrow Wilson Bridge Opening (October 1 11PM): The Woodrow Wilson Bridge Management reports there will be a bridge opening tonight, October 1, at 11PM for the passage of the \"Sweet Pea Boat\". The opening will last for approximately 15-20 minutes."
+      },
+      {
+       "heading": "",
+       "tag": "NOW",
+       "text": "Reagan National: Clear, 73\u00b0F, wind S 7 mph."
+      },
+      {
+       "heading": "",
+       "tag": "TONIGHT",
+       "text": "Partly Cloudy, low 65\u00b0F."
+      },
+      {
+       "heading": "",
+       "tag": "FRIDAY",
+       "text": "Mostly Sunny, high 89\u00b0F."
+      },
+      {
+       "heading": "",
+       "tag": "NOW ON CAIRO RADIO",
+       "text": "DAYTIME ALT SHOW \u00b7 SERGE GAINSBOURG, JANE BIRKIN \u2014 JE T'AIME MOI NON PLUS"
+      }
+     ],
+     "key": "loop-off_air",
+     "kind": "bulletin",
+     "label": "VIZELVISION",
+     "nws": {
+      "checked_at": 1790900276.6876156,
+      "error": null,
+      "zones": [
+       "DCZ001",
+       "DCC001"
+      ]
+     },
+     "on_air": true,
+     "rotation_alerts": [],
+     "style": "station"
+    },
+    "error": null,
+    "ident": {
+     "duration_seconds": 30.0,
+     "enabled": true,
+     "error": null,
+     "file": "51165ce03d9bdeb5f370e90df5f73d4e.mp4",
+     "held": false,
+     "on_air": false,
+     "ready": true
+    },
+    "input_tracks": {
+     "on_air": {
+      "audio": {
+       "age_seconds": 0.01,
+       "buffers": 43,
+       "late_dropped": 0,
+       "max_packet_gap_seconds": 0.0,
+       "packet_age_seconds": null,
+       "rtp_packets": 0
+      },
+      "video": {
+       "age_seconds": 0.012,
+       "buffers": 96,
+       "late_dropped": 0,
+       "max_packet_gap_seconds": 0.0,
+       "packet_age_seconds": null,
+       "rtp_packets": 0
+      }
+     }
+    },
+    "last_completed": {
+     "at": 1790891914.7723358,
+     "input_id": "3d0cc515ee094491bbadd8fda2213628",
+     "target": {
+      "channel_id": "station-id",
+      "generation": "25238016:1790887834285049490",
+      "id": "3d0cc515ee094491bbadd8fda2213628",
+      "media": {
+       "duration_seconds": 30.0,
+       "position_seconds": 30.0
+      },
+      "source_id": "ident"
+     }
+    },
+    "last_input_failure": {
+     "at": 1790892236.0215504,
+     "error": "Input audio timestamps changed (delta_ms=-52.765853); prepare the source again",
+     "target": {
+      "channel_id": "NBC",
+      "generation": "15d65a9fa8dc4d05960f7868a378a9b2",
+      "id": "6a632b05e9ce45b3ba7e48dbdd67a011",
+      "resolved_source": {
+       "label": "NBC",
+       "provider": "youtube_tv"
+      },
+      "source_id": "youtube-tv"
+     },
+     "tracks": {
+      "audio": {
+       "age_seconds": 0.027,
+       "buffers": 4,
+       "late_dropped": 0,
+       "max_packet_gap_seconds": 2.016,
+       "packet_age_seconds": 0.015,
+       "rtp_packets": 24
+      },
+      "video": {
+       "age_seconds": 0.038,
+       "buffers": 1,
+       "late_dropped": 0,
+       "max_packet_gap_seconds": 2.005,
+       "packet_age_seconds": 0.004,
+       "rtp_packets": 65
+      }
+     },
+     "was_on_air": false
+    },
+    "last_station_id": {
+     "after": {
+      "channel_id": "tv-recordings/Jeopardy! - 7.1 WJLA - 2026-09-30 1930 (no ads).mp4",
+      "generation": "167538924:1790813215455631523",
+      "id": "cb6a1f3180cd49d6bf2748c0bf5b1fb5",
+      "media": {
+       "duration_seconds": 1153.2,
+       "position_seconds": 1153.2
+      },
+      "source_id": "library"
+     },
+     "at": 1790891884.79012,
+     "file": "520e7637ccaf42fa686ca89616f1318c.mp4"
+    },
+    "library_enabled": true,
+    "on_air": {
+     "channel_id": "wrc_hd_4_1",
+     "generation": "1790899966456930726-2",
+     "id": "c911ecea61634c88b7de76750f1c6ab6",
+     "quality": "medium",
+     "shared_with": "VCR",
+     "source_id": "tv-thing-digital"
+    },
+    "operation": {
+     "action": "take",
+     "error": null,
+     "error_code": null,
+     "id": "40c218b8453e40d3ace57926e5ad32d7",
+     "state": "succeeded"
+    },
+    "prepared": null,
+    "production_error": null,
+    "publisher_ready": true,
+    "recovery": null,
+    "roku_enabled": true,
+    "state": "live",
+    "tracks": {
+     "audio": {
+      "age_seconds": 0.021,
+      "backwards": 0,
+      "buffers": 529078,
+      "lag_seconds": 0.237
+     },
+     "video": {
+      "age_seconds": 0.01,
+      "backwards": 0,
+      "buffers": 677220,
+      "lag_seconds": 0.23
+     }
+    },
+    "tv_thing_enabled": true
+   },
+   "retry_at": null,
+   "run_at": "2026-10-02T00:18:12.895066+00:00",
+   "schedule_id": null,
+   "schedule_key": null,
+   "skip_after": null,
+   "started_at": "2026-10-02T00:18:12.896414+00:00",
+   "status": "succeeded",
+   "target": {
+    "channel_id": "wrc_hd_4_1",
+    "quality": "medium",
+    "source_id": "tv-thing-digital"
+   },
+   "title": null,
+   "tune_anyway": false
+  },
+  {
+   "after_game_date": null,
+   "after_game_league": null,
+   "after_game_pk": null,
+   "after_game_title": null,
+   "after_program": null,
+   "channel": "NBC",
+   "completed_at": "2026-10-02T00:17:10.973332+00:00",
+   "created_at": "2026-10-01T22:03:50.212179+00:00",
+   "error": {
+    "code": "source_prepare_failed",
+    "message": "The Roku capture device is missing or inaccessible"
+   },
+   "game": null,
+   "gate_checked_at": "2026-10-01T22:09:57.903840+00:00",
+   "gate_detail": "Removed from Up next",
+   "gate_status": "failed",
+   "hold_end": null,
+   "id": "264360428c574acb8026410d4b10e1d5",
+   "ident_at": null,
+   "kind": "block",
+   "late": false,
+   "origin": "programming",
+   "position": 0,
+   "prepare_attempts": 2,
+   "prepared_input_id": null,
+   "preroll_attempts": 1,
+   "preroll_retry_at": "2026-10-01T22:04:16.026517+00:00",
+   "prerolled_at": null,
+   "program": null,
+   "recovery": true,
+   "release_type": "at_time",
+   "result": null,
+   "retry_at": "2026-10-01T22:09:57.902359+00:00",
+   "run_at": "2026-10-01T22:03:52.212179+00:00",
+   "schedule_id": null,
+   "schedule_key": "2026-10-01T22:00:00+00:00|block|muelx4tgqlvrzh10|{\"channel_id\": \"NBC\", \"date\": null, \"source_id\": \"youtube-tv\"}",
+   "skip_after": "2026-10-01T22:30:00+00:00",
+   "started_at": "2026-10-01T22:09:57.903840+00:00",
+   "status": "skipped",
+   "target": {
+    "channel_id": "NBC",
+    "source_id": "youtube-tv"
+   },
+   "title": "News 10",
+   "tune_anyway": false
+  },
+  {
+   "after_game_date": null,
+   "after_game_league": null,
+   "after_game_pk": null,
+   "after_game_title": null,
+   "after_program": null,
+   "channel": "wjla_7_1",
+   "completed_at": "2026-10-02T00:00:01.862550+00:00",
+   "created_at": "2026-10-01T23:20:13.420637+00:00",
+   "error": null,
+   "game": null,
+   "gate_checked_at": null,
+   "gate_detail": "Its scheduled slot ended before it could air",
+   "gate_status": "superseded",
+   "hold_end": null,
+   "id": "2e55df23226e4cd8968d76012fa3200c",
+   "ident_at": null,
+   "kind": "block",
+   "late": false,
+   "origin": "programming",
+   "position": 1,
+   "prepare_attempts": 0,
+   "prepared_input_id": null,
+   "preroll_attempts": 0,
+   "preroll_retry_at": null,
+   "prerolled_at": null,
+   "program": null,
+   "recovery": false,
+   "release_type": "at_time",
+   "result": null,
+   "retry_at": null,
+   "run_at": "2026-10-01T23:30:00+00:00",
+   "schedule_id": null,
+   "schedule_key": "2026-10-01T23:30:00+00:00|block|muelbpzvjazj65fh|{\"channel_id\": \"wjla_7_1\", \"date\": null, \"source_id\": \"tv-thing-digital\"}",
+   "skip_after": "2026-10-02T00:00:00+00:00",
+   "started_at": null,
+   "status": "skipped",
+   "target": {
+    "channel_id": "wjla_7_1",
+    "quality": "medium",
+    "source_id": "tv-thing-digital"
+   },
+   "title": "Jeopardy",
+   "tune_anyway": false
+  }
+ ],
+ "master_on_air": {
+  "channel_id": "wrc_hd_4_1",
+  "generation": "1790899966456930726-2",
+  "id": "86bb133fa012485facf3a3fefac6303d",
+  "quality": "medium",
+  "shared_with": "VCR",
+  "source_id": "tv-thing-digital"
+ },
+ "master_queue": true,
+ "next_scheduled": {
+  "key": "2026-10-02T04:00:00+00:00|off_air|None|{\"channel_id\": \"off-air\", \"date\": null, \"source_id\": \"off-air\"}",
+  "kind": "off_air",
+  "run_at": "2026-10-02T04:00:00+00:00",
+  "skip_after": "2026-10-02T15:00:00+00:00",
+  "target": {
+   "channel_id": "off-air",
+   "source_id": "off-air"
+  },
+  "title": "OFF AIR"
+ },
+ "on_air": null,
+ "pause_reason": "Review the queue and resume after startup",
+ "paused": true,
+ "schedule_enabled": true,
+ "scheduled_shows": [
+  {
+   "backup": {
+    "channel_id": "schedule",
+    "source_id": "schedule"
+   },
+   "backup_title": "Schedule",
+   "end": "2026-10-03T21:00:00+00:00",
+   "game": {
+    "game_date": "2026-10-03",
+    "game_pk": 849829,
+    "league": "mlb",
+    "title": "Chicago White Sox at Cleveland Guardians"
+   },
+   "game_start": "2026-10-03T17:00:00+00:00",
+   "id": "02097b9320ec40e2b66d46d21a7a4e49",
+   "mode": "game",
+   "start": "2026-10-03T17:00:00+00:00",
+   "target": {
+    "channel_id": "TBS",
+    "source_id": "youtube-tv"
+   },
+   "title": "Chicago White Sox at Cleveland Guardians"
+  },
+  {
+   "backup": {
+    "channel_id": "schedule",
+    "source_id": "schedule"
+   },
+   "backup_title": "Schedule",
+   "end": "2026-10-04T00:00:00+00:00",
+   "game": {
+    "game_date": "2026-10-03",
+    "game_pk": 849828,
+    "league": "mlb",
+    "title": "ATL/PHI at Los Angeles Dodgers"
+   },
+   "game_start": "2026-10-03T20:00:00+00:00",
+   "id": "d11bdc1f199148048d30ac15d7b8baaf",
+   "mode": "game",
+   "start": "2026-10-03T20:00:00+00:00",
+   "target": {
+    "channel_id": "FOX",
+    "source_id": "youtube-tv"
+   },
+   "title": "ATL/PHI at Los Angeles Dodgers"
+  },
+  {
+   "backup": {
+    "channel_id": "schedule",
+    "source_id": "schedule"
+   },
+   "backup_title": "Schedule",
+   "end": "2026-10-04T02:30:00+00:00",
+   "game": {
+    "game_date": "2026-10-03",
+    "game_pk": 849835,
+    "league": "mlb",
+    "title": "New York Yankees at Tampa Bay Rays"
+   },
+   "game_start": "2026-10-03T22:30:00+00:00",
+   "id": "db770d244ddd45a5b44a1f56a19d0e56",
+   "mode": "game",
+   "start": "2026-10-03T22:30:00+00:00",
+   "target": {
+    "channel_id": "TBS",
+    "source_id": "youtube-tv"
+   },
+   "title": "New York Yankees at Tampa Bay Rays",
+   "update": {
+    "at": "2026-10-01T15:41:51.530259+00:00",
+    "text": "Was NYY/BOS at Tampa Bay Rays"
+   }
+  },
+  {
+   "backup": {
+    "channel_id": "schedule",
+    "source_id": "schedule"
+   },
+   "backup_title": "Schedule",
+   "end": "2026-10-04T04:30:00+00:00",
+   "game": {
+    "game_date": "2026-10-03",
+    "game_pk": 849830,
+    "league": "mlb",
+    "title": "San Diego Padres at Milwaukee Brewers"
+   },
+   "game_start": "2026-10-04T00:30:00+00:00",
+   "id": "bc6e9fb0d9df4d5dbec2c486aa4b0430",
+   "mode": "game",
+   "start": "2026-10-04T00:30:00+00:00",
+   "target": {
+    "channel_id": "FS1",
+    "source_id": "youtube-tv"
+   },
+   "title": "San Diego Padres at Milwaukee Brewers"
+  },
+  {
+   "backup": {
+    "channel_id": "schedule",
+    "source_id": "schedule"
+   },
+   "backup_title": "Schedule",
+   "end": "2026-10-04T17:15:00+00:00",
+   "game": {
+    "game_date": "2026-10-04",
+    "game_pk": 401872965,
+    "league": "nfl",
+    "title": "Indianapolis Colts at Washington Commanders"
+   },
+   "game_start": "2026-10-04T13:30:00+00:00",
+   "id": "0e8a2d726f9f41298bc2a0e929260ba7",
+   "mode": "game",
+   "start": "2026-10-04T13:30:00+00:00",
+   "target": {
+    "channel_id": "NFL Network",
+    "source_id": "youtube-tv"
+   },
+   "title": "Indianapolis Colts at Washington Commanders"
+  },
+  {
+   "backup": {
+    "channel_id": "schedule",
+    "source_id": "schedule"
+   },
+   "backup_title": "Schedule",
+   "end": "2026-10-05T04:00:00+00:00",
+   "game": {
+    "game_date": "2026-10-04",
+    "game_pk": 849823,
+    "league": "mlb",
+    "title": "ATL/PHI at Los Angeles Dodgers"
+   },
+   "game_start": "2026-10-05T00:00:00+00:00",
+   "id": "42b93cb30f6240d09aeb3e1e4aa7864e",
+   "mode": "game",
+   "start": "2026-10-05T00:00:00+00:00",
+   "target": {
+    "channel_id": "FS1",
+    "source_id": "youtube-tv"
+   },
+   "title": "ATL/PHI at Los Angeles Dodgers"
+  },
+  {
+   "backup": {
+    "channel_id": "schedule",
+    "source_id": "schedule"
+   },
+   "backup_title": "Schedule",
+   "end": "2026-10-05T04:05:00+00:00",
+   "game": {
+    "game_date": "2026-10-04",
+    "game_pk": 401872978,
+    "league": "nfl",
+    "title": "Detroit Lions at Carolina Panthers"
+   },
+   "game_start": "2026-10-05T00:20:00+00:00",
+   "id": "733b5476afb24bb5a036bc1080d2ed19",
+   "mode": "game",
+   "start": "2026-10-05T00:20:00+00:00",
+   "target": {
+    "channel_id": "NBC",
+    "source_id": "youtube-tv"
+   },
+   "title": "Detroit Lions at Carolina Panthers"
+  },
+  {
+   "backup": {
+    "channel_id": "schedule",
+    "source_id": "schedule"
+   },
+   "backup_title": "Schedule",
+   "end": "2026-10-06T01:00:00+00:00",
+   "game": {
+    "game_date": "2026-10-05",
+    "game_pk": 849834,
+    "league": "mlb",
+    "title": "Chicago White Sox at Cleveland Guardians"
+   },
+   "game_start": "2026-10-05T21:00:00+00:00",
+   "id": "eb2a4f62d48a48649c4e4d5e57495f59",
+   "mode": "game",
+   "start": "2026-10-05T21:00:00+00:00",
+   "target": {
+    "channel_id": "TBS",
+    "source_id": "youtube-tv"
+   },
+   "title": "Chicago White Sox at Cleveland Guardians"
+  },
+  {
+   "backup": {
+    "channel_id": "schedule",
+    "source_id": "schedule"
+   },
+   "backup_title": "Schedule",
+   "end": "2026-10-06T04:00:00+00:00",
+   "game": {
+    "game_date": "2026-10-05",
+    "game_pk": 849839,
+    "league": "mlb",
+    "title": "New York Yankees at Tampa Bay Rays"
+   },
+   "game_start": "2026-10-06T00:00:00+00:00",
+   "id": "75712accede448a084dfdc5c94c17f4e",
+   "mode": "game",
+   "start": "2026-10-06T00:00:00+00:00",
+   "target": {
+    "channel_id": "TBS",
+    "source_id": "youtube-tv"
+   },
+   "title": "New York Yankees at Tampa Bay Rays",
+   "update": {
+    "at": "2026-10-01T15:41:51.530259+00:00",
+    "text": "Was NYY/BOS at Tampa Bay Rays"
+   }
+  },
+  {
+   "backup": {
+    "channel_id": "schedule",
+    "source_id": "schedule"
+   },
+   "backup_title": "Schedule",
+   "end": "2026-10-06T04:00:00+00:00",
+   "game": {
+    "game_date": "2026-10-05",
+    "game_pk": 401872979,
+    "league": "nfl",
+    "title": "Atlanta Falcons at New Orleans Saints"
+   },
+   "game_start": "2026-10-06T00:15:00+00:00",
+   "id": "13f19a8724544c638921e1f48ea0f1ff",
+   "mode": "game",
+   "start": "2026-10-06T00:15:00+00:00",
+   "target": {
+    "channel_id": "ESPN",
+    "source_id": "youtube-tv"
+   },
+   "title": "Atlanta Falcons at New Orleans Saints"
+  }
+ ]
+}

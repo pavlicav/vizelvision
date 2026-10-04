@@ -1,0 +1,208 @@
+{
+ "admute_mode": "on",
+ "ads": [
+  {
+   "added": 1790821000.0,
+   "again": null,
+   "allowed": true,
+   "audio": true,
+   "bytes": 18734112,
+   "duration": 30.03,
+   "enabled": true,
+   "file": "3f9c1a2b4d5e.mp4",
+   "gain_db": 3.8,
+   "height": 1080,
+   "id": "3f9c1a2b4d5e",
+   "limit": null,
+   "lufs": -23.8,
+   "name": "Cousin Vinny's Pizza",
+   "pics": 4,
+   "played": {
+    "day": 1,
+    "hour": 1,
+    "last": 1790907388.0,
+    "week": 1
+   },
+   "present": true,
+   "source_name": "vinny_pizza_30.mp4",
+   "trim_db": 0.0,
+   "width": 1920
+  },
+  {
+   "added": 1790900200.0,
+   "again": 1790909500.0,
+   "allowed": false,
+   "audio": true,
+   "bytes": 9012331,
+   "duration": 15.0,
+   "enabled": true,
+   "file": "7a1e0c9d8b2f.mov",
+   "gain_db": -3.8,
+   "height": 720,
+   "id": "7a1e0c9d8b2f",
+   "limit": {
+    "count": 1,
+    "minutes": 60
+   },
+   "lufs": -16.2,
+   "name": "Rocket Lawn Care",
+   "pics": 4,
+   "played": {
+    "day": 1,
+    "hour": 1,
+    "last": 1790905900.0,
+    "week": 1
+   },
+   "present": true,
+   "source_name": null,
+   "trim_db": 0.0,
+   "width": 1280
+  },
+  {
+   "added": 1790903800.0,
+   "again": null,
+   "allowed": false,
+   "audio": false,
+   "bytes": 2211000,
+   "duration": 20.5,
+   "enabled": false,
+   "file": "c0ffee123456.webm",
+   "gain_db": 0.0,
+   "height": 480,
+   "id": "c0ffee123456",
+   "limit": null,
+   "lufs": null,
+   "name": "Hometown Hardware",
+   "pics": 4,
+   "played": {
+    "day": 0,
+    "hour": 0,
+    "last": null,
+    "week": 0
+   },
+   "present": true,
+   "source_name": null,
+   "trim_db": -3.0,
+   "width": 640
+  }
+ ],
+ "card": {
+  "file": "card-b5f05a075b.png",
+  "seconds_today": 64
+ },
+ "limits": {
+  "bytes": 4000000000,
+  "card_text": 32,
+  "image": [
+   ".png",
+   ".jpg",
+   ".jpeg",
+   ".webp"
+  ],
+  "image_bytes": 25000000,
+  "seconds": 900,
+  "video": [
+   ".mp4",
+   ".m4v",
+   ".mov",
+   ".mkv",
+   ".webm",
+   ".ts",
+   ".mts",
+   ".m2ts",
+   ".avi",
+   ".mpg",
+   ".mpeg",
+   ".wmv",
+   ".flv"
+  ]
+ },
+ "on_air": {
+  "channel_id": "FOX",
+  "id": "k1",
+  "source_id": "youtube-tv"
+ },
+ "recent": [
+  {
+   "at": 1790907388.0,
+   "complete": true,
+   "counted": true,
+   "id": "3f9c1a2b4d5e",
+   "kind": "ad",
+   "length": 30.03,
+   "name": "Cousin Vinny's Pizza",
+   "seconds": 30.03
+  },
+  {
+   "at": 1790906530.0,
+   "kind": "card",
+   "seconds": 64.2
+  },
+  {
+   "at": 1790906500.0,
+   "complete": true,
+   "counted": true,
+   "id": "000000000001",
+   "kind": "ad",
+   "length": 30.0,
+   "name": "Old spot",
+   "seconds": 30.0
+  },
+  {
+   "at": 1790905915.0,
+   "complete": false,
+   "counted": false,
+   "id": "3f9c1a2b4d5e",
+   "kind": "ad",
+   "length": 30.03,
+   "name": "Cousin Vinny's Pizza",
+   "seconds": 12.4
+  },
+  {
+   "at": 1790905900.0,
+   "complete": true,
+   "counted": true,
+   "id": "7a1e0c9d8b2f",
+   "kind": "ad",
+   "length": 15.0,
+   "name": "Rocket Lawn Care",
+   "seconds": 15.0
+  }
+ ],
+ "settings": {
+  "card": {
+   "image": null,
+   "text": "STAY TUNED"
+  },
+  "default_limit": {
+   "count": 1,
+   "minutes": 60
+  },
+  "enabled": true,
+  "order": "shuffle",
+  "pip": {
+   "corner": "bottom-right",
+   "enabled": true,
+   "size": "medium"
+  }
+ },
+ "status": {
+  "active": true,
+  "ad": {
+   "duration": 30.03,
+   "id": "3f9c1a2b4d5e",
+   "name": "Cousin Vinny's Pizza",
+   "position": 11.6,
+   "since": 1790907388.0
+  },
+  "card": {
+   "error": null,
+   "ready": true
+  },
+  "card_since": null,
+  "cued": null,
+  "error": null,
+  "left_out": {},
+  "state": "ad"
+ }
+}

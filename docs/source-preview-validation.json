@@ -1,0 +1,18 @@
+{
+  "url": "http://127.0.0.1/vizelvision/sources",
+  "media": {
+    "time": 16.88584,
+    "ready": 4,
+    "width": 1280,
+    "height": 720,
+    "muted": true
+  },
+  "mobileFits": true,
+  "rokuStatus": "1280 \u00d7 720 \u00b7 progressive \u00b7 60.00 frames/s \u00b7 NBC was selected; Roku reported playback",
+  "errors": [],
+  "bad": [],
+  "selection_survives_diagnostics": true,
+  "master_left_on_fallback": true,
+  "python_tests": 218,
+  "browser_suites": 5
+}

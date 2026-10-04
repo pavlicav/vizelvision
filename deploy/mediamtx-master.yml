@@ -1,0 +1,44 @@
+# Dedicated local master output; expose HLS through the existing web proxy later.
+logLevel: info
+rtsp: yes
+rtspAddress: 127.0.0.1:18554
+rtspTransports: [tcp]
+hls: yes
+hlsAddress: 127.0.0.1:18888
+hlsVariant: fmp4
+hlsAlwaysRemux: yes
+hlsSegmentCount: 7
+hlsSegmentDuration: 1s
+hlsSegmentMaxSize: 8M
+hlsDirectory: ''
+api: yes
+apiAddress: 127.0.0.1:19997
+rtmp: no
+webrtc: no
+srt: no
+moq: no
+playback: no
+metrics: no
+pprof: no
+authInternalUsers:
+  - user: any
+    ips: [127.0.0.1]
+    permissions:
+      - action: publish
+        path: master
+      - action: read
+        path: master
+      - action: publish
+        path: roku
+      - action: read
+        path: roku
+      - action: api
+paths:
+  master:
+    source: publisher
+    overridePublisher: no
+    record: no
+  roku:
+    source: publisher
+    overridePublisher: no
+    record: no

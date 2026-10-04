@@ -1,0 +1,7 @@
+[Unit]
+Description=VizelVision master stream and web app
+Wants=vizelvision-mediamtx.service vizelvision-master.service vizelvision-web.service vizelvision-admute.service vizelvision-admute-recordings.timer
+After=vizelvision-mediamtx.service vizelvision-master.service vizelvision-web.service vizelvision-admute.service
+
+[Install]
+WantedBy=default.target

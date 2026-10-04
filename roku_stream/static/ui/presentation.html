@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Presentation · VizelVision</title>
+<script>/* Production's old tabs moved: forward their links before anything draws. */
+(() => { const to = {crawl: 'crawl', monitor: 'engineering#monitor'}[location.hash.slice(1)]; if (to) location.replace(to); })();</script>
+<link rel="stylesheet" href="static/ui/vv.css"><link rel="stylesheet" href="static/ui/testcard.css">
+<style>
+.offair{display:grid;grid-template-columns:minmax(300px,420px) minmax(0,1fr);gap:var(--gap);align-items:start}
+.previews{display:grid;gap:12px}
+.previews .test-card{margin:0}
+.card-wrap{position:relative}
+.tv-clock{position:absolute;top:5%;right:4.5%;font:700 min(3.4vw,26px)/1 'DejaVu Sans',system-ui,sans-serif;color:#fff;text-shadow:0 0 2px #101010,1px 1px 0 #101010,-1px -1px 0 #101010,1px -1px 0 #101010,-1px 1px 0 #101010,2px 2px 3px #000;font-variant-numeric:tabular-nums;pointer-events:none}
+.sonic-card{display:grid;grid-template-columns:auto 1fr;gap:18px;align-items:center}
+.sonic-card .mark{font:900 54px/.9 var(--display);text-transform:uppercase;letter-spacing:.02em}
+.sonic-card .mark span{display:block;color:var(--warn)}
+@media (max-width:900px){.offair{grid-template-columns:1fr}.sonic-card{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header class="topbar" data-page="presentation"></header><script src="static/ui/vv.js"></script>
+<script src="static/ui/testcard.js"></script><script src="static/ui/continuity.js"></script>
+<main class="page">
+  <div class="page-head"><div><h1>Presentation</h1><p>How the station looks and sounds: live captions, the off-air card and its audio, the station clock, the announcer at every break, the station ID, and the sonic identity.</p></div></div>
+  <div class="tabs" role="tablist" aria-label="Presentation">
+    <button type="button" role="tab" id="tab-offair" data-tab="offair">Off-air card</button>
+    <button type="button" role="tab" id="tab-captions" data-tab="captions">Live captions</button>
+    <button type="button" role="tab" id="tab-continuity" data-tab="continuity">Continuity</button>
+    <button type="button" role="tab" id="tab-ident" data-tab="ident">Station ID</button>
+    <button type="button" role="tab" id="tab-sonic" data-tab="sonic">Sonic identity</button>
+  </div>
+
+  <div role="tabpanel" id="panel-offair" aria-labelledby="tab-offair" class="offair">
+    <form id="settings" class="stack">
+      <section class="panel"><div class="head"><h2>Test card captions</h2></div><div class="body stack tight">
+        <label class="field"><span>Master</span><input id="master-caption" maxlength="48" required></label>
+        <label class="field"><span>TV-Thing sources</span><input id="tv-thing-caption" maxlength="48" required></label>
+        <label class="field"><span>Roku sources</span><input id="roku-caption" maxlength="48" required></label></div></section>
+      <section class="panel"><div class="head"><h2>Centre details</h2></div><div class="body stack tight">
+        <div id="detail-options" class="stack tight" style="gap:0"></div>
+        <label class="field"><span>Engineering note</span><input id="note" maxlength="72"></label>
+        <p class="tiny muted">Format details describe the configured master output. TV-Thing and Roku captions apply to all their source cards.</p></div></section>
+      <section class="panel"><div class="head"><h2>Off-air audio</h2></div><div class="body stack tight">
+        <label class="field"><span>Signal</span><select id="audio"><option value="tone">1 kHz sine wave · −20 dBFS peak</option><option value="silence">Silence</option><option value="radio">Cairo radio</option></select></label>
+        <div class="actions"><button type="button" class="sm" id="audition">▶ Listen to test tone</button></div>
+        <details class="more"><summary>Details</summary><p class="hint" style="margin-top:6px">48 kHz stereo on the master stream; live source audio replaces it when taken to air. Cairo radio is fetched by master from <code>master.off_air_radio_url</code>; if it is unreachable, off-air audio is silent until it reconnects. With <em>Cairo radio show and now playing</em> checked, the master card shows the station's current show and track (refreshed every 5 s); this preview shows placeholders. The test tone plays only in this browser, only while the page is open.</p></details></div></section>
+      <section class="panel"><div class="head"><h2>Station clock</h2></div><div class="body stack tight">
+        <label class="switch"><input type="checkbox" id="clock-enabled"><span>Show the time in master's top-right corner</span></label>
+        <label class="switch"><input type="checkbox" id="clock-seconds"><span>Include seconds</span></label>
+        <p class="tiny muted">Japanese broadcast style: bold white numerals with a dark outline, no box, 24-hour time without a leading zero (7:05, 19:30), over everything including the off-air card, in the master host's local time.</p></div></section>
+      <div class="actions"><button id="save" type="submit" class="primary">Save presentation</button><button id="reset" type="button" class="quiet">Reset form to defaults</button></div>
+      <p class="tiny muted">Saved changes reach the running master within a second and source cards within ten.</p>
+    </form>
+    <section class="panel" aria-label="Test card previews"><div class="head"><h2>Preview</h2><div class="end"><span class="tiny muted">unsaved edits show here</span></div></div><div class="body previews" id="previews"></div></section>
+  </div>
+
+  <div role="tabpanel" id="panel-captions" aria-labelledby="tab-captions" hidden class="cols-2">
+    <section class="panel"><div class="head"><h2>Live transcribed captions</h2></div><div class="body stack">
+      <label class="switch"><input type="checkbox" id="captions-enabled" disabled><span>Show live captions on the broadcast</span></label>
+      <p class="hint">Whisper transcribes the sound locally before broadcast. Captions appear for every viewer, above the crawl, timed to the speech. Captions and ad detection share one audio/video delay. Automatic captions can make mistakes.</p>
+      <form id="caption-settings" class="stack tight">
+        <label class="field"><span>Whisper model</span><select id="caption-model" disabled></select></label>
+        <label class="field"><span>Spoken language</span><select id="caption-language" disabled></select></label>
+        <p class="tiny muted">Tiny is faster; Small favors accuracy. Models ending in .en are English only. Other models can detect or transcribe the selected language.</p>
+        <div class="actions"><button type="submit" class="primary" id="caption-save" disabled>Save caption options</button></div>
+      </form>
+    </div></section>
+    <section class="panel"><div class="head"><span class="lamp" id="caption-lamp"></span><h2>Caption status</h2></div><div class="body stack">
+      <p id="caption-status" role="status">Loading caption settings…</p>
+      <p id="caption-timing" class="tiny muted"></p>
+      <p id="caption-error" role="alert" class="hint"></p>
+      <p id="caption-preview" style="white-space:pre-line;font-size:1.2rem;min-height:3em" aria-label="Current captions"></p>
+      <p class="tiny muted">This preview follows captions on master's delayed output. The viewer monitor also has its usual stream buffering delay. Increasing the shared delay briefly holds the picture with silence while the buffer fills; reducing it takes effect after a master restart.</p>
+    </div></section>
+  </div>
+
+  <div role="tabpanel" id="panel-continuity" aria-labelledby="tab-continuity" hidden>
+    <p class="hint" style="margin-bottom:14px">At every break the announcer on duty says what just played and what is next, over the station ID, as BBC continuity does. Cairo Radio's personalities are on the roster.</p>
+    <div id="continuity-panel"></div>
+  </div>
+
+  <div role="tabpanel" id="panel-ident" aria-labelledby="tab-ident" hidden class="stack">
+    <div class="cols-2">
+      <section class="panel"><div class="head"><span class="lamp" id="id-lamp"></span><h2>Station ID</h2></div><div class="body"><dl class="kv" id="ident"></dl></div></section>
+      <section class="panel"><div class="head"><h2>Last ID on air</h2></div><div class="body"><dl class="kv" id="last-id"></dl></div></section>
+    </div>
+    <section class="panel"><div class="head"><h2>How the ID works</h2></div><div class="body cols-2">
+      <ul class="hint stack tight" style="margin:0;padding-left:18px">
+        <li>A 30-second ID plays after every program in Up next. If another program is next, it replaces the previous program's last 30 seconds instead, so scheduled starts are never delayed.</li>
+        <li>It holds its end card (the “STAY TUNED” lockup at 27.9 s) while the next source is prepared, so a channel change never shows the fallback card.</li>
+        <li>Before a scheduled game, the Sports ID (“The following is a presentation of VizelVision Sports”) plays instead, announcements on or off.</li></ul>
+      <ul class="hint stack tight" style="margin:0;padding-left:18px">
+        <li>With continuity on, the announcer's lines are mixed over the ID's music bed at −20 LUFS. A voice or mix failure falls back to the plain ID.</li>
+        <li>Skipped IDs are logged (“Station ID skipped: …” in the web log).</li>
+        <li>Built by <code>ident/build.py</code>; the sound family is on the Sonic identity sheet.</li></ul></div></section>
+  </div>
+
+  <div role="tabpanel" id="panel-sonic" aria-labelledby="tab-sonic" hidden>
+    <section class="panel"><div class="body sonic-card"><div class="mark">Sonic<span>Identity</span></div>
+      <div class="stack tight"><p>How VizelVision sounds: the four-note logo (Viz-el-Vi-sion: C E G A, then D F♯ A D), the lift, the clap, its palette of brass, bells, stadium organ and tape grit, the reference renders, usage and spec.</p>
+        <div class="actions"><a class="btn primary" href="sonic">Open the sheet →</a></div></div></div></section>
+  </div>
+</main>
+<script src="static/ui/presentation.js"></script>
+</body>
+</html>

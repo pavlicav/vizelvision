@@ -1,0 +1,58 @@
+{
+  "ok": true,
+  "channel": "wrc_hd_4_1",
+  "quality": "medium",
+  "generation": "1789252518238576309-1",
+  "tune_calls": 0,
+  "stop_calls": 0,
+  "observation_seconds": 300,
+  "limitations": "Current digital feed only; no analog/Roku test or lip-sync measurement.",
+  "live_video_luma_samples": [
+    55,
+    55,
+    55,
+    39,
+    39,
+    39,
+    39,
+    28,
+    28,
+    28
+  ],
+  "live_audio_mean_energy": 0.001487721710979733,
+  "tracks": {
+    "video": {
+      "buffers": 9143,
+      "backwards": 0,
+      "max_pts_gap_seconds": 0.033333815,
+      "max_arrival_gap_seconds": 0.11185440700501204
+    },
+    "audio": {
+      "buffers": 14283,
+      "backwards": 0,
+      "max_pts_gap_seconds": 0.021361367,
+      "max_arrival_gap_seconds": 0.08984996902290732
+    }
+  },
+  "hls_streams": [
+    {
+      "codec_name": "h264",
+      "codec_type": "video",
+      "width": 1280,
+      "height": 720,
+      "sample_rate": null,
+      "channels": null
+    },
+    {
+      "codec_name": "aac",
+      "codec_type": "audio",
+      "width": null,
+      "height": null,
+      "sample_rate": "48000",
+      "channels": 2
+    }
+  ],
+  "same_publisher_and_reader": true,
+  "lease_released": true,
+  "selection_unchanged": true
+}

@@ -1,0 +1,340 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Sonic identity · VizelVision</title>
+<link rel="stylesheet" href="static/ui/vv.css">
+<style>
+/* Layout: a ballpark scoreboard at dusk. A line-score band of specs up top, then the
+   identity's pieces as boards on the field; one committed dark look, like a real board. */
+:root{
+  /* The sheet's own names, on the control room's colours: the board is the console now. */
+  --night:var(--bg); --rule:var(--line); --chalk:var(--ink); --bulb:var(--warn); --sky:var(--touch);
+  --n1:#ff5a8c; --n2:#4fd08f; --n3:#ff8b3d; --n4:#57b8ff;   /* the wordmark's letter colours: one per logo note */
+}
+body{background:var(--night);color:var(--chalk);font:16px/1.55 var(--body);position:relative}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;opacity:.07;z-index:0;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E")}
+main{position:relative;z-index:1;max-width:1180px;margin:0 auto}
+main h1,main h2,main h3{font-family:var(--display);text-wrap:balance;margin:0;letter-spacing:.02em}
+h2{font-size:clamp(28px,3.4vw,40px);font-weight:800;text-transform:uppercase;line-height:1}
+h3{font-size:22px;font-weight:800;text-transform:uppercase}
+p{margin:0;max-width:65ch}
+.eyebrow{font:500 12px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--bulb)}
+.muted{color:var(--muted)}
+a{color:var(--sky)}
+main button{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--bulb);outline-offset:3px}
+
+/* The board header: title and a line score of specs. */
+.board{padding-block:clamp(28px,5vw,56px) 28px;border-bottom:2px solid var(--rule);display:grid;gap:22px}
+.board h1{font-size:clamp(46px,8.5vw,108px);font-weight:900;line-height:.88;text-transform:uppercase}
+.board h1 span{display:block;color:var(--bulb);text-shadow:0 0 18px rgba(255,177,59,.45)}
+.board .lede{font-size:clamp(17px,1.6vw,20px);color:var(--chalk)}
+.linescore{display:grid;grid-template-columns:repeat(auto-fit,minmax(118px,1fr));border:1px solid var(--rule);border-radius:4px;overflow:hidden;font-variant-numeric:tabular-nums}
+.linescore div{padding:10px 12px;border-right:1px solid var(--rule);background:var(--panel);min-width:0}
+.linescore div:last-child{border-right:0}
+.linescore dt{font:500 11px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.linescore dd{margin:6px 0 0;font:800 30px/1 var(--display);color:var(--bulb);text-shadow:0 0 12px rgba(255,177,59,.35)}
+
+section{padding-block:40px 8px;display:grid;gap:18px}
+section>header{display:grid;gap:8px}
+
+/* The logo, two forms. */
+.logos{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:18px}
+.card{background:var(--panel);border:1px solid var(--rule);border-radius:6px;padding:18px;display:grid;gap:12px;min-width:0}
+.staff{width:100%;height:auto;display:block}
+.staff .line{stroke:var(--muted);stroke-width:1.2}
+.staff text{font-family:var(--mono);font-size:13px;fill:var(--chalk)}
+.syll{display:grid;grid-template-columns:repeat(4,auto);justify-content:start;gap:4px 18px;font:800 26px/1 var(--display);text-transform:uppercase}
+.syll span:nth-child(1){color:var(--n1)}.syll span:nth-child(2){color:var(--n2)}.syll span:nth-child(3){color:var(--n3)}.syll span:nth-child(4){color:var(--n4)}
+.facts{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;font-size:14px;margin:0}
+.facts dt{font:500 12px/1.6 var(--mono);color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
+.facts dd{margin:0}
+
+/* Elements row. */
+.elements{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,250px),1fr));gap:14px}
+.element{border-top:3px solid var(--bulb);padding-top:12px;display:grid;gap:8px;align-content:start}
+.element h3{font-size:24px}
+.clap{display:flex;gap:6px;align-items:flex-end;height:34px}
+.clap i{display:block;background:var(--bulb);border-radius:2px;height:100%}
+.lift{font:800 34px/1 var(--display);display:flex;gap:10px;align-items:baseline}
+.lift b{color:var(--bulb)}
+
+/* The family: players. */
+.family{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,340px),1fr));gap:16px}
+.asset{background:var(--panel);border:1px solid var(--rule);border-radius:6px;padding:16px;display:grid;gap:10px;min-width:0}
+.asset .top{display:flex;gap:12px;align-items:center}
+.asset .top div{min-width:0}
+.asset .meta{font:500 12px/1.4 var(--mono);color:var(--muted);letter-spacing:.04em}
+.play{flex:none;width:48px;height:48px;border-radius:50%;border:2px solid var(--bulb);background:transparent;display:grid;place-items:center;cursor:pointer}
+.play:hover{background:rgba(255,177,59,.12)}
+.play svg{width:18px;height:18px;fill:var(--bulb)}
+.wave{width:100%;height:56px;display:block;background:#0f1c27;border-radius:3px;cursor:pointer}
+.asset p{font-size:14px;color:var(--chalk)}
+.form{display:inline-block;font:600 11px/1 var(--mono);letter-spacing:.1em;text-transform:uppercase;padding:4px 7px;border-radius:3px;border:1px solid var(--rule);color:var(--muted)}
+.form.open{border-color:var(--n1);color:var(--n1)}.form.closed{border-color:var(--n4);color:var(--n4)}
+
+/* Palette as a patch bay. */
+.bay{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr));gap:14px}
+.group{border:1px solid var(--rule);border-radius:6px;overflow:hidden;min-width:0}
+.group h3{background:#0f1c27;padding:10px 14px;font-size:19px;display:flex;justify-content:space-between;align-items:baseline}
+.group h3 small{font:500 11px var(--mono);color:var(--muted);letter-spacing:.1em}
+.group ul{list-style:none;margin:0;padding:6px 14px 12px;display:grid;gap:8px}
+.group li{display:grid;gap:2px;font-size:14px}
+.group li b{font-weight:600}
+.group li span{color:var(--muted)}
+
+/* Tables. */
+.scroll{overflow-x:auto;border:1px solid var(--rule);border-radius:6px}
+table{border-collapse:collapse;width:100%;min-width:720px;font-size:14px;font-variant-numeric:tabular-nums}
+th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--rule);vertical-align:top}
+th{font:500 11px/1.2 var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--muted);background:#0f1c27}
+tr:last-child td{border-bottom:0}
+td code,p code,li code{font:13px var(--mono);color:var(--bulb)}
+
+.rules{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:18px}
+.rules ul{margin:0;padding-left:20px;display:grid;gap:8px}
+.rules .do h3{color:var(--n2)}.rules .dont h3{color:var(--n1)}
+footer{margin-top:44px;padding-top:18px;border-top:2px solid var(--rule);font:13px/1.6 var(--mono);color:var(--muted)}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+
+</head>
+<body>
+<header class="topbar" data-page="presentation"></header><script src="static/ui/vv.js"></script>
+<main class="page narrow">
+<header class="board">
+  <p class="eyebrow">VizelVision · Master sheet · VV-SND-001</p>
+  <h1>Sonic <span>Identity</span></h1>
+  <p class="lede">How VizelVision sounds: a nineties station on a warm night at the ballpark. One four-note logo, one lift, one clap, played on brass, bells and a stadium organ, through a little tape grit. Every promo, bumper and ID draws from this sheet.</p>
+  <dl class="linescore" aria-label="Specification">
+    <div><dt>Tempo</dt><dd>120</dd></div>
+    <div><dt>Key</dt><dd>C→D</dd></div>
+    <div><dt>Logo</dt><dd>4 notes</dd></div>
+    <div><dt>Loudness</dt><dd>−20</dd></div>
+    <div><dt>Peak</dt><dd>−2 dBTP</dd></div>
+    <div><dt>Rate</dt><dd>48k</dd></div>
+    <div><dt>Tail</dt><dd>0.5 s</dd></div>
+  </dl>
+</header>
+
+<section aria-labelledby="logo-title">
+  <header><p class="eyebrow">The mnemonic</p><h2 id="logo-title">The logo: Viz-el-Vi-sion</h2>
+  <p class="muted">Four notes in the rhythm of the name: eighth, eighth, quarter, half. It has two forms. The open form asks, "there's more", and the closed form answers, "here it is".</p></header>
+  <div class="logos">
+    <article class="card">
+      <h3>Open · C E G A</h3>
+      <svg class="staff" viewBox="0 0 420 150" role="img" aria-label="Treble staff: C5 and E5 beamed eighth notes, G5 quarter note, A5 half note">
+        <g id="open-staff"></g>
+      </svg>
+      <div class="syll" aria-hidden="true"><span>Viz</span><span>el</span><span>Vi</span><span>sion</span></div>
+      <dl class="facts"><dt>Ends on</dt><dd>The sixth (A over C): unresolved, leaning forward</dd><dt>Use</dt><dd>Into a break, a promo's middle, bumpers, "stay tuned"</dd><dt>Voicing</dt><dd>FM bells and brass, organ an octave below</dd></dl>
+    </article>
+    <article class="card">
+      <h3>Closed · D F♯ A D</h3>
+      <svg class="staff" viewBox="0 0 420 150" role="img" aria-label="Treble staff: D5 and F-sharp 5 beamed eighth notes, A5 quarter note, D6 half note">
+        <g id="closed-staff"></g>
+      </svg>
+      <div class="syll" aria-hidden="true"><span>Viz</span><span>el</span><span>Vi</span><span>sion</span></div>
+      <dl class="facts"><dt>Ends on</dt><dd>The tonic, up a whole step: home, lifted</dd><dt>Use</dt><dd>Finals, sign-offs, the button of the ID, back from a break</dd><dt>Voicing</dt><dd>Bells, brass and the "aah" choir, hit on the last note</dd></dl>
+    </article>
+  </div>
+</section>
+
+<section aria-labelledby="elements-title">
+  <header><p class="eyebrow">Signature devices</p><h2 id="elements-title">Four moves that say VizelVision</h2></header>
+  <div class="elements">
+    <div class="element"><h3>The lift</h3><div class="lift" aria-label="C up a whole step to D">C <b>→</b> D</div><p>A key change is always up a whole step, the old broadcast modulation. The logo's closed form is the lift made melody.</p></div>
+    <div class="element"><h3>The clap</h3><div class="clap" aria-label="Clap rhythm: short, short, longer, long"><i style="width:12%"></i><i style="width:12%"></i><i style="width:24%"></i><i style="width:48%;opacity:.55"></i></div><p>The logo's rhythm, clapped by a crowd or played on a snare. It carries the brand where no melody fits, like crowd beds and score stings.</p></div>
+    <div class="element"><h3>The channel change</h3><p>A click and half a second of static open the ID and can open any bumper. It is the station taking the air.</p></div>
+    <div class="element"><h3>The button</h3><p>Every piece ends on a hit on its last note, rings out, then gives half a second of silence. That tail makes any cut out of it clean.</p></div>
+  </div>
+</section>
+
+<section aria-labelledby="family-title">
+  <header><p class="eyebrow">Reference renders · −20 LUFS</p><h2 id="family-title">The family</h2>
+  <p class="muted">Sketches rendered on the station ID's own instruments by <code>ident/sonic.py</code>. They are the reference for tone and length, and a starting point for real promos.</p></header>
+  <div class="family" id="family"></div>
+</section>
+
+<section aria-labelledby="palette-title">
+  <header><p class="eyebrow">Instruments and texture</p><h2 id="palette-title">The palette</h2></header>
+  <div class="bay">
+    <div class="group"><h3>Ballpark <small>SPORTS</small></h3><ul>
+      <li><b>Stadium organ</b><span>Tonewheel drawbars (16′ 8′ 4′), Leslie swirl, a little overdrive. Calls and comping.</span></li>
+      <li><b>Crowd</b><span>A murmur, swells to a roar, and the clap. Always under, never the lead.</span></li>
+      <li><b>Drumline</b><span>Snare cadences with flams, bass drum on one and three.</span></li>
+      <li><b>Stadium horn</b><span>Low detuned saws. For finals only.</span></li>
+    </ul></div>
+    <div class="group"><h3>Broadcast <small>NETWORK</small></h3><ul>
+      <li><b>Brass section</b><span>Stabs and fanfares; the logo's body.</span></li>
+      <li><b>FM bells</b><span>The logo's shine, doubled an octave up.</span></li>
+      <li><b>Timpani and orchestra hit</b><span>The button and the big moment.</span></li>
+      <li><b>"Aah" choir</b><span>The closed logo only.</span></li>
+    </ul></div>
+    <div class="group"><h3>Studio <small>1990</small></h3><ul>
+      <li><b>DX e-piano</b><span>Chords under voices.</span></li>
+      <li><b>Synth bass</b><span>Root-and-octave, pushing the beat.</span></li>
+      <li><b>Gated snare</b><span>The eighties-into-nineties room, cut off hard.</span></li>
+      <li><b>Marimba</b><span>Typing sounds for text on screen.</span></li>
+    </ul></div>
+    <div class="group"><h3>Grit <small>TEXTURE</small></h3><ul>
+      <li><b>Tape saturation</b><span>Soft clipping on the mix: warm, never crunchy.</span></li>
+      <li><b>Wow and flutter</b><span>0.5 Hz wow, 6.5 Hz flutter, about 2 ms.</span></li>
+      <li><b>Softened top</b><span>Rolled off from 9.5–12.5 kHz, like a VHS master.</span></li>
+      <li><b>Dust</b><span>Sparse clicks and a hiss floor, in beds only.</span></li>
+    </ul></div>
+  </div>
+</section>
+
+<section aria-labelledby="use-title">
+  <header><p class="eyebrow">Where each piece goes</p><h2 id="use-title">Usage</h2></header>
+  <div class="scroll"><table>
+    <thead><tr><th>Moment</th><th>Piece</th><th>Logo</th><th>Length</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td>Between programs</td><td>Station ID</td><td>Open, then closed</td><td>30 s</td><td>The fixed ID; the continuity announcer can voice it. Holds its <i>Stay tuned</i> card while the next source loads.</td></tr>
+      <tr><td>Into a break</td><td>Bumper</td><td>Open</td><td>10 s</td><td>Drumline and organ call, the crowd claps the logo, the open logo hangs.</td></tr>
+      <tr><td>Back to the game</td><td>Sting</td><td>Open</td><td>4.5 s</td><td>A hit, then the logo. Also for a score change or a replay.</td></tr>
+      <tr><td>Game final</td><td>Final</td><td>Closed, in D</td><td>7 s</td><td>Horn and roar first, then the sung logo and the button.</td></tr>
+      <tr><td>Scores, slates, schedules</td><td>Bed</td><td>None</td><td>8 s loop</td><td>Sits under voices at −3 dB against the others. Loops end to start.</td></tr>
+      <tr><td>Promo open</td><td>Logo, open</td><td>Open</td><td>3.5 s</td><td>Voice starts on beat 3 of the half note.</td></tr>
+      <tr><td>Promo close, sign-off</td><td>Logo, closed</td><td>Closed</td><td>4 s</td><td>The last thing before OFF AIR and the test card.</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section aria-labelledby="spec-title">
+  <header><p class="eyebrow">Delivery</p><h2 id="spec-title">Technical spec</h2></header>
+  <div class="scroll"><table>
+    <thead><tr><th>Item</th><th>Value</th><th>Why</th></tr></thead>
+    <tbody>
+      <tr><td>Loudness</td><td>−20 LUFS integrated, two-pass linear</td><td>Matches the TV-Thing recordings and the ID, so nothing jumps.</td></tr>
+      <tr><td>True peak</td><td>−2 dBTP or lower</td><td>Headroom for the AAC encode on master.</td></tr>
+      <tr><td>Format</td><td>48 kHz, stereo, WAV masters; MP3 for review</td><td>Master's audio caps.</td></tr>
+      <tr><td>Tempo grid</td><td>120 BPM (0.5 s per beat); late night 96</td><td>Lengths land on beats, cuts land on the grid.</td></tr>
+      <tr><td>Tail</td><td>Last 0.5 s silent (and black, with picture)</td><td>A take in the tail is invisible.</td></tr>
+      <tr><td>Voice over music</td><td>Voice about 8 dB above; music ducked about 7 dB</td><td>As the ID and continuity announcements.</td></tr>
+      <tr><td>Voice</td><td>Continuity personalities (Deepgram Aura); house voice DJ Low Tide, <code>aura-2-orpheus-en</code></td><td>One station voice, warm and unhurried.</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section aria-labelledby="rules-title">
+  <header><p class="eyebrow">Keep it recognizable</p><h2 id="rules-title">Rules</h2></header>
+  <div class="rules">
+    <div class="card do"><h3>Do</h3><ul>
+      <li>Keep the logo's intervals and rhythm exact. Transpose only by the lift.</li>
+      <li>End every piece on the open or closed logo, then the half second of silence.</li>
+      <li>Put the brand in the clap when there's no room for melody.</li>
+      <li>Keep grit to tape plus one other texture at a time.</li>
+      <li>Build from <code>ident/sonic.py</code> and <code>ident/jingle.py</code>, so the instruments stay one family.</li>
+    </ul></div>
+    <div class="card dont"><h3>Don't</h3><ul>
+      <li>Don't set the logo in a minor key or resolve the open form's sixth.</li>
+      <li>Don't play music under live game audio. Announcements go over the ID, never over the game.</li>
+      <li>Don't use the horn or the choir outside finals and the closed logo; they lose their weight.</li>
+      <li>Don't borrow stadium chants or other teams' calls. The organ calls with the logo.</li>
+      <li>Don't exceed −20 LUFS to "cut through". The whole station sits at one level.</li>
+    </ul></div>
+  </div>
+</section>
+
+<footer>VizelVision sonic identity · master sheet · renders in ident/build/sonic · constants in ident/sonic.py (BPM, LOGO_OPEN, LOGO_CLOSED, LOGO_RHYTHM, HOME, LIFT) · renders: python sonic.py OUT_DIR</footer>
+</main>
+
+<script>
+(() => {
+  // Staff notation: treble staff, steps counted from the bottom line (E4 = 0).
+  const NS = 'http://www.w3.org/2000/svg';
+  const make = (tag, attrs, parent) => { const n = document.createElementNS(NS, tag); for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, v); parent.append(n); return n; };
+  const colours = ['var(--n1)', 'var(--n2)', 'var(--n3)', 'var(--n4)'];
+  function staff(host, notes) {
+    const g = document.getElementById(host), bottom = 112, gap = 12, step = gap / 2, left = 20, right = 404;
+    for (let i = 0; i < 5; i++) make('line', {class: 'line', x1: left, x2: right, y1: bottom - i * gap, y2: bottom - i * gap}, g);
+    make('text', {x: left, y: bottom + 30, style: 'font-family:var(--mono);font-size:11px;letter-spacing:.12em;fill:var(--muted)'}, g).textContent = 'TREBLE · 120 BPM';
+    const xs = [120, 172, 236, 318], heads = [];
+    notes.forEach(([position, kind, sharp], i) => {
+      const x = xs[i], y = bottom - position * step, colour = colours[i];
+      for (let ledger = 10; ledger <= position; ledger += 2)  // ledger lines above the staff (A5 = 10)
+        make('line', {class: 'line', x1: x - 13, x2: x + 13, y1: bottom - ledger * step, y2: bottom - ledger * step}, g);
+      if (sharp) make('text', {x: x - 30, y: y + 6, 'font-size': 20, style: 'font-family:serif;fill:var(--chalk)'}, g).textContent = '♯';
+      const head = make('ellipse', {cx: x, cy: y, rx: 8, ry: 5.6, transform: `rotate(-20 ${x} ${y})`,
+        fill: kind === 'half' ? 'none' : colour, stroke: colour, 'stroke-width': kind === 'half' ? 2.4 : 1}, g);
+      heads.push({x, y, colour, kind});
+    });
+    // Stems down (notes above the middle line), beam the two eighths.
+    heads.forEach(({x, y, colour}) => make('line', {x1: x - 7.4, x2: x - 7.4, y1: y + 1, y2: y + 34, stroke: colour, 'stroke-width': 1.8}, g));
+    const [a, b] = heads;
+    make('line', {x1: a.x - 7.4, x2: b.x - 7.4, y1: a.y + 34, y2: b.y + 34, stroke: 'var(--chalk)', 'stroke-width': 5}, g);
+    make('line', {class: 'line', x1: right, x2: right, y1: bottom - 4 * gap, y2: bottom}, g);
+  }
+  staff('open-staff', [[5, 'eighth'], [7, 'eighth'], [9, 'quarter'], [10, 'half']]);          // C5 E5 G5 A5
+  staff('closed-staff', [[6, 'eighth'], [8, 'eighth', true], [10, 'quarter'], [13, 'half']]); // D5 F#5 A5 D6
+
+  // The family: players that draw their waveform from the render itself.
+  const family = [
+    ['logo-open', 'Logo, open', 'open', '3.5 s', 'C E G A on bells and brass, organ below. Promo opens, "there\'s more".'],
+    ['logo-closed', 'Logo, closed', 'closed', '4 s', 'Up a step, sung, with timpani and a hit. Sign-offs and closes.'],
+    ['sting', 'Sting', 'open', '4.5 s', 'Orchestra hit and crash, then the open logo over a crowd swell.'],
+    ['bumper', 'Bumper', 'open', '10 s', 'Drumline cadence, the organ calls the logo climbing, the crowd claps it, the open logo hangs.'],
+    ['final', 'Final', 'closed', '7 s', 'Stadium horn and a roar, then the closed logo sung and the big button.'],
+    ['bed', 'Bed', null, '8 s loop', 'Organ comping, brushes and bass. No logo: it sits under voices and loops cleanly.'],
+  ];
+  const host = document.getElementById('family');
+  const PLAY = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4l13 8-13 8z"/></svg>';
+  const STOP = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg>';
+  let current = null;
+  for (const [file, name, form, length, use] of family) {
+    const card = document.createElement('article');
+    card.className = 'asset';
+    card.innerHTML = `<div class="top"><button class="play" type="button" aria-label="Play ${name}">${PLAY}</button>
+      <div><h3>${name}</h3><div class="meta">${length} · ${file}.mp3 ${form ? `· <span class="form ${form}">${form}</span>` : '· <span class="form">no logo</span>'}</div></div></div>
+      <canvas class="wave" aria-hidden="true"></canvas><p>${use}</p>`;
+    host.append(card);
+    const audio = new Audio(`static/sonic/${file}.mp3`), button = card.querySelector('.play'), canvas = card.querySelector('canvas');
+    audio.preload = 'auto';
+    if (file === 'bed') audio.loop = true;
+    let peaks = null;
+    function draw() {
+      const ratio = window.devicePixelRatio || 1, w = canvas.clientWidth, h = canvas.clientHeight;
+      canvas.width = w * ratio; canvas.height = h * ratio;
+      const c = canvas.getContext('2d'); c.scale(ratio, ratio); c.clearRect(0, 0, w, h);
+      const style = getComputedStyle(document.documentElement), bulb = style.getPropertyValue('--bulb').trim(), dim = style.getPropertyValue('--rule').trim();
+      const done = audio.duration ? audio.currentTime / audio.duration : 0;
+      if (!peaks) { c.fillStyle = dim; c.fillRect(0, h / 2 - 1, w, 2); return; }
+      const bars = Math.floor(w / 3);
+      for (let i = 0; i < bars; i++) {
+        const v = peaks[Math.floor(i / bars * peaks.length)], bh = Math.max(2, v * (h - 6));
+        c.fillStyle = i / bars < done ? bulb : dim;
+        c.fillRect(i * 3, (h - bh) / 2, 2, bh);
+      }
+    }
+    fetch(`static/sonic/${file}.mp3`).then(r => r.arrayBuffer()).then(data => {
+      const decoder = new (window.OfflineAudioContext || window.webkitOfflineAudioContext)(1, 2, 48000);
+      return decoder.decodeAudioData(data);
+    }).then(buffer => {
+      const channel = buffer.getChannelData(0), buckets = 400, size = Math.floor(channel.length / buckets);
+      peaks = Array.from({length: buckets}, (_, i) => { let m = 0; for (let j = i * size; j < (i + 1) * size; j++) m = Math.max(m, Math.abs(channel[j])); return m; });
+      const top = Math.max(...peaks) || 1; peaks = peaks.map(p => p / top); draw();
+    }).catch(() => draw());
+    function stop() { audio.pause(); audio.currentTime = 0; button.innerHTML = PLAY; button.setAttribute('aria-label', `Play ${name}`); draw(); }
+    button.addEventListener('click', () => {
+      if (!audio.paused) { stop(); current = null; return; }
+      if (current) current();
+      current = stop;
+      audio.play().then(() => { button.innerHTML = STOP; button.setAttribute('aria-label', `Stop ${name}`); }).catch(() => {});
+    });
+    canvas.addEventListener('click', event => {
+      if (!audio.duration) return;
+      audio.currentTime = event.offsetX / canvas.clientWidth * audio.duration;
+      if (audio.paused) button.click();
+    });
+    audio.addEventListener('timeupdate', draw);
+    audio.addEventListener('ended', () => { stop(); current = null; });
+    new ResizeObserver(draw).observe(canvas);
+  }
+})();
+</script>
+
+</body></html>

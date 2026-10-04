@@ -1,0 +1,175 @@
+{
+  "master_path": "vv-publication-99152a6859934391812432d6feae0061",
+  "mediamtx_version": "v1.21.0",
+  "ok": true,
+  "publication": {
+    "hls_media_sequences": {
+      "audio": [
+        3,
+        7,
+        11,
+        15
+      ],
+      "video": [
+        2,
+        6,
+        10,
+        15
+      ]
+    },
+    "hls_streams": [
+      {
+        "channels": null,
+        "codec_name": "h264",
+        "codec_type": "video",
+        "height": 180,
+        "sample_rate": null,
+        "width": 320
+      },
+      {
+        "channels": 2,
+        "codec_name": "aac",
+        "codec_type": "audio",
+        "height": null,
+        "sample_rate": "48000",
+        "width": null
+      }
+    ],
+    "phases": [
+      {
+        "audio_crossings": 0,
+        "audio_energy": 0,
+        "decoded_buffers": {
+          "audio": 277,
+          "video": 60
+        },
+        "luma": 16,
+        "phase": 0
+      },
+      {
+        "audio_crossings": 4.4,
+        "audio_energy": 0.32044915369761134,
+        "decoded_buffers": {
+          "audio": 511,
+          "video": 110
+        },
+        "luma": 81,
+        "phase": 1
+      },
+      {
+        "audio_crossings": 8.75,
+        "audio_energy": 0.3199430388891684,
+        "decoded_buffers": {
+          "audio": 746,
+          "video": 160
+        },
+        "luma": 41,
+        "phase": 2
+      },
+      {
+        "audio_crossings": 0,
+        "audio_energy": 0,
+        "decoded_buffers": {
+          "audio": 980,
+          "video": 211
+        },
+        "luma": 16,
+        "phase": 3
+      }
+    ],
+    "publisher_id": "553cbbdb-2fe2-4f17-8778-b26192c9aff9",
+    "reader_id": "5f2f9179-7e1e-4067-8d1b-5d8cfd208b26",
+    "reader_reconnects": 0,
+    "ready_verified": true,
+    "released_on_stop": true,
+    "tracks": {
+      "audio": {
+        "backwards": 0,
+        "buffers": 1001,
+        "max_arrival_gap_seconds": 0.092762890009908,
+        "max_pts_gap_seconds": 0.02133412
+      },
+      "video": {
+        "backwards": 0,
+        "buffers": 215,
+        "max_arrival_gap_seconds": 0.10260367201408371,
+        "max_pts_gap_seconds": 0.100482044
+      }
+    }
+  },
+  "publisher": {
+    "content_phases": [
+      {
+        "audio_buffers": 1043,
+        "mean_audio_crossings": 0,
+        "mean_audio_energy": 0,
+        "video_luma": 16
+      },
+      {
+        "audio_buffers": 467,
+        "mean_audio_crossings": 4.19914346895075,
+        "mean_audio_energy": 0.32000598699794747,
+        "video_luma": 81
+      },
+      {
+        "audio_buffers": 483,
+        "mean_audio_crossings": 8.600414078674948,
+        "mean_audio_energy": 0.32000519832036106,
+        "video_luma": 41
+      },
+      {
+        "audio_buffers": 470,
+        "mean_audio_crossings": 0,
+        "mean_audio_energy": 0,
+        "video_luma": 16
+      }
+    ],
+    "content_settle_seconds": 0.25,
+    "cuts": [
+      {
+        "elapsed_seconds": 5.49,
+        "encoded_buffers": {
+          "audio": 490,
+          "video": 106
+        },
+        "input": 1
+      },
+      {
+        "elapsed_seconds": 10.414,
+        "encoded_buffers": {
+          "audio": 721,
+          "video": 155
+        },
+        "input": 2
+      },
+      {
+        "elapsed_seconds": 15.489,
+        "encoded_buffers": {
+          "audio": 958,
+          "video": 206
+        },
+        "input": 0
+      }
+    ],
+    "duration_seconds": 20,
+    "errors": [],
+    "limitations": "Synthetic feeds only; no tuner, capture or real-input A/V sync was tested.",
+    "mode": "synthetic_rtsp_publish",
+    "ok": true,
+    "tracks": {
+      "audio": {
+        "backwards": 0,
+        "buffers": 1189,
+        "bytes": 165514,
+        "max_gap_seconds": 0.021333334
+      },
+      "video": {
+        "backwards": 0,
+        "buffers": 256,
+        "bytes": 19225,
+        "max_gap_seconds": 0.1
+      }
+    }
+  },
+  "scope": "Isolated loopback server and synthetic feeds; no production service or capture hardware changed."
+}

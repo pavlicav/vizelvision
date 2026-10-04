@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Schedule · VizelVision</title>
+<link rel="stylesheet" href="static/ui/vv.css">
+<style>
+.status{display:grid;grid-template-columns:240px repeat(2,minmax(0,1fr)) 260px}
+.status>div{padding:14px 16px;border-left:1px solid var(--line);display:grid;gap:6px;align-content:start;min-width:0}
+.status>div:first-child{border-left:0}
+.status .big{font:700 22px/1.1 var(--display);letter-spacing:.02em;text-transform:uppercase;overflow-wrap:anywhere}
+.week{display:grid;grid-template-columns:250px minmax(0,1fr);gap:var(--gap);align-items:start}
+.blocks{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+.blocks li{display:flex;gap:6px}
+.brush{flex:1;height:auto;justify-content:flex-start;text-align:left;padding:8px 10px;gap:10px;background:var(--well)}
+.brush[aria-pressed=true]{border-color:var(--touch);box-shadow:inset 0 0 0 1px var(--touch)}
+.brush small{display:block;color:var(--muted);font-size:12px;font-weight:400}
+.swatch{width:16px;height:16px;border-radius:3px;flex:none}
+.swatch.off{background:repeating-linear-gradient(135deg,#1a2227 0 4px,#0d1114 4px 8px);border:1px solid var(--line-2)}
+.savebar{position:sticky;top:calc(var(--top) + 12px)}
+.grid-wrap{overflow:auto;max-height:76vh;border-top:1px solid var(--line);background:var(--well);border-radius:0 0 var(--r-lg) var(--r-lg)}
+.grid-canvas{position:relative;min-width:780px}
+table.grid{border-collapse:separate;border-spacing:0;width:100%;min-width:780px;table-layout:fixed;user-select:none;touch-action:none}
+.grid th{position:sticky;top:0;background:#0d1013;z-index:2;font:500 11px/1 var(--mono);letter-spacing:.08em;text-transform:uppercase;padding:9px 4px;border-bottom:1px solid var(--line-2);color:var(--muted)}
+.grid th.today{color:var(--touch)}
+.grid th.time,.grid td.time{width:54px;position:sticky;left:0;background:#0d1013;z-index:2;text-align:right;padding-right:8px;color:var(--dim);font:500 10.5px/1 var(--mono)}
+.grid th.time{z-index:3}
+.grid td.cell{height:19px;padding:0 6px;font-size:11px;line-height:19px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:crosshair;border-left:1px solid #161b20;color:#fff}
+.grid tr.hour td.cell,.grid tr.hour td.time{border-top:1px solid #1b2127}
+.grid td.off{background:repeating-linear-gradient(135deg,#101418 0 5px,#0b0e11 5px 10px);color:var(--dim)}
+.grid td.cell.now{box-shadow:inset 0 2px 0 var(--pgm)}.grid td.cell.run{font-weight:600}.grid td.cell.past{opacity:.35}
+.airs{position:absolute;inset:0;pointer-events:none;z-index:1}
+.chipx{position:absolute;overflow:hidden;border-radius:4px;padding:1px 5px;font-size:11px;line-height:14px;color:#fff;background:#0e2233f2;border:1px solid var(--touch);box-shadow:0 1px 6px #000a}
+.chipx strong,.chipx small{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.chipx small{color:#d0dae0;font-size:10.5px}
+.chipx.game{background:#3a2608f2;border-color:var(--warn)}.chipx.game.estimated{border-bottom:2px dashed var(--warn)}
+.chipx.recording{background:#251c40f2;border-color:var(--rec)}.chipx.manual{background:#0c2418f2;border-color:var(--pvw)}
+.chipx.late{border-style:dashed}.chipx.off_air{background:#14181cf2;border-color:var(--line-3);color:var(--ink-2)}
+.airs-now{position:absolute;height:0;border-top:2px solid var(--pgm);z-index:1}
+.legend{display:flex;gap:6px 16px;flex-wrap:wrap;padding:10px 16px;font-size:12px;color:var(--muted)}
+.legend i{display:inline-block;width:11px;height:11px;border-radius:3px;margin-right:6px;vertical-align:-1px;border:1px solid}
+.shows li,.rundown-list li{display:flex;gap:12px;align-items:center}
+.shows li>div,.rundown-list li>div{flex:1;min-width:0}
+.shows small,.rundown-list small{display:block;color:var(--muted);font-size:12.5px}
+.shows time,.rundown-list time{font:500 12px/1.3 var(--mono);color:var(--muted);width:100px;flex:none}
+.shows li.day{padding:12px 16px 4px;border-top:1px solid var(--line);font:500 11px/1 var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--touch)}
+.shows small.note{color:var(--warn)}
+.shows li.gone{opacity:.65}.shows li.gone strong{text-decoration:line-through}
+.rundown-list li.off{opacity:.75}.rundown-list li.current{box-shadow:inset 3px 0 0 var(--pgm);background:#ff44380a}
+.rundown-list .swatch{align-self:stretch;width:4px;height:auto}
+.ladder{counter-reset:step;list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.ladder li{counter-increment:step;display:grid;grid-template-columns:30px 1fr;gap:10px;align-items:start}
+.ladder li::before{content:counter(step);display:grid;place-items:center;width:26px;height:26px;border-radius:50%;border:1px solid var(--warn-line);color:var(--warn);font:500 12px/1 var(--mono)}
+@media (max-width:1180px){.status{grid-template-columns:1fr 1fr}.status>div:nth-child(3){border-left:0}.status>div:nth-child(n+3){border-top:1px solid var(--line)}}
+@media (max-width:980px){.week{grid-template-columns:1fr}.savebar{position:static}}
+@media (max-width:640px){.status{grid-template-columns:1fr}.status>div{border-left:0;border-top:1px solid var(--line)}.status>div:first-child{border-top:0}}
+</style>
+</head>
+<body>
+<header class="topbar" data-page="schedule"></header><script src="static/ui/vv.js"></script>
+<script src="static/ui/onair.js"></script>
+<main class="page">
+  <div class="page-head"><div><h1>Schedule</h1><p>Paint blocks onto the week; anything unpainted is <strong>OFF AIR</strong> (the test card). Shows and games override the grid on their date. Changes join Up next about <span id="lookahead">10</span> minutes ahead.</p></div></div>
+  <div class="stack" id="workspace">
+    <section class="panel status" aria-label="Automation status">
+      <div><span class="label">Automation</span><label class="switch"><input type="checkbox" id="enabled"><span>Run this schedule</span></label><div id="queue-state" class="row" style="gap:6px"></div></div>
+      <div><span class="label">On now</span><div class="big" id="on-now">—</div><div class="tiny muted" id="on-now-detail"></div></div>
+      <div><span class="label">Next</span><div class="big" id="next">—</div><div class="tiny muted" id="next-detail"></div></div>
+      <div><span class="label">Catch up</span><button id="take-current" type="button" class="sm">Queue what's on now</button><p class="tiny muted">Turning the schedule on only queues future changes. Use this after turning it on, or after a restart, to air the current block.</p></div>
+    </section>
+
+    <div class="week">
+      <div class="stack">
+        <section class="panel" aria-labelledby="blocks-title"><div class="head"><h2 id="blocks-title">Brushes</h2><div class="end"><button type="button" id="new-block" class="sm primary">+ New block</button></div></div>
+          <div class="body stack tight"><p class="hint tiny">Pick a brush, then click or drag across the week. OFF AIR erases. The grid repeats every week.</p><ul class="blocks" id="blocks"></ul></div></section>
+        <section class="panel savebar" aria-label="Save the grid"><div class="body stack tight">
+          <p class="small" id="dirty">No unsaved changes.</p>
+          <div class="actions"><button id="save" type="button" class="primary sm">Save schedule</button><button id="revert" type="button" class="quiet sm">Discard</button></div>
+          <p class="tiny muted">Times are <span id="zone"></span>. Half-hour cells.</p></div></section>
+      </div>
+      <section class="panel" aria-labelledby="week-title"><div class="head"><h2 id="week-title">Next 7 days</h2><div class="end"><label class="switch tiny"><input type="checkbox" id="show-airs" checked><span>Show what will air</span></label></div></div>
+        <div class="grid-wrap" id="grid-wrap"><div class="grid-canvas"><table class="grid" id="grid" aria-describedby="blocks-title"></table><div class="airs" id="airs" aria-hidden="true"></div></div></div>
+        <div class="legend" id="legend"><span><i style="background:#3a2608;border-color:var(--warn)"></i>Game · until its final (dashed: estimated)</span><span><i style="background:#0e2233;border-color:var(--touch)"></i>Scheduled show</span><span><i style="background:#251c40;border-color:var(--rec)"></i>Recording from Up next</span><span><i style="background:#0c2418;border-color:var(--pvw)"></i>Queued by hand</span><span><i style="background:transparent;border:1px dashed var(--touch)"></i>Joins late</span></div>
+      </section>
+    </div>
+
+    <section class="machine machinery" aria-label="How it works: what airs"><div class="head"><span class="title">How it works · what airs when</span></div>
+      <div class="body cols-2">
+        <div class="stack tight"><span class="label">Who gets master, in order</span>
+          <ol class="ladder"><li><span><strong>A game holds master until it is final.</strong> Never cut early, even past its window; estimated from the live inning or quarter.</span></li>
+            <li><span><strong>Then a game already under way</strong> (another one that started meanwhile).</span></li>
+            <li><span><strong>Then recordings waiting in Up next</strong>, until the next live show starts.</span></li>
+            <li><span><strong>Then the schedule:</strong> scheduled shows, else the painted grid, else OFF AIR.</span></li></ol></div>
+        <div class="stack tight"><span class="label">Games follow the sports feeds</span>
+          <p class="hint">Until a game starts, its show follows MLB Stats and ESPN every <span id="check-minutes">10</span> minutes: a moved game takes its whole window along (pregame lead kept), the title follows a decided matchup unless you renamed it, and a game missing for <span id="gone-minutes">20</span> minutes or cancelled is removed and listed below. A feed outage changes nothing.</p>
+          <p class="hint">The overlay on the grid is <code>GET /v1/playback</code>: Up next and the schedule played forward under these rules. Blocks airing as painted are not drawn again.</p></div></div></section>
+
+    <div class="cols-2">
+      <section class="panel" aria-labelledby="shows-title"><div class="head"><h2 id="shows-title">Upcoming shows and games</h2><div class="end"><button type="button" class="sm quiet" id="follow-games">Check sports feeds now</button></div></div>
+        <p class="tiny muted" id="games-checked" style="padding:10px 16px 0"></p><ul class="list shows" id="shows"></ul></section>
+      <section class="panel" aria-labelledby="rundown-title"><div class="head"><h2 id="rundown-title">As it will air · next 24 hours</h2></div>
+        <p class="tiny muted" id="rundown-note" style="padding:10px 16px 0">Game ends (~) are estimates; preparation and station IDs are not shown. <strong id="rundown-paused" style="color:var(--warn)"></strong></p>
+        <ul class="list rundown-list" id="rundown"></ul></section>
+    </div>
+
+    <section class="panel" aria-label="Add to the schedule">
+      <div class="head" style="padding-bottom:0;border-bottom:0"><div class="tabs" role="tablist" style="margin:0;border:0;width:100%">
+        <button type="button" role="tab" data-tab="sports" aria-selected="true">Sports</button><button type="button" role="tab" data-tab="add" aria-selected="false">Add a show or game</button></div></div>
+      <div class="body" style="border-top:1px solid var(--line)">
+        <div data-panel="sports"><p class="hint" style="margin-bottom:12px">A live game: <strong>▶ Play now</strong> or <strong>+ Add to queue</strong>. An upcoming game: <strong>Schedule</strong> adds it on the channel carrying it (NFL 3 h 45, college football and MLB 4 h). <strong>⋯</strong> opens the form to pick another channel, window or backup.</p><div id="sports-list"></div></div>
+        <form id="show-form" data-panel="add" hidden class="stack" style="max-width:860px">
+          <div class="seg" role="radiogroup" aria-label="Show type"><label class="check" style="padding:0 10px"><input type="radio" name="mode" value="program" checked>Program</label><label class="check" style="padding:0 10px"><input type="radio" name="mode" value="game">Sports game</label></div>
+          <div id="program-fields" class="stack tight"><label class="field"><span>Title</span><input id="show-title" maxlength="72" placeholder="Election night coverage"></label><div class="target" id="show-target"></div></div>
+          <div id="game-fields" class="stack tight" hidden>
+            <div class="fields"><label class="field"><span>League</span><select id="league"><option value="nfl">NFL</option><option value="ncaaf">College Football (Power 5)</option><option value="nba">NBA</option><option value="mlb">MLB</option><option value="nhl">NHL</option><option value="wnba">WNBA</option><option value="nwsl">NWSL</option></select></label>
+              <label class="field"><span>Game date</span><input type="date" id="game-date"></label><div class="field"><span>&nbsp;</span><button type="button" class="sm" id="load-games">Load games</button></div></div>
+            <label class="field"><span>Game</span><select id="game"><option value="">Load a date first</option></select></label>
+            <p class="tiny muted" id="game-note"></p>
+            <div class="target" id="game-target"></div>
+            <p class="tiny muted">Any channel you have works: YouTube TV networks, an over-the-air TV-Thing station, Sunday Ticket for NFL (found by reading the YouTube TV guide for its matchup, selectable once live), or Prime Video for Thursday Night Football.</p>
+            <label class="field"><span>Title (optional)</span><input id="game-title" maxlength="72" placeholder="Uses the matchup"></label>
+            <fieldset class="panel inset" style="padding:12px 14px"><legend class="label" style="padding:0 6px">After the game ends</legend><div class="target" id="backup-target"></div>
+              <label class="field" id="backup-title-label" style="margin-top:8px"><span>Backup program title</span><input id="backup-title" maxlength="48" value="Postgame"></label>
+              <details class="more"><summary>How the backup works</summary><p class="hint" style="margin-top:6px">When the game is final (MLB Stats API; ESPN for the other leagues), <em>Return to schedule</em> airs whatever the grid and shows have, unless a game under way or recordings in Up next come first; the next live show still starts on time. A backup program airs until the window ends, which ends early where another show starts. A game running past its window stays on air, and the backup is skipped if it ends after the window.</p></details></fieldset>
+          </div>
+          <div class="fields"><label class="field"><span>Starts</span><input type="datetime-local" id="show-start" required></label><label class="field"><span>Window ends</span><input type="datetime-local" id="show-end" required></label></div>
+          <div class="actions"><button type="submit" id="add-show" class="primary">Add show</button></div>
+        </form>
+      </div>
+    </section>
+  </div>
+</main>
+
+<dialog id="block-dialog"><form id="block-form"><div class="head"><h2 id="block-dialog-title">Programming block</h2></div>
+<div class="body"><div class="fields" style="grid-template-columns:1fr auto"><label class="field"><span>Name</span><input id="block-name" maxlength="48" required placeholder="Morning news"></label><label class="field"><span>Colour</span><input type="color" id="block-color" value="#3a6f8f"></label></div>
+<div class="target" id="block-target"></div><p class="tiny muted">Blocks are saved with the schedule.</p></div>
+<div class="foot"><button type="button" class="danger" id="block-delete" style="margin-right:auto">Delete block</button><button type="button" class="quiet" id="block-cancel">Cancel</button><button type="submit" class="primary">Save block</button></div></form></dialog>
+<script src="static/ui/schedule.js"></script>
+</body>
+</html>

@@ -1,0 +1,18 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+state/
+vendor/tesseract/
+vendor/mediamtx/
+config.master.json
+ident/build/
+
+# local secrets and live config (config.example.json is the template)
+auto.key
+auto.crt
+config.json
+.claude/
+
+# local pre-change snapshots (git history replaces these)
+.backup-*/

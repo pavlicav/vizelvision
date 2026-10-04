@@ -1,0 +1,350 @@
+{
+ "master": {
+  "can_prepare": true,
+  "can_take": false,
+  "cleanup_warning": null,
+  "crawl": {
+   "alerts": [],
+   "bulletin": null,
+   "bulletins_ended": [
+    {
+     "at": 1790890124.61116,
+     "how": "done",
+     "key": "dc_alerts-ae78c270af"
+    },
+    {
+     "at": 1790890440.3895202,
+     "how": "done",
+     "key": "coming_up-317dc22b87"
+    },
+    {
+     "at": 1790890792.028462,
+     "how": "done",
+     "key": "transit-c304c465cc"
+    },
+    {
+     "at": 1790900325.3880954,
+     "how": "done",
+     "key": "transit-1b7ddbe6a5"
+    },
+    {
+     "at": 1790900728.9307528,
+     "how": "done",
+     "key": "dc_alerts-2acae03250"
+    },
+    {
+     "at": 1790901045.7519724,
+     "how": "done",
+     "key": "coming_up-4c8f5f5cbe"
+    },
+    {
+     "at": 1790901217.2033677,
+     "how": "done",
+     "key": "transit-c948284953"
+    },
+    {
+     "at": 1790901672.5753484,
+     "how": "done",
+     "key": "dc_alerts-7a8aa5feac"
+    },
+    {
+     "at": 1790901988.7013013,
+     "how": "done",
+     "key": "coming_up-d50446b318"
+    },
+    {
+     "at": 1790902336.1918967,
+     "how": "done",
+     "key": "transit-a1c0043405"
+    }
+   ],
+   "eas": {
+    "areas": [
+     "011001"
+    ],
+    "checked_at": 1790907392.9866533,
+    "error": null,
+    "url": "http://127.0.0.1:8090/eas"
+   },
+   "error": null,
+   "items": [],
+   "key": null,
+   "kind": null,
+   "label": null,
+   "nws": {
+    "checked_at": 1790907340.809364,
+    "error": null,
+    "zones": [
+     "DCZ001",
+     "DCC001"
+    ]
+   },
+   "on_air": false,
+   "rotation_alerts": [],
+   "style": null
+  },
+  "error": null,
+  "ident": {
+   "duration_seconds": 30.0,
+   "enabled": true,
+   "error": null,
+   "file": "840cd1c52ceb09aa1df45e2bcf3701e9.mp4",
+   "held": false,
+   "on_air": false,
+   "ready": true
+  },
+  "input_tracks": {
+   "on_air": {
+    "audio": {
+     "age_seconds": 0.01,
+     "buffers": 274492,
+     "late_dropped": 0,
+     "max_packet_gap_seconds": 0.0,
+     "packet_age_seconds": null,
+     "rtp_packets": 0
+    },
+    "video": {
+     "age_seconds": 0.007,
+     "buffers": 351373,
+     "late_dropped": 0,
+     "max_packet_gap_seconds": 0.0,
+     "packet_age_seconds": null,
+     "rtp_packets": 0
+    }
+   }
+  },
+  "last_completed": {
+   "at": 1790891914.7723358,
+   "input_id": "3d0cc515ee094491bbadd8fda2213628",
+   "target": {
+    "channel_id": "station-id",
+    "generation": "25238016:1790887834285049490",
+    "id": "3d0cc515ee094491bbadd8fda2213628",
+    "media": {
+     "duration_seconds": 30.0,
+     "position_seconds": 30.0
+    },
+    "source_id": "ident"
+   }
+  },
+  "last_input_failure": {
+   "at": 1790892236.0215504,
+   "error": "Input audio timestamps changed (delta_ms=-52.765853); prepare the source again",
+   "target": {
+    "channel_id": "NBC",
+    "generation": "15d65a9fa8dc4d05960f7868a378a9b2",
+    "id": "6a632b05e9ce45b3ba7e48dbdd67a011",
+    "resolved_source": {
+     "label": "NBC",
+     "provider": "youtube_tv"
+    },
+    "source_id": "youtube-tv"
+   },
+   "tracks": {
+    "audio": {
+     "age_seconds": 0.027,
+     "buffers": 4,
+     "late_dropped": 0,
+     "max_packet_gap_seconds": 2.016,
+     "packet_age_seconds": 0.015,
+     "rtp_packets": 24
+    },
+    "video": {
+     "age_seconds": 0.038,
+     "buffers": 1,
+     "late_dropped": 0,
+     "max_packet_gap_seconds": 2.005,
+     "packet_age_seconds": 0.004,
+     "rtp_packets": 65
+    }
+   },
+   "was_on_air": false
+  },
+  "last_station_id": {
+   "after": {
+    "channel_id": "NBC",
+    "generation": "17547bec269b431496ecee1974220b2d",
+    "id": "a9668e70a7b241efb1a1b38c5035f4f8",
+    "resolved_source": {
+     "label": "NBC",
+     "provider": "youtube_tv"
+    },
+    "source_id": "youtube-tv"
+   },
+   "at": 1790901538.5569098,
+   "file": "sports-65d45ff77e80f0e7.mp4"
+  },
+  "library_enabled": true,
+  "on_air": {
+   "channel_id": "wrc_hd_4_1",
+   "generation": "1790899966456930726-2",
+   "id": "86bb133fa012485facf3a3fefac6303d",
+   "quality": "medium",
+   "shared_with": "VCR",
+   "source_id": "tv-thing-digital"
+  },
+  "operation": {
+   "action": "cancel",
+   "error": null,
+   "error_code": null,
+   "id": "196c8be1f6cf4abab13f66f409cc7d0a",
+   "state": "succeeded"
+  },
+  "prepared": null,
+  "preview_enabled": true,
+  "production_error": null,
+  "publisher_ready": true,
+  "recovery": null,
+  "roku_enabled": true,
+  "roku_last_prepared": {
+   "age_seconds": 5883.8,
+   "max_age_seconds": 900,
+   "prepared_at": 1790901512.8910353,
+   "reason": "Roku changed or service restarted; prepare again",
+   "resolved_source": {
+    "label": "NBC",
+    "provider": "youtube_tv"
+   },
+   "reusable": false,
+   "selection_id": "17547bec269b431496ecee1974220b2d",
+   "target": {
+    "channel_id": "NBC",
+    "source_id": "youtube-tv"
+   }
+  },
+  "state": "live",
+  "tracks": {
+   "audio": {
+    "age_seconds": 0.014,
+    "backwards": 0,
+    "buffers": 861986,
+    "lag_seconds": 0.23
+   },
+   "video": {
+    "age_seconds": 0.006,
+    "backwards": 0,
+    "buffers": 1103342,
+    "lag_seconds": 0.227
+   }
+  },
+  "tv_thing_enabled": true
+ },
+ "sources": [
+  {
+   "availability": "available",
+   "capabilities": {
+    "browse": true,
+    "master_queue": true,
+    "master_take": true
+   },
+   "configured": true,
+   "count": 62,
+   "guide_kind": "broadcast",
+   "id": "tv-thing-digital",
+   "name": "TV-Thing Digital",
+   "resource_id": "tv_thing:digital",
+   "selection": {
+    "audio_pid": 52,
+    "frequency": 593000000,
+    "id": "wrc_hd_4_1",
+    "modulation": "VSB_8",
+    "name": "WRC-HD",
+    "number": "4.1",
+    "rf_channel": 34,
+    "service_id": 3,
+    "video_pid": 49
+   },
+   "stale": false,
+   "stream_state": "ready"
+  },
+  {
+   "availability": "available",
+   "capabilities": {
+    "browse": true,
+    "master_queue": true,
+    "master_take": true
+   },
+   "configured": true,
+   "count": 135,
+   "guide_kind": "unavailable",
+   "id": "tv-thing-analog",
+   "name": "TV-Thing Analog",
+   "resource_id": "tv_thing:analog",
+   "selection": null,
+   "stale": false,
+   "stream_state": "idle"
+  },
+  {
+   "availability": "unknown",
+   "capabilities": {
+    "browse": true,
+    "master_queue": true,
+    "master_take": true
+   },
+   "configured": true,
+   "guide_kind": "unavailable",
+   "id": "youtube-tv",
+   "name": "YouTube TV",
+   "resource_id": "roku:primary",
+   "selection": null
+  },
+  {
+   "availability": "unknown",
+   "capabilities": {
+    "browse": true,
+    "master_queue": true,
+    "master_take": true
+   },
+   "configured": true,
+   "guide_kind": "games",
+   "id": "mlb",
+   "name": "Baseball",
+   "resource_id": "roku:primary",
+   "selection": null
+  },
+  {
+   "availability": "unknown",
+   "capabilities": {
+    "browse": true,
+    "master_queue": true,
+    "master_take": true
+   },
+   "configured": true,
+   "guide_kind": "games",
+   "id": "sunday-ticket",
+   "name": "NFL Sunday Ticket",
+   "resource_id": "roku:primary",
+   "selection": null
+  },
+  {
+   "availability": "unknown",
+   "capabilities": {
+    "browse": true,
+    "master_queue": true,
+    "master_take": true
+   },
+   "configured": true,
+   "guide_kind": "games",
+   "id": "thursday-night-football",
+   "name": "Thursday Night Football",
+   "resource_id": "roku:primary",
+   "selection": null
+  },
+  {
+   "availability": "14 files",
+   "capabilities": {
+    "browse": true,
+    "master_queue": true,
+    "master_take": true
+   },
+   "configured": true,
+   "count": 14,
+   "guide_kind": "library",
+   "id": "library",
+   "name": "Media Library",
+   "resource_id": "library:files",
+   "selection": null
+  }
+ ],
+ "warnings": []
+}

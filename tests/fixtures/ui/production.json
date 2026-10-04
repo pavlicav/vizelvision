@@ -1,0 +1,56 @@
+{
+ "cards": {
+  "master": {
+   "audio": "radio",
+   "caption": "VIZELVISION MASTER OFF-AIR",
+   "lines": [
+    "OFF-AIR AUDIO \u00b7 CAIRO RADIO",
+    "MASTER 1280 \u00d7 720 / 60 FPS \u00b7 H.264 4500 kb/s",
+    "NO PROGRAM LIVE"
+   ]
+  },
+  "roku": {
+   "audio": "radio",
+   "caption": "ROKU OFF",
+   "lines": [
+    "OFF-AIR AUDIO \u00b7 CAIRO RADIO",
+    "MASTER 1280 \u00d7 720 / 60 FPS \u00b7 H.264 4500 kb/s",
+    "NO PROGRAM LIVE"
+   ]
+  },
+  "tv-thing": {
+   "audio": "radio",
+   "caption": "TV-THING OFF",
+   "lines": [
+    "OFF-AIR AUDIO \u00b7 CAIRO RADIO",
+    "MASTER 1280 \u00d7 720 / 60 FPS \u00b7 H.264 4500 kb/s",
+    "NO PROGRAM LIVE"
+   ]
+  }
+ },
+ "detail_options": {
+  "audio": "Off-air audio",
+  "format": "Master output format",
+  "now_playing": "Cairo radio show and now playing",
+  "route": "Source / output identification"
+ },
+ "format_line": "MASTER 1280 \u00d7 720 / 60 FPS \u00b7 H.264 4500 kb/s",
+ "settings": {
+  "audio": "radio",
+  "captions": {
+   "master": "VIZELVISION MASTER OFF-AIR",
+   "roku": "ROKU OFF",
+   "tv-thing": "TV-THING OFF"
+  },
+  "clock": {
+   "enabled": false,
+   "seconds": false
+  },
+  "details": [
+   "audio",
+   "format",
+   "now_playing"
+  ],
+  "note": "NO PROGRAM LIVE"
+ }
+}

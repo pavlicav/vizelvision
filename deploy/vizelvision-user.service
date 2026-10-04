@@ -1,0 +1,18 @@
+[Unit]
+Description=VizelVision Roku Stream controller
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/vivian/vizelVision
+ExecStart=/usr/bin/python3 -m roku_stream --config /home/vivian/vizelVision/config.json serve
+Environment=PYTHONUNBUFFERED=1
+Restart=always
+RestartSec=5
+TimeoutStopSec=20
+NoNewPrivileges=true
+UMask=0027
+
+[Install]
+WantedBy=default.target

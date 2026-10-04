@@ -1,0 +1,48 @@
+{
+  "ok": true,
+  "hardware_opened": false,
+  "roku_controls": "simulated",
+  "phases": [
+    "fallback confirmed before simulated navigation",
+    "verified selection and fresh A/V taken",
+    "legacy navigation invalidates on-air Roku first",
+    "fallback confirmed before simulated navigation",
+    "verified selection and fresh A/V taken",
+    "fallback confirmed before simulated navigation",
+    "persistent source queue prepared and confirmed an automatic master take",
+    "web shutdown returns master to fallback"
+  ],
+  "tracks": {
+    "video": {
+      "buffers": 1043,
+      "backwards": 0,
+      "max_pts_gap_seconds": 0.033362225,
+      "max_arrival_gap_seconds": 0.10517024801811203
+    },
+    "audio": {
+      "buffers": 1625,
+      "backwards": 0,
+      "max_pts_gap_seconds": 0.02133376,
+      "max_arrival_gap_seconds": 0.09472548199119046
+    }
+  },
+  "same_master_publisher_and_reader": true,
+  "hls_streams": [
+    {
+      "codec_name": "h264",
+      "codec_type": "video",
+      "width": 1280,
+      "height": 720,
+      "sample_rate": null,
+      "channels": null
+    },
+    {
+      "codec_name": "aac",
+      "codec_type": "audio",
+      "width": null,
+      "height": null,
+      "sample_rate": "48000",
+      "channels": 2
+    }
+  ]
+}

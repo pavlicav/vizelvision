@@ -1,0 +1,12 @@
+{
+  "host": "VizelVision Sports",
+  "model": "aura-2-jupiter-en",
+  "lines": [
+    {"id": "sports-presentation", "at": 13.4, "text": "The following... is a presentation of Vizel Vision Sports."}
+  ],
+  "words": [
+    ["THE", 0.15, 0.47], ["FOLLOWING", 0.47, 1.03], ["IS", 1.03, 1.27], ["A", 1.27, 1.43],
+    ["PRESENTATION", 1.43, 2.15], ["OF", 2.15, 2.39], ["VIZEL", 2.39, 2.87], ["VISION", 2.87, 3.27],
+    ["SPORTS", 3.27, 3.75]
+  ]
+}

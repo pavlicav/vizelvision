@@ -1,0 +1,137 @@
+{
+  "ok": true,
+  "target": {
+    "source_id": "youtube-tv",
+    "channel_id": "NBC"
+  },
+  "observation_seconds": 30,
+  "limitations": "NBC only; no physical MLB or analog test, no lip-sync measurement.",
+  "queue_item_id": "2a864586b9f94d3bac6b6f2117b72edb",
+  "queue_result": {
+    "after_game_date": null,
+    "after_game_pk": null,
+    "after_game_title": null,
+    "after_program": null,
+    "channel": "NBC",
+    "completed_at": "2026-09-13T16:53:22.593493+00:00",
+    "created_at": "2026-09-13T16:52:57.235421+00:00",
+    "error": null,
+    "gate_checked_at": "2026-09-13T16:53:00.235021+00:00",
+    "gate_detail": null,
+    "gate_status": "taken",
+    "id": "2a864586b9f94d3bac6b6f2117b72edb",
+    "late": false,
+    "position": 0,
+    "program": null,
+    "release_type": "at_time",
+    "result": {
+      "can_prepare": true,
+      "can_take": false,
+      "cleanup_warning": null,
+      "error": null,
+      "last_input_failure": {
+        "at": 1789318374.4076447,
+        "error": "Verified Roku selection expired or changed; prepare again",
+        "target": {
+          "channel_id": "NBC",
+          "generation": "677d341bb865406c8a8ecd92ffea631f",
+          "id": "eac6bee6302144538e11d8a54be217c3",
+          "resolved_source": {
+            "label": "NBC",
+            "provider": "youtube_tv"
+          },
+          "source_id": "youtube-tv"
+        },
+        "tracks": {
+          "audio": {
+            "age_seconds": 0.007,
+            "buffers": 7087
+          },
+          "video": {
+            "age_seconds": 0.023,
+            "buffers": 4593
+          }
+        },
+        "was_on_air": true
+      },
+      "on_air": {
+        "channel_id": "NBC",
+        "generation": "8fb8e6402a5346d195046dc492187a1d",
+        "id": "9baf334172c0456aa37f7eb3dbe8216b",
+        "resolved_source": {
+          "label": "NBC",
+          "provider": "youtube_tv"
+        },
+        "source_id": "youtube-tv"
+      },
+      "operation": {
+        "action": "take",
+        "error": null,
+        "error_code": null,
+        "id": "23efc8a7af694bf8ae6733cb835d66a3",
+        "state": "succeeded"
+      },
+      "prepared": null,
+      "publisher_ready": true,
+      "roku_enabled": true,
+      "state": "live",
+      "tracks": {
+        "audio": {
+          "age_seconds": 0.005,
+          "backwards": 0,
+          "buffers": 14839
+        },
+        "video": {
+          "age_seconds": 0.005,
+          "backwards": 0,
+          "buffers": 9498
+        }
+      },
+      "tv_thing_enabled": true
+    },
+    "run_at": "2026-09-13T16:53:00.234638+00:00",
+    "schedule_id": null,
+    "started_at": "2026-09-13T16:53:00.235021+00:00",
+    "status": "succeeded",
+    "target": {
+      "channel_id": "NBC",
+      "source_id": "youtube-tv"
+    },
+    "tune_anyway": false
+  },
+  "release_and_prepare_seconds": 25.49,
+  "tracks": {
+    "video": {
+      "buffers": 1692,
+      "backwards": 0,
+      "max_pts_gap_seconds": 0.033357134,
+      "max_arrival_gap_seconds": 0.04955781204625964
+    },
+    "audio": {
+      "buffers": 2642,
+      "backwards": 0,
+      "max_pts_gap_seconds": 0.021333867,
+      "max_arrival_gap_seconds": 0.04907693399582058
+    }
+  },
+  "same_publisher_and_reader": true,
+  "one_capture_owner": true,
+  "hls_streams": [
+    {
+      "codec_name": "h264",
+      "codec_type": "video",
+      "width": 1280,
+      "height": 720,
+      "sample_rate": null,
+      "channels": null
+    },
+    {
+      "codec_name": "aac",
+      "codec_type": "audio",
+      "width": null,
+      "height": null,
+      "sample_rate": "48000",
+      "channels": 2
+    }
+  ]
+}

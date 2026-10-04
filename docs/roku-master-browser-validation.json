@@ -1,0 +1,22 @@
+{
+  "ok": true,
+  "source": {
+    "channel_id": "NBC",
+    "generation": "e0df3297346340d48367a9895fd9796f",
+    "id": "0f247f531e4a4d14a92e6c921c88b001",
+    "resolved_source": {
+      "label": "NBC",
+      "provider": "youtube_tv"
+    },
+    "source_id": "youtube-tv"
+  },
+  "video": {
+    "width": 1280,
+    "height": 720,
+    "time": 11.075204,
+    "ready_state": 4,
+    "error": null
+  },
+  "clock_advance_seconds": 9.986376,
+  "page_errors": []
+}

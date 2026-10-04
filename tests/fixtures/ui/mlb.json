@@ -1,0 +1,928 @@
+{
+ "days": 10,
+ "games": [
+  {
+   "broadcasts": [
+    {
+     "market": "national",
+     "name": "NBC/Peacock"
+    },
+    {
+     "market": "national",
+     "name": "NBC/Peacock"
+    },
+    {
+     "market": "national",
+     "name": "Universo/Peacock"
+    },
+    {
+     "market": "national",
+     "name": "Universo/Peacock"
+    }
+   ],
+   "channels": [
+    "NBC"
+   ],
+   "game_date": "2026-10-01",
+   "game_id": 849844,
+   "if_necessary": false,
+   "league": "mlb",
+   "note": null,
+   "series": "NL Wild Card Series",
+   "series_game": 3,
+   "short_title": "Philadelphia Phillies at Atlanta Braves",
+   "start_time": "2026-10-02T00:00:00Z",
+   "start_time_tbd": false,
+   "state": "live",
+   "status": "In Progress",
+   "suggested_target": {
+    "channel_id": "NBC",
+    "source_id": "youtube-tv"
+   },
+   "title": "Philadelphia Phillies at Atlanta Braves"
+  },
+  {
+   "broadcasts": [
+    {
+     "market": "national",
+     "name": "TBS/HBO MAX"
+    },
+    {
+     "market": "national",
+     "name": "TBS/HBO MAX"
+    },
+    {
+     "market": "national",
+     "name": "TruTV"
+    },
+    {
+     "market": "national",
+     "name": "TruTV"
+    },
+    {
+     "market": "national",
+     "name": "Univision/ TUDN"
+    },
+    {
+     "market": "national",
+     "name": "Univision/ TUDN"
+    }
+   ],
+   "channels": [
+    "TBS"
+   ],
+   "game_date": "2026-10-03",
+   "game_id": 849829,
+   "if_necessary": false,
+   "league": "mlb",
+   "note": null,
+   "series": "AL Division Series",
+   "series_game": 1,
+   "short_title": "Chicago White Sox at Cleveland Guardians",
+   "start_time": "2026-10-03T17:00:00Z",
+   "start_time_tbd": false,
+   "state": "preview",
+   "status": "Scheduled",
+   "suggested_target": {
+    "channel_id": "TBS",
+    "source_id": "youtube-tv"
+   },
+   "title": "Chicago White Sox at Cleveland Guardians"
+  },
+  {
+   "broadcasts": [
+    {
+     "market": "national",
+     "name": "FOX/ FOX ONE"
+    },
+    {
+     "market": "national",
+     "name": "FOX/ FOX ONE"
+    },
+    {
+     "market": "national",
+     "name": "Fox Deportes / FOX ONE"
+    },
+    {
+     "market": "national",
+     "name": "Fox Deportes / FOX ONE"
+    }
+   ],
+   "channels": [
+    "FOX"
+   ],
+   "game_date": "2026-10-03",
+   "game_id": 849828,
+   "if_necessary": false,
+   "league": "mlb",
+   "note": null,
+   "series": "NL Division Series",
+   "series_game": 1,
+   "short_title": "ATL/PHI at Los Angeles Dodgers",
+   "start_time": "2026-10-03T20:00:00Z",
+   "start_time_tbd": false,
+   "state": "preview",
+   "status": "Scheduled",
+   "suggested_target": {
+    "channel_id": "FOX",
+    "source_id": "youtube-tv"
+   },
+   "title": "ATL/PHI at Los Angeles Dodgers"
+  },
+  {
+   "broadcasts": [
+    {
+     "market": "national",
+     "name": "TBS/HBO MAX"
+    },
+    {
+     "market": "national",
+     "name": "TBS/HBO MAX"
+    },
+    {
+     "market": "national",
+     "name": "TruTV"
+    },
+    {
+     "market": "national",
+     "name": "TruTV"
+    },
+    {
+     "market": "national",
+     "name": "Univision/ TUDN"
+    },
+    {
+     "market": "national",
+     "name": "Univision/ TUDN"
+    }
+   ],
+   "channels": [
+    "TBS"
+   ],
+   "game_date": "2026-10-03",
+   "game_id": 849835,
+   "if_necessary": false,
+   "league": "mlb",
+   "note": null,
+   "series": "AL Division Series",
+   "series_game": 1,
+   "short_title": "New York Yankees at Tampa Bay Rays",
+   "start_time": "2026-10-03T22:30:00Z",
+   "start_time_tbd": false,
+   "state": "preview",
+   "status": "Scheduled",
+   "suggested_target": {
+    "channel_id": "TBS",
+    "source_id": "youtube-tv"
+   },
+   "title": "New York Yankees at Tampa Bay Rays"
+  },
+  {
+   "broadcasts": [
+    {
+     "market": "national",
+     "name": "FS1/ FOX ONE"
+    },
+    {
+     "market": "national",
+     "name": "FS1/ FOX ONE"
+    },
+    {
+     "market": "national",
+     "name": "Fox Deportes / FOX ONE"
+    },
+    {
+     "market": "national",
+     "name": "Fox Deportes / FOX ONE"
+    }
+   ],
+   "channels": [
+    "FS1"
+   ],
+   "game_date": "2026-10-03",
+   "game_id": 849830,
+   "if_necessary": false,
+   "league": "mlb",
+   "note": null,
+   "series": "NL Division Series",
+   "series_game": 1,
+   "short_title": "San Diego Padres at Milwaukee Brewers",
+   "start_time": "2026-10-04T00:30:00Z",
+   "start_time_tbd": false,
+   "state": "preview",
+   "status": "Scheduled",
+   "suggested_target": {
+    "channel_id": "FS1",
+    "source_id": "youtube-tv"
+   },
+   "title": "San Diego Padres at Milwaukee Brewers"
+  },
+  {
+   "broadcasts": [
+    {
+     "market": "national",
+     "name": "FS1/ FOX ONE"
+    },
+    {
+     "market": "national",
+     "name": "FS1/ FOX ONE"
+    },
+    {
+     "market": "national",
+     "name": "Fox Deportes / FOX ONE"
+    },
+    {
+     "market": "national",
+     "name": "Fox Deportes / FOX ONE"
+    }
+   ],
+   "channels": [
+    "FS1"
+   ],
+   "game_date": "2026-10-04",
+   "game_id": 849825,
+   "if_necessary": false,
+   "league": "mlb",
+   "note": null,
+   "series": "NL Division Series",
+   "series_game": 2,
+   "short_title": "San Diego Padres at Milwaukee Brewers",
+   "start_time": "2026-10-04T20:00:00Z",
+   "start_time_tbd": false,
+   "state": "preview",
+   "status": "Scheduled",
+   "suggested_target": {
+    "channel_id": "FS1",
+    "source_id": "youtube-tv"
+   },
+   "title": "San Diego Padres at Milwaukee Brewers"
+  },
+  {
+   "broadcasts": [
+    {
+     "market": "national",
+     "name": "FS1/ FOX ONE"
+    },
+    {
+     "market": "national",
+     "name": "FS1/ FOX ONE"
+    },
+    {
+     "market": "national",
+     "name": "Fox Deportes / FOX ONE"
+    },
+    {
+     "market": "national",
+     "name": "Fox Deportes / FOX ONE"
+    }
+   ],
+   "channels": [
+    "FS1"
+   ],
+   "game_date": "2026-10-04",
+   "game_id": 849823,
+   "if_necessary": false,
+   "league": "mlb",
+   "note": null,
+   "series": "NL Division Series",
+   "series_game": 2,
+   "short_title": "ATL/PHI at Los Angeles Dodgers",
+   "start_time": "2026-10-05T00:00:00Z",
+   "start_time_tbd": false,
+   "state": "preview",
+   "status": "Scheduled",
+   "suggested_target": {
+    "channel_id": "FS1",
+    "source_id": "youtube-tv"
+   },
+   "title": "ATL/PHI at Los Angeles Dodgers"
+  },
+  {
+   "broadcasts": [
+    {
+     "market": "national",
+     "name": "TBS/HBO MAX"
+    },
+    {
+     "market": "national",
+     "name": "TBS/HBO MAX"
+    },
+    {
+     "market": "national",
+     "name": "TruTV"
+    },
+    {
+     "market": "national",
+     "name": "TruTV"
+    },
+    {
+     "market": "national",
+     "name": "Univision/ TUDN"
+    },
+    {
+     "market": "national",
+     "name": "Univision/ TUDN"
+    }
+   ],
+   "channels": [
+    "TBS"
+   ],
+   "game_date": "2026-10-05",
+   "game_id": 849834,
+   "if_necessary": false,
+   "league": "mlb",
+   "note": null,
+   "series": "AL Division Series",
+   "series_game": 2,
+   "short_title": "Chicago White Sox at Cleveland Guardians",
+   "start_time": "2026-10-05T21:00:00Z",
+   "start_time_tbd": false,
+   "state": "preview",
+   "status": "Scheduled",
+   "suggested_target": {
+    "channel_id": "TBS",
+    "source_id": "youtube-tv"
+   },
+   "title": "Chicago White Sox at Cleveland Guardians"
+  },
+  {
+   "broadcasts": [
+    {
+     "market": "national",
+     "name": "TBS/HBO MAX"
+    },
+    {
+     "market": "national",
+     "name": "TBS/HBO MAX"
+    },
+    {
+     "market": "national",
+     "name": "TruTV"
+    },
+    {
+     "market": "national",
+     "name": "TruTV"
+    },
+    {
+     "market": "national",
+     "name": "Univision/ TUDN"
+    },
+    {
+     "market": "national",
+     "name": "Univision/ TUDN"
+    }
+   ],
+   "channels": [
+    "TBS"
+   ],
+   "game_date": "2026-10-05",
+   "game_id": 849839,
+   "if_necessary": false,
+   "league": "mlb",
+   "note": null,
+   "series": "AL Division Series",
+   "series_game": 2,
+   "short_title": "New York Yankees at Tampa Bay Rays",
+   "start_time": "2026-10-06T00:00:00Z",
+   "start_time_tbd": false,
+   "state": "preview",
+   "status": "Scheduled",
+   "suggested_target": {
+    "channel_id": "TBS",
+    "source_id": "youtube-tv"
+   },
+   "title": "New York Yankees at Tampa Bay Rays"
+  },
+  {
+   "broadcasts": [
+    {
+     "market": "national",
+     "name": "FS1/ FOX ONE"
+    },
+    {
+     "market": "national",
+     "name": "FS1/ FOX ONE"
+    },
+    {
+     "market": "national",
+     "name": "Fox Deportes / FOX ONE"
+    },
+    {
+     "market": "national",
+     "name": "Fox Deportes / FOX ONE"
+    }
+   ],
+   "channels": [
+    "FS1"
+   ],
+   "game_date": "2026-10-06",
+   "game_id": 849819,
+   "if_necessary": false,
+   "league": "mlb",
+   "note": null,
+   "series": "NL Division Series",
+   "series_game": 3,
+   "short_title": "Los Angeles Dodgers at ATL/PHI",
+   "start_time": "2026-10-06T22:00:00Z",
+   "start_time_tbd": false,
+   "state": "preview",
+   "status": "Scheduled",
+   "suggested_target": {
+    "channel_id": "FS1",
+    "source_id": "youtube-tv"
+   },
+   "title": "Los Angeles Dodgers at ATL/PHI"
+  },
+  {
+   "broadcasts": [
+    {
+     "market": "national",
+     "name": "FS1/ FOX ONE"
+    },
+    {
+     "market": "national",
+     "name": "FS1/ FOX ONE"
+    },
+    {
+     "market": "national",
+     "name": "Fox Deportes / FOX ONE"
+    },
+    {
+     "market": "national",
+     "name": "Fox Deportes / FOX ONE"
+    }
+   ],
+   "channels": [
+    "FS1"
+   ],
+   "game_date": "2026-10-06",
+   "game_id": 849826,
+   "if_necessary": false,
+   "league": "mlb",
+   "note": null,
+   "series": "NL Division Series",
+   "series_game": 3,
+   "short_title": "Milwaukee Brewers at San Diego Padres",
+   "start_time": "2026-10-07T01:30:00Z",
+   "start_time_tbd": false,
+   "state": "preview",
+   "status": "Scheduled",
+   "suggested_target": {
+    "channel_id": "FS1",
+    "source_id": "youtube-tv"
+   },
+   "title": "Milwaukee Brewers at San Diego Padres"
+  },
+  {
+   "broadcasts": [
+    {
+     "market": "national",
+     "name": "TBS/HBO MAX"
+    },
+    {
+     "market": "national",
+     "name": "TBS/HBO MAX"
+    },
+    {
+     "market": "national",
+     "name": "TruTV"
+    },
+    {
+     "market": "national",
+     "name": "TruTV"
+    },
+    {
+     "market": "national",
+     "name": "Univision/ TUDN"
+    },
+    {
+     "market": "national",
+     "name": "Univision/ TUDN"
+    }
+   ],
+   "channels": [
+    "TBS"
+   ],
+   "game_date": "2026-10-07",
+   "game_id": 849833,
+   "if_necessary": false,
+   "league": "mlb",
+   "note": null,
+   "series": "AL Division Series",
+   "series_game": 3,
+   "short_title": "Cleveland Guardians at Chicago White Sox",
+   "start_time": "2026-10-07T20:00:00Z",
+   "start_time_tbd": false,
+   "state": "preview",
+   "status": "Scheduled",
+   "suggested_target": {
+    "channel_id": "TBS",
+    "source_id": "youtube-tv"
+   },
+   "title": "Cleveland Guardians at Chicago White Sox"
+  },
+  {
+   "broadcasts": [
+    {
+     "market": "national",
+     "name": "FS1/ FOX ONE"
+    },
+    {
+     "market": "national",
+     "name": "FS1/ FOX ONE"
+    },
+    {
+     "market": "national",
+     "name": "Fox Deportes / FOX ONE"
+    },
+    {
+     "market": "national",
+     "name": "Fox Deportes / FOX ONE"
+    }
+   ],
+   "channels": [
+    "FS1"
+   ],
+   "game_date": "2026-10-07",
+   "game_id": 849822,
+   "if_necessary": true,
+   "league": "mlb",
+   "note": null,
+   "series": "NL Division Series",
+   "series_game": 4,
+   "short_title": "Los Angeles Dodgers at ATL/PHI",
+   "start_time": "2026-10-07T22:00:00Z",
+   "start_time_tbd": false,
+   "state": "preview",
+   "status": "Scheduled",
+   "suggested_target": {
+    "channel_id": "FS1",
+    "source_id": "youtube-tv"
+   },
+   "title": "Los Angeles Dodgers at ATL/PHI"
+  },
+  {
+   "broadcasts": [
+    {
+     "market": "national",
+     "name": "TBS/HBO MAX"
+    },
+    {
+     "market": "national",
+     "name": "TBS/HBO MAX"
+    },
+    {
+     "market": "national",
+     "name": "TruTV"
+    },
+    {
+     "market": "national",
+     "name": "TruTV"
+    },
+    {
+     "market": "national",
+     "name": "Univision/ TUDN"
+    },
+    {
+     "market": "national",
+     "name": "Univision/ TUDN"
+    }
+   ],
+   "channels": [
+    "TBS"
+   ],
+   "game_date": "2026-10-07",
+   "game_id": 849838,
+   "if_necessary": false,
+   "league": "mlb",
+   "note": null,
+   "series": "AL Division Series",
+   "series_game": 3,
+   "short_title": "Tampa Bay Rays at New York Yankees",
+   "start_time": "2026-10-08T00:00:00Z",
+   "start_time_tbd": false,
+   "state": "preview",
+   "status": "Scheduled",
+   "suggested_target": {
+    "channel_id": "TBS",
+    "source_id": "youtube-tv"
+   },
+   "title": "Tampa Bay Rays at New York Yankees"
+  },
+  {
+   "broadcasts": [
+    {
+     "market": "national",
+     "name": "FS1/ FOX ONE"
+    },
+    {
+     "market": "national",
+     "name": "FS1/ FOX ONE"
+    },
+    {
+     "market": "national",
+     "name": "Fox Deportes / FOX ONE"
+    },
+    {
+     "market": "national",
+     "name": "Fox Deportes / FOX ONE"
+    }
+   ],
+   "channels": [
+    "FS1"
+   ],
+   "game_date": "2026-10-07",
+   "game_id": 849827,
+   "if_necessary": true,
+   "league": "mlb",
+   "note": null,
+   "series": "NL Division Series",
+   "series_game": 4,
+   "short_title": "Milwaukee Brewers at San Diego Padres",
+   "start_time": "2026-10-08T02:00:00Z",
+   "start_time_tbd": false,
+   "state": "preview",
+   "status": "Scheduled",
+   "suggested_target": {
+    "channel_id": "FS1",
+    "source_id": "youtube-tv"
+   },
+   "title": "Milwaukee Brewers at San Diego Padres"
+  },
+  {
+   "broadcasts": [
+    {
+     "market": "national",
+     "name": "TBS/HBO MAX"
+    },
+    {
+     "market": "national",
+     "name": "TBS/HBO MAX"
+    },
+    {
+     "market": "national",
+     "name": "TruTV"
+    },
+    {
+     "market": "national",
+     "name": "TruTV"
+    },
+    {
+     "market": "national",
+     "name": "Univision/ TUDN"
+    },
+    {
+     "market": "national",
+     "name": "Univision/ TUDN"
+    }
+   ],
+   "channels": [
+    "TBS"
+   ],
+   "game_date": "2026-10-08",
+   "game_id": 849832,
+   "if_necessary": true,
+   "league": "mlb",
+   "note": null,
+   "series": "AL Division Series",
+   "series_game": 4,
+   "short_title": "Cleveland Guardians at Chicago White Sox",
+   "start_time": "2026-10-08T21:00:00Z",
+   "start_time_tbd": false,
+   "state": "preview",
+   "status": "Scheduled",
+   "suggested_target": {
+    "channel_id": "TBS",
+    "source_id": "youtube-tv"
+   },
+   "title": "Cleveland Guardians at Chicago White Sox"
+  },
+  {
+   "broadcasts": [
+    {
+     "market": "national",
+     "name": "TBS/HBO MAX"
+    },
+    {
+     "market": "national",
+     "name": "TBS/HBO MAX"
+    },
+    {
+     "market": "national",
+     "name": "TruTV"
+    },
+    {
+     "market": "national",
+     "name": "TruTV"
+    },
+    {
+     "market": "national",
+     "name": "Univision/ TUDN"
+    },
+    {
+     "market": "national",
+     "name": "Univision/ TUDN"
+    }
+   ],
+   "channels": [
+    "TBS"
+   ],
+   "game_date": "2026-10-08",
+   "game_id": 849837,
+   "if_necessary": true,
+   "league": "mlb",
+   "note": null,
+   "series": "AL Division Series",
+   "series_game": 4,
+   "short_title": "Tampa Bay Rays at New York Yankees",
+   "start_time": "2026-10-09T00:00:00Z",
+   "start_time_tbd": false,
+   "state": "preview",
+   "status": "Scheduled",
+   "suggested_target": {
+    "channel_id": "TBS",
+    "source_id": "youtube-tv"
+   },
+   "title": "Tampa Bay Rays at New York Yankees"
+  },
+  {
+   "broadcasts": [
+    {
+     "market": "national",
+     "name": "FS1/ FOX ONE"
+    },
+    {
+     "market": "national",
+     "name": "FS1/ FOX ONE"
+    },
+    {
+     "market": "national",
+     "name": "Fox Deportes / FOX ONE"
+    },
+    {
+     "market": "national",
+     "name": "Fox Deportes / FOX ONE"
+    }
+   ],
+   "channels": [
+    "FS1"
+   ],
+   "game_date": "2026-10-09",
+   "game_id": 849824,
+   "if_necessary": true,
+   "league": "mlb",
+   "note": null,
+   "series": "NL Division Series",
+   "series_game": 5,
+   "short_title": "San Diego Padres at Milwaukee Brewers",
+   "start_time": "2026-10-09T20:30:00Z",
+   "start_time_tbd": false,
+   "state": "preview",
+   "status": "Scheduled",
+   "suggested_target": {
+    "channel_id": "FS1",
+    "source_id": "youtube-tv"
+   },
+   "title": "San Diego Padres at Milwaukee Brewers"
+  },
+  {
+   "broadcasts": [
+    {
+     "market": "national",
+     "name": "FOX/ FOX ONE"
+    },
+    {
+     "market": "national",
+     "name": "FOX/ FOX ONE"
+    },
+    {
+     "market": "national",
+     "name": "Fox Deportes / FOX ONE"
+    },
+    {
+     "market": "national",
+     "name": "Fox Deportes / FOX ONE"
+    }
+   ],
+   "channels": [
+    "FOX"
+   ],
+   "game_date": "2026-10-09",
+   "game_id": 849821,
+   "if_necessary": true,
+   "league": "mlb",
+   "note": null,
+   "series": "NL Division Series",
+   "series_game": 5,
+   "short_title": "ATL/PHI at Los Angeles Dodgers",
+   "start_time": "2026-10-10T00:00:00Z",
+   "start_time_tbd": false,
+   "state": "preview",
+   "status": "Scheduled",
+   "suggested_target": {
+    "channel_id": "FOX",
+    "source_id": "youtube-tv"
+   },
+   "title": "ATL/PHI at Los Angeles Dodgers"
+  },
+  {
+   "broadcasts": [
+    {
+     "market": "national",
+     "name": "TBS/HBO MAX"
+    },
+    {
+     "market": "national",
+     "name": "TBS/HBO MAX"
+    },
+    {
+     "market": "national",
+     "name": "TruTV"
+    },
+    {
+     "market": "national",
+     "name": "TruTV"
+    },
+    {
+     "market": "national",
+     "name": "Univision/ TUDN"
+    },
+    {
+     "market": "national",
+     "name": "Univision/ TUDN"
+    }
+   ],
+   "channels": [
+    "TBS"
+   ],
+   "game_date": "2026-10-10",
+   "game_id": 849831,
+   "if_necessary": true,
+   "league": "mlb",
+   "note": null,
+   "series": "AL Division Series",
+   "series_game": 5,
+   "short_title": "Chicago White Sox at Cleveland Guardians",
+   "start_time": "2026-10-10T21:00:00Z",
+   "start_time_tbd": false,
+   "state": "preview",
+   "status": "Scheduled",
+   "suggested_target": {
+    "channel_id": "TBS",
+    "source_id": "youtube-tv"
+   },
+   "title": "Chicago White Sox at Cleveland Guardians"
+  },
+  {
+   "broadcasts": [
+    {
+     "market": "national",
+     "name": "TBS/HBO MAX"
+    },
+    {
+     "market": "national",
+     "name": "TBS/HBO MAX"
+    },
+    {
+     "market": "national",
+     "name": "TruTV"
+    },
+    {
+     "market": "national",
+     "name": "TruTV"
+    },
+    {
+     "market": "national",
+     "name": "Univision/ TUDN"
+    },
+    {
+     "market": "national",
+     "name": "Univision/ TUDN"
+    }
+   ],
+   "channels": [
+    "TBS"
+   ],
+   "game_date": "2026-10-10",
+   "game_id": 849836,
+   "if_necessary": true,
+   "league": "mlb",
+   "note": null,
+   "series": "AL Division Series",
+   "series_game": 5,
+   "short_title": "New York Yankees at Tampa Bay Rays",
+   "start_time": "2026-10-11T00:00:00Z",
+   "start_time_tbd": false,
+   "state": "preview",
+   "status": "Scheduled",
+   "suggested_target": {
+    "channel_id": "TBS",
+    "source_id": "youtube-tv"
+   },
+   "title": "New York Yankees at Tampa Bay Rays"
+  }
+ ],
+ "generated_at": "2026-10-02T02:16:37.252421+00:00",
+ "league": "mlb",
+ "start": "2026-10-01"
+}

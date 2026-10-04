@@ -1,0 +1,397 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ads · VizelVision</title>
+<link rel="stylesheet" href="static/ui/vv.css">
+<style>
+/* Each tab opens with what it does, and its own switch. */
+.lead{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:var(--gap)}
+.lead p{color:var(--muted);max-width:72ch}
+/* Each tab's styles apply inside its panel only (the three share class names); its dialogs open on <body>. */
+/* Ad mute ------------------------------------------------------------------------------------------ */
+#panel-admute .admute{display:grid;grid-template-columns:minmax(0,1fr) minmax(300px,400px);gap:var(--gap);align-items:start}
+#panel-admute .status-big{font:700 26px/1.1 var(--display);text-transform:uppercase;letter-spacing:.02em}
+#panel-admute .status-big.muted-now{color:var(--pgm)}
+#panel-admute .status-big.shadow-now{color:var(--warn)}
+#panel-admute .pad{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+#panel-admute .pad button{height:58px;font-size:15px}
+#panel-admute .timeline{width:100%;height:120px;display:block;background:var(--well);border-radius:var(--r)}
+#panel-admute .legend{display:flex;gap:14px;flex-wrap:wrap}
+#panel-admute .legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px}
+#panel-admute input[type=range]{width:100%}
+#panel-admute .exceptions{width:100%;min-height:72px;font:14px/1.4 var(--mono)}
+#panel-admute td.when{white-space:nowrap;font-family:var(--mono);font-size:13px}
+#panel-admute .shot .call{position:absolute;right:6px;top:6px;padding:1px 7px;border-radius:4px;font:700 12px/1.5 var(--display);letter-spacing:.04em;text-transform:uppercase;background:#000b;color:#fff}
+#panel-admute .shot .call.ad{background:var(--pgm)}
+#panel-admute .fix{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:12px;align-items:start}
+#panel-admute .fix .pad{grid-template-columns:1fr}
+#panel-admute .fix .pad button{height:72px}
+#panel-admute .now{margin:0}
+#panel-admute .now figcaption{margin-top:6px}
+#panel-admute .strip{display:grid;grid-template-columns:repeat(10,minmax(0,1fr));gap:4px}
+#panel-admute .frame{display:grid;grid-template-columns:minmax(0,1fr);gap:3px;width:100%;height:auto;padding:0;border:0;background:none;color:inherit;cursor:pointer;text-align:center;min-width:0;white-space:normal}
+#panel-admute .frame:hover:not(:disabled){background:none}
+#panel-admute .frame:focus-visible{outline:2px solid var(--touch);outline-offset:2px}
+.call-bar{display:block;height:4px;border-radius:2px;background:var(--line-2)}
+.call-bar.maybe{background:var(--warn)}
+.call-bar.ad{background:var(--pgm)}
+#panel-admute .frame .t{font:11px/1 var(--mono);color:var(--muted);white-space:nowrap}
+#panel-admute .edges{display:grid;grid-template-columns:repeat(3,64px);gap:4px}
+#panel-admute .events{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+#panel-admute .events li{display:flex;gap:10px;align-items:baseline;font-size:14px}
+#panel-admute .events li .when{flex:none;font:12px/1.4 var(--mono);color:var(--muted);min-width:64px}
+#panel-admute .events li .what{flex:1;min-width:0}
+#panel-admute .tag{display:inline-block;padding:0 6px;border-radius:4px;font:600 11px/1.6 var(--mono);text-transform:uppercase;letter-spacing:.04em;background:var(--raised);border:1px solid var(--line-2)}
+#panel-admute .tag.known{border-color:var(--touch-line);color:#d7eeff}
+#panel-admute .flow{margin:0;padding-left:20px;display:grid;gap:8px;font-size:14px}
+#panel-admute .flow b{font-weight:600}
+.sheet{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;max-height:62vh;overflow:auto}
+dialog.break{width:min(860px,94vw)}
+@media (max-width:640px){#panel-admute .fix{grid-template-columns:1fr}#panel-admute .fix .pad{grid-template-columns:1fr 1fr}#panel-admute .fix .pad button{height:58px}#panel-admute .strip{grid-template-columns:repeat(5,minmax(0,1fr))}#panel-admute .strip .frame:nth-child(-n+5){display:none}.sheet{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:900px){#panel-admute .admute{grid-template-columns:1fr}}
+/* Ad database ----------------------------------------------------------------------------------------- */
+#panel-database .counts{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:var(--gap);margin-bottom:var(--gap)}
+#panel-database .counts .panel{padding:12px 16px}
+#panel-database .counts b{display:block;font:800 30px/1 var(--display);letter-spacing:.02em}
+#panel-database .counts span{font:500 11px/1.4 var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+#panel-database .counts .known b{color:var(--pvw)}
+#panel-database .counts .learning b{color:var(--warn)}
+#panel-database .counts .show b{color:var(--touch)}
+#panel-database .tools{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:var(--gap)}
+#panel-database .tools .find{flex:1 1 260px;max-width:460px}
+#panel-database .ads{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,520px),1fr));gap:var(--gap);align-items:start}
+#panel-database .ad>.body{display:grid;grid-template-columns:minmax(0,1fr);gap:10px}
+#panel-database .ad .title{display:flex;gap:8px;align-items:baseline;min-width:0}
+#panel-database .ad .title h2{font:600 17px/1.25 var(--body);letter-spacing:0;text-transform:none;color:var(--ink);min-width:0;overflow-wrap:anywhere}
+#panel-database .ad .title h2.untitled{color:var(--ink-2);font-style:italic;font-weight:500}
+#panel-database .ad .title .end{margin-left:auto;display:flex;gap:4px;flex:none}
+#panel-database .ad .title form{display:flex;gap:6px;flex:1;min-width:0}
+#panel-database .ad .title input{height:30px}
+#panel-database .pics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px}
+#panel-database .pics .shot{border-radius:4px}
+#panel-database .pics.none{display:block}
+#panel-database .pics.none p{margin:0;padding:8px 10px;border:1px dashed var(--line-2);border-radius:var(--r);color:var(--dim);font-size:12px}
+#panel-database .facts{display:flex;gap:6px 10px;flex-wrap:wrap;align-items:center;font-size:13px;color:var(--muted)}
+#panel-database .facts .sep{color:var(--dim)}
+#panel-database .script{margin:0;padding:10px 12px;background:var(--well);border:1px solid var(--line);border-radius:var(--r);display:grid;grid-template-columns:minmax(0,1fr);gap:3px;font-size:14px;line-height:1.45;max-height:none}
+#panel-database .script.folded{max-height:9.6em;overflow:hidden;-webkit-mask-image:linear-gradient(#000 70%,transparent);mask-image:linear-gradient(#000 70%,transparent)}
+#panel-database .script .ln{display:grid;grid-template-columns:3.4em minmax(0,1fr);gap:8px}
+#panel-database .script .ln span{overflow-wrap:anywhere}
+#panel-database .script .ln i{font:normal 11px/1.9 var(--mono);color:var(--dim);text-align:right}
+#panel-database .script.empty{color:var(--muted);font-size:13px}
+#panel-database mark{background:#4fb3ff38;color:var(--ink);border-radius:2px;padding:0 1px}
+#panel-database .ad .foot{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+#panel-database .ad .foot .end{margin-left:auto;display:flex;gap:6px}
+#panel-database .ad .mach{font:12px/1.5 var(--mono);color:var(--dim)}
+#panel-database .more-ads{display:flex;justify-content:center;margin-top:var(--gap)}
+@media (max-width:760px){#panel-database .counts{grid-template-columns:repeat(2,minmax(0,1fr))}}
+/* My ads ------------------------------------------------------------------------------------------------ */
+#panel-my-ads .myads{display:grid;grid-template-columns:minmax(0,1fr) minmax(300px,380px);gap:var(--gap);align-items:start}
+@media (max-width:980px){#panel-my-ads .myads{grid-template-columns:1fr}}
+#panel-my-ads .status-big{font:700 26px/1.1 var(--display);text-transform:uppercase;letter-spacing:.02em;overflow-wrap:anywhere}
+#panel-my-ads .status-big.on{color:var(--pgm)}
+#panel-my-ads .status-big.card{color:var(--warn)}
+#panel-my-ads .now{display:grid;grid-template-columns:minmax(0,1fr) minmax(220px,300px);gap:16px;align-items:start}
+@media (max-width:640px){#panel-my-ads .now{grid-template-columns:1fr}}
+#panel-my-ads .pad{display:grid;gap:8px}
+#panel-my-ads .pad button{height:54px;font-size:15px}
+#panel-my-ads .meter.ad i{background:var(--pgm)}
+/* Upload */
+#panel-my-ads .drop{display:grid;place-items:center;gap:6px;padding:26px 16px;border:2px dashed var(--line-3);border-radius:var(--r-lg);background:var(--well);text-align:center;cursor:pointer;transition:border-color .12s,background .12s}
+#panel-my-ads .drop:hover,#panel-my-ads .drop:focus-visible{border-color:var(--touch-line);background:#0e1620}
+#panel-my-ads .drop.over{border-color:var(--touch);background:var(--touch-bg)}
+#panel-my-ads .drop b{font:700 20px/1.1 var(--display);letter-spacing:.03em;text-transform:uppercase}
+#panel-my-ads .drop svg{width:30px;height:30px;stroke:var(--touch);fill:none;stroke-width:1.6}
+#panel-my-ads .uploads{list-style:none;margin:10px 0 0;padding:0;display:grid;gap:6px}
+#panel-my-ads .uploads li{display:grid;grid-template-columns:minmax(0,1fr) 120px auto;gap:10px;align-items:center;font-size:13px}
+#panel-my-ads .uploads .name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#panel-my-ads .uploads .bar{height:6px;border-radius:3px;background:var(--line-2);overflow:hidden}
+#panel-my-ads .uploads .bar i{display:block;height:100%;width:0;background:var(--touch);transition:width .2s}
+#panel-my-ads .uploads li.done .bar i{background:var(--pvw)}
+#panel-my-ads .uploads li.failed .bar i{background:var(--pgm)}
+#panel-my-ads .uploads .what{font:12px/1.3 var(--mono);color:var(--muted);white-space:nowrap}
+#panel-my-ads .uploads li.failed .what{color:#ffb4ae;white-space:normal}
+/* The list */
+#panel-my-ads .tools{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+#panel-my-ads .ads{list-style:none;margin:0;padding:0;display:grid;gap:10px}
+#panel-my-ads .ad{display:grid;grid-template-columns:auto minmax(0,1fr);gap:12px;padding:12px;border:1px solid var(--line);border-radius:var(--r-lg);background:var(--well)}
+#panel-my-ads .ad.airing{border-color:var(--pgm-line);box-shadow:inset 3px 0 0 var(--pgm)}
+#panel-my-ads .ad.next{border-color:var(--pvw-line)}
+#panel-my-ads .ad.off{opacity:.62}
+#panel-my-ads .ad .move{display:grid;grid-template-rows:auto auto auto;gap:4px;justify-items:center;align-content:start}
+#panel-my-ads .ad .move b{font:700 18px/1 var(--display);color:var(--muted)}
+#panel-my-ads .ad .main{display:grid;gap:8px;min-width:0}
+#panel-my-ads .ad .top{display:flex;gap:8px;align-items:center;flex-wrap:wrap;min-width:0}
+#panel-my-ads .ad .top h3{font:600 17px/1.25 var(--body);margin:0;min-width:0;overflow-wrap:anywhere}
+#panel-my-ads .ad .top .end{margin-left:auto;display:flex;gap:6px;align-items:center}
+#panel-my-ads .ad .top form{display:flex;gap:6px;flex:1;min-width:200px}
+#panel-my-ads .ad .top input{height:30px}
+#panel-my-ads .pics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px;padding:0;border:0;background:none;cursor:pointer;height:auto;width:100%;max-width:440px}
+#panel-my-ads .pics:hover:not(:disabled){background:none}
+#panel-my-ads .pics .shot{border-radius:4px}
+#panel-my-ads .pics .shot.none{background:var(--raised)}
+#panel-my-ads .facts{display:flex;gap:4px 10px;flex-wrap:wrap;align-items:center;font-size:13px;color:var(--muted)}
+#panel-my-ads .facts .sep{color:var(--dim)}
+#panel-my-ads .controls{display:flex;gap:10px 16px;flex-wrap:wrap;align-items:center}
+#panel-my-ads .controls .field{grid-template-columns:auto auto;align-items:center;gap:8px}
+#panel-my-ads .controls select{height:30px;width:auto}
+#panel-my-ads .empty-list{padding:18px;border:1px dashed var(--line-2);border-radius:var(--r-lg);color:var(--muted);font-size:14px;text-align:center}
+/* The card and the corner */
+#panel-my-ads .card-shot{position:relative;border-radius:var(--r);overflow:hidden;background:#000;aspect-ratio:16/9}
+#panel-my-ads .card-shot img{width:100%;height:100%;object-fit:contain;display:block}
+#panel-my-ads .presets{display:flex;gap:6px;flex-wrap:wrap}
+#panel-my-ads .screen{position:relative;aspect-ratio:16/9;border-radius:var(--r);background:linear-gradient(135deg,#2a0f0d,#171b20 60%);border:1px solid var(--line-2);overflow:hidden}
+#panel-my-ads .screen .label{position:absolute;left:10px;top:8px}
+#panel-my-ads .screen .corner{position:absolute;background:#506070;border:2px solid #eef;box-shadow:0 2px 10px #000a}
+#panel-my-ads .screen .corner::before{content:'LIVE';position:absolute;left:2px;top:2px;padding:0 3px;background:#cc1616;color:#fff;font:700 8px/1.4 var(--body)}
+#panel-my-ads .screen.off .corner{display:none}
+#panel-my-ads td.when{white-space:nowrap;font-family:var(--mono);font-size:13px}
+#panel-my-ads td.aired{white-space:nowrap}
+dialog.preview{width:min(900px,94vw)}
+dialog.preview video{width:100%;max-height:70vh;background:#000;border-radius:var(--r)}
+</style>
+</head>
+<body>
+<header class="topbar" data-page="ads"></header><script src="static/ui/vv.js"></script>
+<main class="page">
+  <div class="page-head"><div><h1>Ads</h1><p>The commercial breaks in live programmes: ad mute finds them and takes them off air, the ad database holds every ad it knows by its sound, and your own ads can air in their place.</p></div></div>
+  <div class="tabs" role="tablist" aria-label="Ads">
+    <button type="button" role="tab" id="tab-admute" data-tab="admute">Ad mute</button>
+    <button type="button" role="tab" id="tab-database" data-tab="database">Ad database</button>
+    <button type="button" role="tab" id="tab-my-ads" data-tab="my-ads">My ads</button>
+  </div>
+
+  <div role="tabpanel" id="panel-admute" aria-labelledby="tab-admute" hidden>
+    <div class="lead"><p>Finds the commercial breaks in live programmes and takes their sound down, or, in shadow, just marks them with an AD badge on screen. It errs towards sound: when unsure, the programme stays audible.</p>
+      <div class="end"><div class="seg" role="group" aria-label="Mode" id="mode">
+        <button type="button" data-mode="off" aria-pressed="false">Off</button>
+        <button type="button" data-mode="shadow" aria-pressed="false">Shadow</button>
+        <button type="button" data-mode="on" aria-pressed="false">On</button></div></div></div>
+
+    <div class="admute">
+      <div class="stack">
+        <section class="panel" aria-label="On air"><div class="head"><span class="lamp" id="lamp"></span><h2>On air</h2><div class="end"><span class="chip" id="detector-chip">detector</span></div></div>
+          <div class="body stack">
+            <div class="status-big" id="status">—</div>
+            <div class="small" id="status-detail">—</div>
+            <p class="small" id="why" hidden></p>
+            <p class="tiny muted" id="heard" hidden></p>
+            <div><div class="meter warn" title="How sure the detector is that an ad is airing"><i id="p-meter" style="width:0"></i></div>
+              <div class="tiny muted" id="p-text">P(ad) —</div></div>
+            <div class="fix">
+            <figure class="now" id="now" hidden><div class="shot" id="now-shot"><img id="now-img" alt="The picture on master now"><span class="call" id="now-call"></span><span class="stamp" id="now-stamp"></span></div>
+              <figcaption class="tiny muted">On master now: a fix applies from this picture. Your player shows it a few seconds later; the strip is the half-minute before, so you can find what you are watching.</figcaption></figure>
+            <div class="pad">
+              <button type="button" class="primary" id="unmute" title="Bring the sound back now; no new mute until the programme has run a while (u)">It's the show · unmute</button>
+              <button type="button" id="mute" title="Mute now, until the detector sees the programme come back (a)">It's an ad · mute</button>
+            </div></div>
+            <div class="strip" id="strip" aria-label="The last 30 seconds on master"></div>
+            <div class="actions"><button type="button" class="sm quiet" id="pause">Pause for this program</button><button type="button" class="sm quiet" id="resume" hidden>Resume ad mute</button></div>
+            <p class="note bad" id="error" role="status"></p>
+          </div></section>
+
+        <section class="panel" aria-label="Recent breaks"><div class="head"><h2>Recent breaks</h2><div class="end"><span class="tiny muted">Mark mistakes: they become training data. Click the pictures to see the whole break.</span></div></div>
+          <div class="body scroll-x"><table class="data"><thead><tr><th>When</th><th>Pictures</th><th>Length</th><th>Call</th><th>Ended</th><th>Right?</th></tr></thead><tbody id="spans"></tbody></table>
+            <p class="hint" id="spans-empty">No breaks found yet.</p>
+            <details class="more"><summary>It missed a break</summary>
+              <form class="row" id="missed" style="margin-top:8px;flex-wrap:wrap;gap:8px">
+                <label class="field"><span>From (clock on screen)</span><input type="time" step="1" id="missed-from" required></label>
+                <label class="field"><span>To</span><input type="time" step="1" id="missed-to" required></label>
+                <button class="sm" type="submit">Record as an ad</button></form></details>
+          </div></section>
+
+        <section class="panel" aria-label="Known ads"><div class="head"><h2>Known ads</h2><div class="end"><a class="btn xs quiet" href="#database" style="height:24px;padding:0 8px;font-size:12px">Ad database: scripts and pictures</a><span class="chip" id="known-chip">—</span></div></div>
+          <div class="body stack tight">
+            <p class="small" id="known-summary">—</p>
+            <p class="small" id="game-learning" hidden></p>
+            <ul class="events" id="known-log" aria-label="What it learnt lately"></ul>
+            <p class="hint" id="known-log-empty">Nothing learnt or forgotten since the detector started. Breaks it confirms are learnt ten minutes after they end; a game's breaks as the game goes.</p>
+            <details class="more" id="known-all"><summary>All known ads and show sounds</summary>
+              <div class="scroll-x" style="margin-top:8px"><table class="data"><thead><tr><th>Kind</th><th>From</th><th>Length</th><th>Heard in</th><th>Last heard</th><th></th></tr></thead><tbody id="known-table"></tbody></table></div>
+              <p class="tiny muted" id="known-table-note"></p></details>
+          </div></section>
+
+        <section class="panel" aria-label="Training recordings"><div class="head"><h2>Training recordings</h2><div class="end"><span class="chip" id="rec-chip">—</span></div></div>
+          <div class="body stack tight">
+            <p class="small" id="rec-summary">Games on over-the-air networks are recorded on TV-Thing and kept in its library. Once recorded, their breaks are learnt from MLB's play-by-play and saved as training labels.</p>
+            <div class="scroll-x"><table class="data"><thead><tr><th>Game</th><th>On</th><th>When</th><th>Status</th><th></th></tr></thead><tbody id="rec-table"></tbody></table></div>
+            <p class="hint" id="rec-empty">Nothing planned: over-the-air games in the next 24 hours appear here.</p>
+            <p class="note bad" id="rec-error" hidden></p>
+            <details class="more"><summary>Not recorded</summary><ul class="events" id="rec-skipped" style="margin-top:8px"></ul></details>
+          </div></section>
+
+        <section class="panel" aria-label="How it works"><div class="head"><h2>How it works</h2></div>
+          <div class="body"><details class="more" id="how"><summary>Watch, weigh, err towards sound, fix, learn</summary><ol class="flow" style="margin-top:10px">
+            <li><b>It watches and listens ahead of you.</b> Master holds the programme a few seconds (6 s with captions on); in that time the detector sees each cut and black frame, hears the words (Whisper) and fingerprints the sound before you do.</li>
+            <li><b>It weighs the evidence.</b> The station or score bug, cutting, whether this looks like the programme so far, the words, and above all whether the sound is an ad it has heard before. A mute starts at a black frame, or at a hard cut when what follows is clearly an ad (stations like WJLA fade to black at every break; cable feeds often cut straight in), in games wherever it is sure, or on a known ad.</li>
+            <li><b>It errs towards sound.</b> A mute must be confirmed within 10 s or it is taken back, and the sound returns once the detector is no longer sure and what it has already seen ahead agrees, so a mute doesn't cut in and out. Early in an MLB inning break, only a clear cut back to the game ends it. Mutes are capped, master brings the sound back if the detector stops answering, and with the detector down nothing is muted. During an MLB game, play in progress is never muted.</li>
+            <li><b>You fix it in one press.</b> "It's the show" (u) and "It's an ad" (a), here or on On Air, act at once on the picture shown; the marks and fixes are kept as training data.</li>
+            <li><b>It learns ads.</b> A break it confirms teaches it that break's sound (an ad counts once heard in two breaks); an MLB game's breaks are learnt from the play-by-play as the game goes; recordings can be added with <code>admute.seed</code>. Show sound that repeats, like a theme, is never learnt as an ad, and "It's the show", "Was the show" or Forget (above) removes one at once.</li>
+          </ol></details></div></section>
+
+        <section class="panel machinery" aria-label="Timeline"><div class="head"><h2>Last hour</h2><div class="end"><span class="tiny muted" id="model"></span></div></div>
+          <div class="body stack tight"><canvas class="timeline" id="timeline" width="900" height="120"></canvas>
+            <div class="legend tiny muted"><span><i style="background:var(--warn)"></i>P(ad)</span><span><i style="background:var(--pgm)"></i>muted / would mute</span><span><i style="background:var(--ink)"></i>black seam</span><span><i style="background:var(--touch)"></i>sports feed: play live</span></div>
+            <pre class="json tiny" id="raw" hidden></pre></div></section>
+      </div>
+
+      <form class="stack" id="settings">
+        <section class="panel"><div class="head"><h2>What it listens to</h2></div><div class="body stack tight">
+          <label class="switch"><input type="checkbox" id="src-tv"><span>TV-Thing channels</span></label>
+          <label class="switch"><input type="checkbox" id="src-roku"><span>Roku apps (YouTube TV, MLB…)</span></label>
+          <label class="switch"><input type="checkbox" id="gate"><span>Use MLB's live feed: never mute while play is live</span></label>
+          <label class="field"><span>Never mute these programmes (one per line)</span><textarea class="exceptions" id="exceptions" placeholder="e.g. Jeopardy!"></textarea></label>
+          <p class="tiny muted">Which inputs are analysed is decided when a source is prepared.</p></div></section>
+        <section class="panel"><div class="head"><h2>How it decides</h2></div><div class="body stack tight">
+          <label class="field"><span>Sensitivity: <b id="sens-text"></b></span><input type="range" id="sensitivity" min="0" max="1" step="0.05"></label>
+          <label class="switch"><input type="checkbox" id="speech"><span>Listen to what is said (Whisper)</span></label>
+          <p class="tiny muted">Words count as evidence: ads repeat, talk to "you", and use different words from the programme. About a third of a CPU core per analysed source.</p>
+          <label class="field"><span>Longest mute (seconds)</span><input type="number" id="max-mute" min="60" max="600" step="10"></label>
+          <details class="more"><summary>Lookahead</summary>
+            <label class="field" style="margin-top:6px"><span>Seconds the programme plays behind the detector</span><input type="number" id="lookahead" min="1" max="8" step="0.5"></label>
+            <p class="tiny muted">More lookahead lets it judge each seam before the sound gets there. Applies to sources prepared after saving; the programme runs this much later than live.</p></details></div></section>
+        <section class="panel"><div class="head"><h2>What it learns</h2></div><div class="body stack tight">
+          <label class="switch"><input type="checkbox" id="known-ads"><span>Recognise ads heard before (audio fingerprints)</span></label>
+          <p class="tiny muted">An ad's sound is the same every time it airs; a programme's is not. Show sound that repeats, like a theme, can never become an ad.</p>
+          <label class="switch"><input type="checkbox" id="learn-ads"><span>Learn ads from breaks it confirms</span></label>
+          <p class="tiny muted">Ten minutes after a confirmed break, unless you marked it "Was the show". A learnt ad counts once heard in two breaks.</p>
+          <label class="switch"><input type="checkbox" id="learn-games"><span>Learn each game's breaks from MLB's play-by-play</span></label>
+          <p class="tiny muted">Between a half-inning's last pitch and the next first pitch, matched to the broadcast's own black frames (however far the stream lags) and kept only if it also looks like ads. Nothing is recorded.</p>
+          <label class="switch"><input type="checkbox" id="record-games"><span>Record over-the-air games on TV-Thing for training</span></label>
+          <p class="tiny muted">FOX, NBC, CBS and ABC games in the schedule get a TV-Thing timer (5 min before to 4 h after). TV-Thing can stream the channel it records, but not change channel meanwhile; recordings stay in its library.</p>
+          <label class="switch"><input type="checkbox" id="learn"><span>Keep my corrections as training data</span></label></div></section>
+        <section class="panel"><div class="head"><h2>During a break</h2></div><div class="body stack tight">
+          <label class="field"><span>Sound</span><select id="sound"><option value="silence">Silence</option><option value="radio">Cairo radio</option></select></label>
+          <label class="field" id="radio-level-row"><span>Cairo radio level: <b id="radio-db-text"></b></span><input type="range" id="radio-db" min="-30" max="6" step="1"></label>
+          <label class="field"><span>AD badge on screen</span><select id="badge"><option value="shadow">In shadow mode</option><option value="always">Always</option><option value="off">Never</option></select></label>
+          <label class="switch"><input type="checkbox" id="diagnostic"><span>Diagnostic badge: each mute's confidence and source</span></label>
+          <p class="tiny muted">On screen during every mute (or would-be mute): how sure it is, and what says so: a known ad (which, heard how often), the picture, the words, or you. The same reasons show here under each break.</p></div></section>
+        <div class="actions"><button class="primary" type="submit" id="save">Save settings</button></div>
+        <p class="tiny muted" id="save-note">Mode and sound changes reach master within a second.</p>
+      </form>
+    </div>
+  </div>
+
+  <div role="tabpanel" id="panel-database" aria-labelledby="tab-database" hidden>
+    <div class="lead"><p>Every ad the detector knows by its sound, with the words said over it. A known ad is muted the moment it airs again; one heard once becomes known when it airs again. Show sounds, like a theme, are kept too: they can never be muted.</p></div>
+
+    <div class="counts" aria-label="What it knows">
+      <div class="panel known"><b id="n-known">—</b><span>Known ads</span></div>
+      <div class="panel learning"><b id="n-learning">—</b><span>Heard once</span></div>
+      <div class="panel show"><b id="n-show">—</b><span>Show sounds</span></div>
+      <div class="panel"><b id="n-scripted">—</b><span>With a script</span></div>
+    </div>
+
+    <div class="tools">
+      <input class="find" type="search" id="find" data-search placeholder="Search the scripts, names and programmes  ( / )" aria-label="Search the ad database" autocomplete="off">
+      <div class="seg" role="group" aria-label="Show" id="filter">
+        <button type="button" data-filter="ads" aria-pressed="true">Ads <span class="count" id="c-ads"></span></button>
+        <button type="button" data-filter="known" aria-pressed="false">Known <span class="count" id="c-known"></span></button>
+        <button type="button" data-filter="learning" aria-pressed="false">Heard once <span class="count" id="c-learning"></span></button>
+        <button type="button" data-filter="show" aria-pressed="false">Show sounds <span class="count" id="c-show"></span></button>
+      </div>
+      <label class="row tiny muted" style="gap:6px"><span>Sort</span><select id="sort" style="height:30px;width:auto">
+        <option value="last">Last heard</option><option value="breaks">Most heard</option><option value="first">Newest</option><option value="dur">Longest</option></select></label>
+    </div>
+
+    <p class="note bad" id="db-error" role="status"></p>
+    <div class="ads" id="db-ads" aria-live="polite"></div>
+    <p class="hint" id="db-empty" hidden></p>
+    <div class="more-ads"><button type="button" class="sm" id="more" hidden>Show more</button></div>
+    <p class="tiny muted" id="foot" style="margin-top:var(--gap)">Scripts are what Whisper heard: written down when an ad is learnt, from the recordings an ad was found in, or the next time it airs. Pictures come from its airing.</p>
+  </div>
+
+  <div role="tabpanel" id="panel-my-ads" aria-labelledby="tab-my-ads" hidden>
+    <div class="lead"><p>Your own ads, aired in place of the commercial breaks ad mute takes off air. While a break is muted, master plays your ads instead, with their sound, and keeps the programme small in a corner so you see the moment it comes back. When none of yours may play, a break card.</p>
+      <div class="end"><div class="seg" role="group" aria-label="During muted breaks" id="enabled">
+        <button type="button" data-enabled="false" aria-pressed="false">Off</button>
+        <button type="button" data-enabled="true" aria-pressed="false">My ads</button></div></div></div>
+
+    <p class="note warn" id="mode-note" hidden></p>
+
+    <div class="myads">
+      <div class="stack">
+        <section class="panel" id="now-panel" aria-label="On air"><div class="head"><span class="lamp" id="my-lamp"></span><h2>On air</h2><div class="end"><span class="chip" id="state-chip">—</span></div></div>
+          <div class="body"><div class="now">
+            <div class="stack tight">
+              <div class="status-big" id="my-status">—</div>
+              <div class="small" id="my-status-detail">—</div>
+              <div id="progress" hidden><div class="meter ad"><i id="progress-bar" style="width:0"></i></div><div class="tiny muted num" id="progress-text"></div></div>
+              <p class="tiny muted" id="next"></p>
+              <p class="note bad" id="my-error" role="status"></p>
+            </div>
+            <div class="pad">
+              <button type="button" class="primary" id="my-unmute" title="The programme is back: end the break now, picture and sound (u)">It's the show · back to it</button>
+              <button type="button" id="my-mute" title="Start a break now: my ads until the programme comes back (a)">It's an ad · break now</button>
+              <p class="tiny muted">The corner of the screen shows the programme throughout a break. If it is back before the detector notices, press <kbd>u</kbd>.</p>
+            </div></div></div></section>
+
+        <section class="panel" aria-label="Upload"><div class="head"><h2>Upload</h2><div class="end"><span class="tiny muted" id="upload-limits"></span></div></div>
+          <div class="body">
+            <div class="drop" id="drop" role="button" tabindex="0" aria-label="Upload ads: drop video files here or choose them">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 15v4a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-4"/></svg>
+              <b>Drop videos here</b><span class="small muted">or <u>choose files</u>: MP4, MOV, WebM, MKV and more. Each is checked, levelled to the station's loudness and pictured.</span>
+              <input type="file" id="files" accept="video/*,.mkv,.ts,.mts,.m2ts" multiple hidden></div>
+            <ul class="uploads" id="uploads" aria-live="polite"></ul>
+          </div></section>
+
+        <section class="panel" aria-label="Your ads"><div class="head"><h2>Your ads</h2><div class="end"><span class="chip" id="count-chip">—</span></div></div>
+          <div class="body stack tight">
+            <div class="tools">
+              <div class="seg" role="group" aria-label="Order" id="order">
+                <button type="button" data-order="shuffle" aria-pressed="false" title="A random order: every ad once before any plays again">Shuffle</button>
+                <button type="button" data-order="list" aria-pressed="false" title="Top to bottom, then around again">In list order</button></div>
+              <button type="button" class="sm quiet" id="shuffle-list" title="Put the list itself in a random order">Shuffle the list</button>
+              <span class="tiny muted grow" id="order-note"></span>
+            </div>
+            <ul class="ads" id="my-list" aria-label="Your ads, in order"></ul>
+            <div class="empty-list" id="my-empty" hidden>No ads yet. Upload a few above: until then, every muted break shows the break card.</div>
+          </div></section>
+
+        <section class="panel" aria-label="What aired"><div class="head"><h2>What aired</h2><div class="end"><span class="tiny muted" id="card-today"></span></div></div>
+          <div class="body scroll-x"><table class="data"><thead><tr><th>When</th><th>What</th><th>Aired</th><th></th></tr></thead><tbody id="recent"></tbody></table>
+            <p class="hint" id="recent-empty">Nothing yet: plays show here as they air. A play counts towards an ad's limit once half of it has aired.</p></div></section>
+      </div>
+
+      <div class="stack">
+        <section class="panel"><div class="head"><h2>Limits</h2></div><div class="body stack tight">
+          <p class="small">Each ad has its own limit, set in the list: say, <b>once an hour</b>. An ad over its limit sits out until the hour since its play has passed; with every ad out, the break card shows.</p>
+          <label class="field"><span>Limit for new uploads</span><select id="default-limit"></select></label></div></section>
+
+        <section class="panel"><div class="head"><h2>Break card</h2></div><div class="body stack tight">
+          <div class="card-shot"><img id="card-img" alt="The break card"></div>
+          <p class="tiny muted" id="card-note">Shown when none of your ads may play. Its sound is ad mute's break sound (silence or Cairo radio).</p>
+          <form class="stack tight" id="card-form">
+            <label class="field"><span>The station card's words</span><input type="text" id="card-text" maxlength="32" autocomplete="off"></label>
+            <div class="presets" id="presets"></div>
+            <div class="row"><button class="sm primary" type="submit" id="card-save">Save words</button>
+              <button class="sm" type="button" id="card-upload">Use a picture of my own…</button>
+              <button class="sm quiet" type="button" id="card-station" hidden>Back to the station card</button></div>
+            <input type="file" id="card-file" accept="image/png,image/jpeg,image/webp" hidden>
+          </form></div></section>
+
+        <section class="panel"><div class="head"><h2>Picture in picture</h2></div><div class="body stack tight">
+          <div class="screen" id="screen"><span class="chip ghost label">your ad</span><div class="corner" id="corner"></div></div>
+          <label class="switch"><input type="checkbox" id="pip-on"><span>Show the programme in a corner during a break</span></label>
+          <div class="fields">
+            <label class="field"><span>Corner</span><select id="pip-corner"><option value="bottom-right">Bottom right</option><option value="bottom-left">Bottom left</option><option value="top-right">Top right</option><option value="top-left">Top left</option></select></label>
+            <label class="field"><span>Size</span><select id="pip-size"><option value="small">Small (1/5)</option><option value="medium">Medium (1/4)</option><option value="large">Large (1/3)</option></select></label></div>
+          <p class="tiny muted">Everyone watching sees it, framed, with a LIVE tab. It sits above the crawl and clear of the clock and the AD badge.</p></div></section>
+
+        <section class="panel"><div class="head"><h2>How it works</h2></div><div class="body"><ol class="small" style="margin:0;padding-left:20px;display:grid;gap:6px">
+          <li>Ad mute finds a break and mutes it (it must be <b>On</b>).</li>
+          <li>From that very frame master shows your next ad, with its sound, then the next, until the programme comes back: then it is back at once, picture and sound, even mid-ad.</li>
+          <li>Shuffle plays every ad once before any repeats; In list order goes top to bottom. Ads switched off or over their limit sit out; with none left, the break card.</li>
+          <li>Ads are levelled to the station's loudness when uploaded; a volume trim per ad adjusts that.</li>
+        </ol></div></section>
+      </div>
+    </div>
+  </div>
+</main>
+<script src="static/ui/admute.js"></script>
+<script src="static/ui/ad-database.js"></script>
+<script src="static/ui/my-ads.js"></script>
+<script src="static/ui/ads.js"></script>
+</body>
+</html>

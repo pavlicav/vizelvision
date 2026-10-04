@@ -1,0 +1,187 @@
+{
+ "default_lines": {
+  "en": [
+   "That was {just_played}.",
+   "You're watching Vizel Vision.",
+   "Coming up: {up_next}.",
+   "Stay tuned."
+  ],
+  "fr": [
+   "C'\u00e9tait {just_played}.",
+   "Vous regardez Vizel Vision.",
+   "\u00c0 suivre : {up_next}.",
+   "Restez avec nous."
+  ]
+ },
+ "error": null,
+ "fields": [
+  "just_played",
+  "up_next"
+ ],
+ "hour": 22,
+ "next": {
+  "aired_at": null,
+  "announcer": "amelie",
+  "at": 1790906340.8734674,
+  "break_at": 1790910385.185429,
+  "file": "840cd1c52ceb09aa1df45e2bcf3701e9.mp4",
+  "id": "2c10b3471476437f90f8524709848d29",
+  "just_played": "les Phillies et les Braves",
+  "lines": [
+   "C'\u00e9tait les Phillies et les Braves.",
+   "Vous regardez Vizel Vision.",
+   "\u00c0 suivre : les Steelers et les Browns.",
+   "Restez avec nous."
+  ],
+  "name": "Am\u00e9lie",
+  "up_next": "les Steelers et les Browns"
+ },
+ "on_duty_now": "amelie",
+ "ready": {
+  "id": true,
+  "key": true,
+  "music": true,
+  "sports": true
+ },
+ "recent": [],
+ "settings": {
+  "announcers": [
+   {
+    "id": "low-tide",
+    "lines": [
+     "That was {just_played}.",
+     "You're watching Vizzle Vision.",
+     "Coming up: {up_next}.",
+     "Stay tuned."
+    ],
+    "model": "aura-2-orpheus-en",
+    "name": "DJ Low Tide",
+    "style": "Cairo Radio's host for The Old Rock Show, Classical and Daytime Alt, and the voice of the station ID. Easygoing, late-night warmth."
+   },
+   {
+    "id": "daytime-announcer",
+    "lines": [
+     "You've been watching {just_played}.",
+     "This is Vizzle Vision.",
+     "Next: {up_next}.",
+     "Stay with us."
+    ],
+    "model": "aura-2-aurora-en",
+    "name": "The Daytime Announcer",
+    "style": "Cairo Radio's Morning Show announcer. Deep, clear and unhurried: classic network continuity."
+   },
+   {
+    "id": "amelie",
+    "lines": [
+     "C'\u00e9tait {just_played}.",
+     "Vous regardez Vizel Vision.",
+     "\u00c0 suivre : {up_next}.",
+     "Restez avec nous."
+    ],
+    "model": "aura-2-agathe-fr",
+    "name": "Am\u00e9lie",
+    "style": "Cairo Radio's host for L'heure qu\u00e9b\u00e9coise. Speaks About 20% French, 80% Anglais: bright, charming, a little mischievous."
+   }
+  ],
+  "duty": "roster",
+  "enabled": true,
+  "on_duty": "amelie",
+  "roster": [
+   "low-tide",
+   "low-tide",
+   "low-tide",
+   "low-tide",
+   "low-tide",
+   "low-tide",
+   "low-tide",
+   "low-tide",
+   "low-tide",
+   "daytime-announcer",
+   "daytime-announcer",
+   "amelie",
+   "amelie",
+   "low-tide",
+   "low-tide",
+   "low-tide",
+   "low-tide",
+   "low-tide",
+   "daytime-announcer",
+   "low-tide",
+   "low-tide",
+   "amelie",
+   "amelie",
+   "amelie"
+  ],
+  "version": 1
+ },
+ "voices": [
+  {
+   "accent": "Filipino",
+   "id": "aura-2-amalthea-en",
+   "language": "en",
+   "tags": [
+    "feminine",
+    "engaging",
+    "natural",
+    "cheerful"
+   ]
+  },
+  {
+   "accent": "American",
+   "id": "aura-2-andromeda-en",
+   "language": "en",
+   "tags": [
+    "feminine",
+    "casual",
+    "expressive",
+    "comfortable"
+   ]
+  },
+  {
+   "accent": "American",
+   "id": "aura-2-apollo-en",
+   "language": "en",
+   "tags": [
+    "masculine",
+    "confident",
+    "comfortable",
+    "casual"
+   ]
+  },
+  {
+   "accent": "American",
+   "id": "aura-2-arcas-en",
+   "language": "en",
+   "tags": [
+    "masculine",
+    "natural",
+    "smooth",
+    "clear",
+    "comfortable"
+   ]
+  },
+  {
+   "accent": "American",
+   "id": "aura-2-aries-en",
+   "language": "en",
+   "tags": [
+    "masculine",
+    "warm",
+    "energetic",
+    "caring"
+   ]
+  },
+  {
+   "accent": "American",
+   "id": "aura-2-asteria-en",
+   "language": "en",
+   "tags": [
+    "feminine",
+    "clear",
+    "confident",
+    "knowledgeable",
+    "energetic"
+   ]
+  }
+ ]
+}

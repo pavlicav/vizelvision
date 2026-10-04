@@ -1,0 +1,969 @@
+{
+ "games": [
+  {
+   "away": {
+    "abbreviation": "PIT",
+    "id": "23",
+    "name": "Pittsburgh Steelers",
+    "nickname": "Steelers",
+    "score": "10"
+   },
+   "broadcasts": [
+    {
+     "market": "national",
+     "name": "Prime Video"
+    }
+   ],
+   "channels": [],
+   "detail": "10:24 - 3rd",
+   "finished": false,
+   "game_date": "2026-10-01",
+   "game_id": 401872964,
+   "home": {
+    "abbreviation": "CLE",
+    "id": "5",
+    "name": "Cleveland Browns",
+    "nickname": "Browns",
+    "score": "21"
+   },
+   "league": "nfl",
+   "note": "Thursday Night Football on Prime Video. Sign in on the Roku if prompted.",
+   "period": 3,
+   "prime_video_target": {
+    "channel_id": "401872964",
+    "date": "2026-10-01",
+    "source_id": "thursday-night-football"
+   },
+   "short_title": "PIT @ CLE",
+   "start_time": "2026-10-02T00:15Z",
+   "start_time_tbd": false,
+   "state": "in",
+   "status": "In Progress",
+   "suggested_target": {
+    "channel_id": "401872964",
+    "date": "2026-10-01",
+    "source_id": "thursday-night-football"
+   },
+   "sunday_ticket_target": {
+    "channel_id": "401872964",
+    "date": "2026-10-01",
+    "source_id": "sunday-ticket"
+   },
+   "title": "Pittsburgh Steelers at Cleveland Browns"
+  },
+  {
+   "away": {
+    "abbreviation": "IND",
+    "id": "11",
+    "name": "Indianapolis Colts",
+    "nickname": "Colts",
+    "score": "0"
+   },
+   "broadcasts": [
+    {
+     "market": "national",
+     "name": "NFL Net"
+    }
+   ],
+   "channels": [
+    "NFL Network"
+   ],
+   "detail": "10/4 - 9:30 AM EDT",
+   "finished": false,
+   "game_date": "2026-10-04",
+   "game_id": 401872965,
+   "home": {
+    "abbreviation": "WSH",
+    "id": "28",
+    "name": "Washington Commanders",
+    "nickname": "Commanders",
+    "score": "0"
+   },
+   "league": "nfl",
+   "note": null,
+   "period": 0,
+   "prime_video_target": null,
+   "short_title": "IND VS WSH",
+   "start_time": "2026-10-04T13:30Z",
+   "start_time_tbd": false,
+   "state": "pre",
+   "status": "Scheduled",
+   "suggested_target": {
+    "channel_id": "NFL Network",
+    "source_id": "youtube-tv"
+   },
+   "sunday_ticket_target": {
+    "channel_id": "401872965",
+    "date": "2026-10-04",
+    "source_id": "sunday-ticket"
+   },
+   "title": "Indianapolis Colts at Washington Commanders"
+  },
+  {
+   "away": {
+    "abbreviation": "NE",
+    "id": "17",
+    "name": "New England Patriots",
+    "nickname": "Patriots",
+    "score": "0"
+   },
+   "broadcasts": [
+    {
+     "market": "national",
+     "name": "CBS"
+    }
+   ],
+   "channels": [
+    "CBS"
+   ],
+   "detail": "10/4 - 1:00 PM EDT",
+   "finished": false,
+   "game_date": "2026-10-04",
+   "game_id": 401872971,
+   "home": {
+    "abbreviation": "BUF",
+    "id": "2",
+    "name": "Buffalo Bills",
+    "nickname": "Bills",
+    "score": "0"
+   },
+   "league": "nfl",
+   "note": "Out of market: NFL Sunday Ticket (found by reading the YouTube TV guide). If this game is on WUSA or FOX 5 in DC, choose that channel instead.",
+   "period": 0,
+   "prime_video_target": null,
+   "short_title": "NE @ BUF",
+   "start_time": "2026-10-04T17:00Z",
+   "start_time_tbd": false,
+   "state": "pre",
+   "status": "Scheduled",
+   "suggested_target": {
+    "channel_id": "401872971",
+    "date": "2026-10-04",
+    "source_id": "sunday-ticket"
+   },
+   "sunday_ticket_target": {
+    "channel_id": "401872971",
+    "date": "2026-10-04",
+    "source_id": "sunday-ticket"
+   },
+   "title": "New England Patriots at Buffalo Bills"
+  },
+  {
+   "away": {
+    "abbreviation": "NYJ",
+    "id": "20",
+    "name": "New York Jets",
+    "nickname": "Jets",
+    "score": "0"
+   },
+   "broadcasts": [
+    {
+     "market": "national",
+     "name": "FOX"
+    }
+   ],
+   "channels": [
+    "FOX"
+   ],
+   "detail": "10/4 - 1:00 PM EDT",
+   "finished": false,
+   "game_date": "2026-10-04",
+   "game_id": 401872972,
+   "home": {
+    "abbreviation": "CHI",
+    "id": "3",
+    "name": "Chicago Bears",
+    "nickname": "Bears",
+    "score": "0"
+   },
+   "league": "nfl",
+   "note": "Out of market: NFL Sunday Ticket (found by reading the YouTube TV guide). If this game is on WUSA or FOX 5 in DC, choose that channel instead.",
+   "period": 0,
+   "prime_video_target": null,
+   "short_title": "NYJ @ CHI",
+   "start_time": "2026-10-04T17:00Z",
+   "start_time_tbd": false,
+   "state": "pre",
+   "status": "Scheduled",
+   "suggested_target": {
+    "channel_id": "401872972",
+    "date": "2026-10-04",
+    "source_id": "sunday-ticket"
+   },
+   "sunday_ticket_target": {
+    "channel_id": "401872972",
+    "date": "2026-10-04",
+    "source_id": "sunday-ticket"
+   },
+   "title": "New York Jets at Chicago Bears"
+  },
+  {
+   "away": {
+    "abbreviation": "JAX",
+    "id": "30",
+    "name": "Jacksonville Jaguars",
+    "nickname": "Jaguars",
+    "score": "0"
+   },
+   "broadcasts": [
+    {
+     "market": "national",
+     "name": "CBS"
+    }
+   ],
+   "channels": [
+    "CBS"
+   ],
+   "detail": "10/4 - 1:00 PM EDT",
+   "finished": false,
+   "game_date": "2026-10-04",
+   "game_id": 401872969,
+   "home": {
+    "abbreviation": "CIN",
+    "id": "4",
+    "name": "Cincinnati Bengals",
+    "nickname": "Bengals",
+    "score": "0"
+   },
+   "league": "nfl",
+   "note": "Out of market: NFL Sunday Ticket (found by reading the YouTube TV guide). If this game is on WUSA or FOX 5 in DC, choose that channel instead.",
+   "period": 0,
+   "prime_video_target": null,
+   "short_title": "JAX @ CIN",
+   "start_time": "2026-10-04T17:00Z",
+   "start_time_tbd": false,
+   "state": "pre",
+   "status": "Scheduled",
+   "suggested_target": {
+    "channel_id": "401872969",
+    "date": "2026-10-04",
+    "source_id": "sunday-ticket"
+   },
+   "sunday_ticket_target": {
+    "channel_id": "401872969",
+    "date": "2026-10-04",
+    "source_id": "sunday-ticket"
+   },
+   "title": "Jacksonville Jaguars at Cincinnati Bengals"
+  },
+  {
+   "away": {
+    "abbreviation": "ARI",
+    "id": "22",
+    "name": "Arizona Cardinals",
+    "nickname": "Cardinals",
+    "score": "0"
+   },
+   "broadcasts": [
+    {
+     "market": "national",
+     "name": "CBS"
+    }
+   ],
+   "channels": [
+    "CBS"
+   ],
+   "detail": "10/4 - 1:00 PM EDT",
+   "finished": false,
+   "game_date": "2026-10-04",
+   "game_id": 401872966,
+   "home": {
+    "abbreviation": "NYG",
+    "id": "19",
+    "name": "New York Giants",
+    "nickname": "Giants",
+    "score": "0"
+   },
+   "league": "nfl",
+   "note": "Out of market: NFL Sunday Ticket (found by reading the YouTube TV guide). If this game is on WUSA or FOX 5 in DC, choose that channel instead.",
+   "period": 0,
+   "prime_video_target": null,
+   "short_title": "ARI @ NYG",
+   "start_time": "2026-10-04T17:00Z",
+   "start_time_tbd": false,
+   "state": "pre",
+   "status": "Scheduled",
+   "suggested_target": {
+    "channel_id": "401872966",
+    "date": "2026-10-04",
+    "source_id": "sunday-ticket"
+   },
+   "sunday_ticket_target": {
+    "channel_id": "401872966",
+    "date": "2026-10-04",
+    "source_id": "sunday-ticket"
+   },
+   "title": "Arizona Cardinals at New York Giants"
+  },
+  {
+   "away": {
+    "abbreviation": "LAR",
+    "id": "14",
+    "name": "Los Angeles Rams",
+    "nickname": "Rams",
+    "score": "0"
+   },
+   "broadcasts": [
+    {
+     "market": "national",
+     "name": "FOX"
+    }
+   ],
+   "channels": [
+    "FOX"
+   ],
+   "detail": "10/4 - 1:00 PM EDT",
+   "finished": false,
+   "game_date": "2026-10-04",
+   "game_id": 401872970,
+   "home": {
+    "abbreviation": "PHI",
+    "id": "21",
+    "name": "Philadelphia Eagles",
+    "nickname": "Eagles",
+    "score": "0"
+   },
+   "league": "nfl",
+   "note": "Out of market: NFL Sunday Ticket (found by reading the YouTube TV guide). If this game is on WUSA or FOX 5 in DC, choose that channel instead.",
+   "period": 0,
+   "prime_video_target": null,
+   "short_title": "LAR @ PHI",
+   "start_time": "2026-10-04T17:00Z",
+   "start_time_tbd": false,
+   "state": "pre",
+   "status": "Scheduled",
+   "suggested_target": {
+    "channel_id": "401872970",
+    "date": "2026-10-04",
+    "source_id": "sunday-ticket"
+   },
+   "sunday_ticket_target": {
+    "channel_id": "401872970",
+    "date": "2026-10-04",
+    "source_id": "sunday-ticket"
+   },
+   "title": "Los Angeles Rams at Philadelphia Eagles"
+  },
+  {
+   "away": {
+    "abbreviation": "GB",
+    "id": "9",
+    "name": "Green Bay Packers",
+    "nickname": "Packers",
+    "score": "0"
+   },
+   "broadcasts": [
+    {
+     "market": "national",
+     "name": "FOX"
+    }
+   ],
+   "channels": [
+    "FOX"
+   ],
+   "detail": "10/4 - 1:00 PM EDT",
+   "finished": false,
+   "game_date": "2026-10-04",
+   "game_id": 401872968,
+   "home": {
+    "abbreviation": "TB",
+    "id": "27",
+    "name": "Tampa Bay Buccaneers",
+    "nickname": "Buccaneers",
+    "score": "0"
+   },
+   "league": "nfl",
+   "note": "Out of market: NFL Sunday Ticket (found by reading the YouTube TV guide). If this game is on WUSA or FOX 5 in DC, choose that channel instead.",
+   "period": 0,
+   "prime_video_target": null,
+   "short_title": "GB @ TB",
+   "start_time": "2026-10-04T17:00Z",
+   "start_time_tbd": false,
+   "state": "pre",
+   "status": "Scheduled",
+   "suggested_target": {
+    "channel_id": "401872968",
+    "date": "2026-10-04",
+    "source_id": "sunday-ticket"
+   },
+   "sunday_ticket_target": {
+    "channel_id": "401872968",
+    "date": "2026-10-04",
+    "source_id": "sunday-ticket"
+   },
+   "title": "Green Bay Packers at Tampa Bay Buccaneers"
+  },
+  {
+   "away": {
+    "abbreviation": "TEN",
+    "id": "10",
+    "name": "Tennessee Titans",
+    "nickname": "Titans",
+    "score": "0"
+   },
+   "broadcasts": [
+    {
+     "market": "national",
+     "name": "CBS"
+    }
+   ],
+   "channels": [
+    "CBS"
+   ],
+   "detail": "10/4 - 1:00 PM EDT",
+   "finished": false,
+   "game_date": "2026-10-04",
+   "game_id": 401872973,
+   "home": {
+    "abbreviation": "BAL",
+    "id": "33",
+    "name": "Baltimore Ravens",
+    "nickname": "Ravens",
+    "score": "0"
+   },
+   "league": "nfl",
+   "note": "Regional CBS/FOX window with a DC team: the local station carries it.",
+   "period": 0,
+   "prime_video_target": null,
+   "short_title": "TEN @ BAL",
+   "start_time": "2026-10-04T17:00Z",
+   "start_time_tbd": false,
+   "state": "pre",
+   "status": "Scheduled",
+   "suggested_target": {
+    "channel_id": "CBS",
+    "source_id": "youtube-tv"
+   },
+   "sunday_ticket_target": {
+    "channel_id": "401872973",
+    "date": "2026-10-04",
+    "source_id": "sunday-ticket"
+   },
+   "title": "Tennessee Titans at Baltimore Ravens"
+  },
+  {
+   "away": {
+    "abbreviation": "DAL",
+    "id": "6",
+    "name": "Dallas Cowboys",
+    "nickname": "Cowboys",
+    "score": "0"
+   },
+   "broadcasts": [
+    {
+     "market": "national",
+     "name": "FOX"
+    }
+   ],
+   "channels": [
+    "FOX"
+   ],
+   "detail": "10/4 - 1:00 PM EDT",
+   "finished": false,
+   "game_date": "2026-10-04",
+   "game_id": 401872967,
+   "home": {
+    "abbreviation": "HOU",
+    "id": "34",
+    "name": "Houston Texans",
+    "nickname": "Texans",
+    "score": "0"
+   },
+   "league": "nfl",
+   "note": "Out of market: NFL Sunday Ticket (found by reading the YouTube TV guide). If this game is on WUSA or FOX 5 in DC, choose that channel instead.",
+   "period": 0,
+   "prime_video_target": null,
+   "short_title": "DAL @ HOU",
+   "start_time": "2026-10-04T17:00Z",
+   "start_time_tbd": false,
+   "state": "pre",
+   "status": "Scheduled",
+   "suggested_target": {
+    "channel_id": "401872967",
+    "date": "2026-10-04",
+    "source_id": "sunday-ticket"
+   },
+   "sunday_ticket_target": {
+    "channel_id": "401872967",
+    "date": "2026-10-04",
+    "source_id": "sunday-ticket"
+   },
+   "title": "Dallas Cowboys at Houston Texans"
+  },
+  {
+   "away": {
+    "abbreviation": "MIA",
+    "id": "15",
+    "name": "Miami Dolphins",
+    "nickname": "Dolphins",
+    "score": "0"
+   },
+   "broadcasts": [
+    {
+     "market": "national",
+     "name": "FOX"
+    }
+   ],
+   "channels": [
+    "FOX"
+   ],
+   "detail": "10/4 - 4:05 PM EDT",
+   "finished": false,
+   "game_date": "2026-10-04",
+   "game_id": 401872974,
+   "home": {
+    "abbreviation": "MIN",
+    "id": "16",
+    "name": "Minnesota Vikings",
+    "nickname": "Vikings",
+    "score": "0"
+   },
+   "league": "nfl",
+   "note": "Out of market: NFL Sunday Ticket (found by reading the YouTube TV guide). If this game is on WUSA or FOX 5 in DC, choose that channel instead.",
+   "period": 0,
+   "prime_video_target": null,
+   "short_title": "MIA @ MIN",
+   "start_time": "2026-10-04T20:05Z",
+   "start_time_tbd": false,
+   "state": "pre",
+   "status": "Scheduled",
+   "suggested_target": {
+    "channel_id": "401872974",
+    "date": "2026-10-04",
+    "source_id": "sunday-ticket"
+   },
+   "sunday_ticket_target": {
+    "channel_id": "401872974",
+    "date": "2026-10-04",
+    "source_id": "sunday-ticket"
+   },
+   "title": "Miami Dolphins at Minnesota Vikings"
+  },
+  {
+   "away": {
+    "abbreviation": "KC",
+    "id": "12",
+    "name": "Kansas City Chiefs",
+    "nickname": "Chiefs",
+    "score": "0"
+   },
+   "broadcasts": [
+    {
+     "market": "national",
+     "name": "CBS"
+    }
+   ],
+   "channels": [
+    "CBS"
+   ],
+   "detail": "10/4 - 4:25 PM EDT",
+   "finished": false,
+   "game_date": "2026-10-04",
+   "game_id": 401872976,
+   "home": {
+    "abbreviation": "LV",
+    "id": "13",
+    "name": "Las Vegas Raiders",
+    "nickname": "Raiders",
+    "score": "0"
+   },
+   "league": "nfl",
+   "note": "Out of market: NFL Sunday Ticket (found by reading the YouTube TV guide). If this game is on WUSA or FOX 5 in DC, choose that channel instead.",
+   "period": 0,
+   "prime_video_target": null,
+   "short_title": "KC @ LV",
+   "start_time": "2026-10-04T20:25Z",
+   "start_time_tbd": false,
+   "state": "pre",
+   "status": "Scheduled",
+   "suggested_target": {
+    "channel_id": "401872976",
+    "date": "2026-10-04",
+    "source_id": "sunday-ticket"
+   },
+   "sunday_ticket_target": {
+    "channel_id": "401872976",
+    "date": "2026-10-04",
+    "source_id": "sunday-ticket"
+   },
+   "title": "Kansas City Chiefs at Las Vegas Raiders"
+  },
+  {
+   "away": {
+    "abbreviation": "DEN",
+    "id": "7",
+    "name": "Denver Broncos",
+    "nickname": "Broncos",
+    "score": "0"
+   },
+   "broadcasts": [
+    {
+     "market": "national",
+     "name": "CBS"
+    }
+   ],
+   "channels": [
+    "CBS"
+   ],
+   "detail": "10/4 - 4:25 PM EDT",
+   "finished": false,
+   "game_date": "2026-10-04",
+   "game_id": 401872975,
+   "home": {
+    "abbreviation": "SF",
+    "id": "25",
+    "name": "San Francisco 49ers",
+    "nickname": "49ers",
+    "score": "0"
+   },
+   "league": "nfl",
+   "note": "Out of market: NFL Sunday Ticket (found by reading the YouTube TV guide). If this game is on WUSA or FOX 5 in DC, choose that channel instead.",
+   "period": 0,
+   "prime_video_target": null,
+   "short_title": "DEN @ SF",
+   "start_time": "2026-10-04T20:25Z",
+   "start_time_tbd": false,
+   "state": "pre",
+   "status": "Scheduled",
+   "suggested_target": {
+    "channel_id": "401872975",
+    "date": "2026-10-04",
+    "source_id": "sunday-ticket"
+   },
+   "sunday_ticket_target": {
+    "channel_id": "401872975",
+    "date": "2026-10-04",
+    "source_id": "sunday-ticket"
+   },
+   "title": "Denver Broncos at San Francisco 49ers"
+  },
+  {
+   "away": {
+    "abbreviation": "LAC",
+    "id": "24",
+    "name": "Los Angeles Chargers",
+    "nickname": "Chargers",
+    "score": "0"
+   },
+   "broadcasts": [
+    {
+     "market": "national",
+     "name": "CBS"
+    }
+   ],
+   "channels": [
+    "CBS"
+   ],
+   "detail": "10/4 - 4:25 PM EDT",
+   "finished": false,
+   "game_date": "2026-10-04",
+   "game_id": 401872977,
+   "home": {
+    "abbreviation": "SEA",
+    "id": "26",
+    "name": "Seattle Seahawks",
+    "nickname": "Seahawks",
+    "score": "0"
+   },
+   "league": "nfl",
+   "note": "Out of market: NFL Sunday Ticket (found by reading the YouTube TV guide). If this game is on WUSA or FOX 5 in DC, choose that channel instead.",
+   "period": 0,
+   "prime_video_target": null,
+   "short_title": "LAC @ SEA",
+   "start_time": "2026-10-04T20:25Z",
+   "start_time_tbd": false,
+   "state": "pre",
+   "status": "Scheduled",
+   "suggested_target": {
+    "channel_id": "401872977",
+    "date": "2026-10-04",
+    "source_id": "sunday-ticket"
+   },
+   "sunday_ticket_target": {
+    "channel_id": "401872977",
+    "date": "2026-10-04",
+    "source_id": "sunday-ticket"
+   },
+   "title": "Los Angeles Chargers at Seattle Seahawks"
+  },
+  {
+   "away": {
+    "abbreviation": "DET",
+    "id": "8",
+    "name": "Detroit Lions",
+    "nickname": "Lions",
+    "score": "0"
+   },
+   "broadcasts": [
+    {
+     "market": "national",
+     "name": "NBC"
+    }
+   ],
+   "channels": [
+    "NBC"
+   ],
+   "detail": "10/4 - 8:20 PM EDT",
+   "finished": false,
+   "game_date": "2026-10-04",
+   "game_id": 401872978,
+   "home": {
+    "abbreviation": "CAR",
+    "id": "29",
+    "name": "Carolina Panthers",
+    "nickname": "Panthers",
+    "score": "0"
+   },
+   "league": "nfl",
+   "note": null,
+   "period": 0,
+   "prime_video_target": null,
+   "short_title": "DET @ CAR",
+   "start_time": "2026-10-05T00:20Z",
+   "start_time_tbd": false,
+   "state": "pre",
+   "status": "Scheduled",
+   "suggested_target": {
+    "channel_id": "NBC",
+    "source_id": "youtube-tv"
+   },
+   "sunday_ticket_target": {
+    "channel_id": "401872978",
+    "date": "2026-10-04",
+    "source_id": "sunday-ticket"
+   },
+   "title": "Detroit Lions at Carolina Panthers"
+  },
+  {
+   "away": {
+    "abbreviation": "ATL",
+    "id": "1",
+    "name": "Atlanta Falcons",
+    "nickname": "Falcons",
+    "score": "0"
+   },
+   "broadcasts": [
+    {
+     "market": "national",
+     "name": "ESPN"
+    }
+   ],
+   "channels": [
+    "ESPN"
+   ],
+   "detail": "10/5 - 8:15 PM EDT",
+   "finished": false,
+   "game_date": "2026-10-05",
+   "game_id": 401872979,
+   "home": {
+    "abbreviation": "NO",
+    "id": "18",
+    "name": "New Orleans Saints",
+    "nickname": "Saints",
+    "score": "0"
+   },
+   "league": "nfl",
+   "note": null,
+   "period": 0,
+   "prime_video_target": null,
+   "short_title": "ATL @ NO",
+   "start_time": "2026-10-06T00:15Z",
+   "start_time_tbd": false,
+   "state": "pre",
+   "status": "Scheduled",
+   "suggested_target": {
+    "channel_id": "ESPN",
+    "source_id": "youtube-tv"
+   },
+   "sunday_ticket_target": {
+    "channel_id": "401872979",
+    "date": "2026-10-05",
+    "source_id": "sunday-ticket"
+   },
+   "title": "Atlanta Falcons at New Orleans Saints"
+  }
+ ],
+ "generated_at": "2026-10-02T02:16:36.992428+00:00",
+ "league": "nfl",
+ "season_type": 2,
+ "week": 4,
+ "weeks": [
+  {
+   "detail": "Sep 6-15",
+   "end": "2026-09-16T06:59Z",
+   "label": "Week 1",
+   "season_type": 2,
+   "start": "2026-09-06T07:00Z",
+   "week": 1
+  },
+  {
+   "detail": "Sep 16-22",
+   "end": "2026-09-23T06:59Z",
+   "label": "Week 2",
+   "season_type": 2,
+   "start": "2026-09-16T07:00Z",
+   "week": 2
+  },
+  {
+   "detail": "Sep 23-29",
+   "end": "2026-09-30T06:59Z",
+   "label": "Week 3",
+   "season_type": 2,
+   "start": "2026-09-23T07:00Z",
+   "week": 3
+  },
+  {
+   "detail": "Sep 30-Oct 6",
+   "end": "2026-10-07T06:59Z",
+   "label": "Week 4",
+   "season_type": 2,
+   "start": "2026-09-30T07:00Z",
+   "week": 4
+  },
+  {
+   "detail": "Oct 7-13",
+   "end": "2026-10-14T06:59Z",
+   "label": "Week 5",
+   "season_type": 2,
+   "start": "2026-10-07T07:00Z",
+   "week": 5
+  },
+  {
+   "detail": "Oct 14-20",
+   "end": "2026-10-21T06:59Z",
+   "label": "Week 6",
+   "season_type": 2,
+   "start": "2026-10-14T07:00Z",
+   "week": 6
+  },
+  {
+   "detail": "Oct 21-27",
+   "end": "2026-10-28T06:59Z",
+   "label": "Week 7",
+   "season_type": 2,
+   "start": "2026-10-21T07:00Z",
+   "week": 7
+  },
+  {
+   "detail": "Oct 28-Nov 3",
+   "end": "2026-11-04T07:59Z",
+   "label": "Week 8",
+   "season_type": 2,
+   "start": "2026-10-28T07:00Z",
+   "week": 8
+  },
+  {
+   "detail": "Nov 4-10",
+   "end": "2026-11-11T07:59Z",
+   "label": "Week 9",
+   "season_type": 2,
+   "start": "2026-11-04T08:00Z",
+   "week": 9
+  },
+  {
+   "detail": "Nov 11-17",
+   "end": "2026-11-18T07:59Z",
+   "label": "Week 10",
+   "season_type": 2,
+   "start": "2026-11-11T08:00Z",
+   "week": 10
+  },
+  {
+   "detail": "Nov 18-24",
+   "end": "2026-11-25T07:59Z",
+   "label": "Week 11",
+   "season_type": 2,
+   "start": "2026-11-18T08:00Z",
+   "week": 11
+  },
+  {
+   "detail": "Nov 25-Dec 1",
+   "end": "2026-12-02T07:59Z",
+   "label": "Week 12",
+   "season_type": 2,
+   "start": "2026-11-25T08:00Z",
+   "week": 12
+  },
+  {
+   "detail": "Dec 2-8",
+   "end": "2026-12-09T07:59Z",
+   "label": "Week 13",
+   "season_type": 2,
+   "start": "2026-12-02T08:00Z",
+   "week": 13
+  },
+  {
+   "detail": "Dec 9-15",
+   "end": "2026-12-16T07:59Z",
+   "label": "Week 14",
+   "season_type": 2,
+   "start": "2026-12-09T08:00Z",
+   "week": 14
+  },
+  {
+   "detail": "Dec 16-22",
+   "end": "2026-12-23T07:59Z",
+   "label": "Week 15",
+   "season_type": 2,
+   "start": "2026-12-16T08:00Z",
+   "week": 15
+  },
+  {
+   "detail": "Dec 23-29",
+   "end": "2026-12-30T07:59Z",
+   "label": "Week 16",
+   "season_type": 2,
+   "start": "2026-12-23T08:00Z",
+   "week": 16
+  },
+  {
+   "detail": "Dec 30-Jan 5",
+   "end": "2027-01-06T07:59Z",
+   "label": "Week 17",
+   "season_type": 2,
+   "start": "2026-12-30T08:00Z",
+   "week": 17
+  },
+  {
+   "detail": "Jan 6-12",
+   "end": "2027-01-13T07:59Z",
+   "label": "Week 18",
+   "season_type": 2,
+   "start": "2027-01-06T08:00Z",
+   "week": 18
+  },
+  {
+   "detail": "Jan 13-19",
+   "end": "2027-01-20T07:59Z",
+   "label": "Wild Card",
+   "season_type": 3,
+   "start": "2027-01-13T08:00Z",
+   "week": 1
+  },
+  {
+   "detail": "Jan 20-26",
+   "end": "2027-01-27T07:59Z",
+   "label": "Divisional Round",
+   "season_type": 3,
+   "start": "2027-01-20T08:00Z",
+   "week": 2
+  },
+  {
+   "detail": "Jan 27-Feb 2",
+   "end": "2027-02-03T07:59Z",
+   "label": "Conference Championship",
+   "season_type": 3,
+   "start": "2027-01-27T08:00Z",
+   "week": 3
+  },
+  {
+   "detail": "Feb 3-15",
+   "end": "2027-02-16T07:59Z",
+   "label": "Super Bowl",
+   "season_type": 3,
+   "start": "2027-02-03T08:00Z",
+   "week": 4
+  }
+ ],
+ "year": 2026
+}

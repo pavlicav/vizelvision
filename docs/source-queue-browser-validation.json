@@ -1,0 +1,15 @@
+{
+  "ok": true,
+  "url": "http://viviserv/vizelvision/sources",
+  "queue": "Paused · Paused by operator",
+  "master": "Published · YouTube TV · NBC",
+  "playback": {
+    "time": 10.973725,
+    "width": 1280,
+    "height": 720,
+    "readyState": 4
+  },
+  "advanced_seconds": 9.968726,
+  "mobile_queue_sheet": true,
+  "errors": []
+}

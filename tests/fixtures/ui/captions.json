@@ -1,0 +1,7 @@
+{
+  "settings": {"enabled": false, "model": "base.en", "language": "en"},
+  "status": {"enabled": false, "state": "off", "text": "", "error": null, "programme_delay": {"seconds": 6}},
+  "master_error": null,
+  "models": ["tiny.en", "base.en", "small.en", "tiny", "base", "small"],
+  "languages": {"auto": "Detect language", "en": "English", "es": "Spanish", "fr": "French", "de": "German", "it": "Italian", "pt": "Portuguese", "ja": "Japanese"}
+}

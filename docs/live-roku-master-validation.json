@@ -1,0 +1,55 @@
+{
+  "ok": true,
+  "target": {
+    "source_id": "youtube-tv",
+    "channel_id": "NBC"
+  },
+  "on_air_observation_seconds": 30,
+  "limitations": "NBC only; no real MLB game or lip-sync measurement.",
+  "prepare_seconds": 59.99,
+  "verification_operation_id": "1bc08f1352df4279b21252c8bd6ac4a5",
+  "tracks": {
+    "video": {
+      "buffers": 2734,
+      "backwards": 0,
+      "max_pts_gap_seconds": 0.033533887,
+      "max_arrival_gap_seconds": 0.041956394037697464
+    },
+    "audio": {
+      "buffers": 4271,
+      "backwards": 0,
+      "max_pts_gap_seconds": 0.021333845,
+      "max_arrival_gap_seconds": 0.028742660011630505
+    }
+  },
+  "same_master_publisher_and_reader": true,
+  "single_capture_owner": true,
+  "hls_streams": [
+    {
+      "codec_name": "h264",
+      "codec_type": "video",
+      "width": 1280,
+      "height": 720,
+      "sample_rate": null,
+      "channels": null
+    },
+    {
+      "codec_name": "aac",
+      "codec_type": "audio",
+      "width": null,
+      "height": null,
+      "sample_rate": "48000",
+      "channels": 2
+    }
+  ],
+  "left_on_air": {
+    "channel_id": "NBC",
+    "generation": "e0df3297346340d48367a9895fd9796f",
+    "id": "0f247f531e4a4d14a92e6c921c88b001",
+    "resolved_source": {
+      "label": "NBC",
+      "provider": "youtube_tv"
+    },
+    "source_id": "youtube-tv"
+  }
+}

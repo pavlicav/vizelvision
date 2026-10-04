@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Crawl · VizelVision</title>
+<link rel="stylesheet" href="static/ui/vv.css">
+<style>
+.top{display:grid;grid-template-columns:minmax(0,1fr) 330px;gap:var(--gap);align-items:stretch}
+.coming>li{display:grid;grid-template-columns:120px minmax(0,1fr) auto;gap:10px;padding:7px 0;align-items:baseline}
+.coming>li .t{font:500 12.5px/1 var(--mono)}
+.layers{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+.layers li{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;padding:9px 12px;border:1px solid var(--line);border-radius:var(--r);background:var(--well)}
+.layers li.on{border-color:var(--line-3);background:var(--raised)}
+.layers li.on.important{border-color:var(--pgm-line);background:var(--pgm-bg)}
+.layers li small{display:block;color:var(--muted);font-size:12px}
+.layers .n{font:500 11px/1 var(--mono);color:var(--dim)}
+.filters{display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:10px 16px;border-bottom:1px solid var(--line)}
+.filters input{width:220px}.filters select{width:auto;min-width:150px}
+.reg{width:100%;border-collapse:collapse}
+.reg th{font:500 10.5px/1.2 var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--muted);text-align:left;padding:8px 10px;border-bottom:1px solid var(--line-2);background:var(--well);white-space:nowrap}
+.reg td{padding:10px;border-top:1px solid var(--line);vertical-align:top}
+.reg tr.item{cursor:pointer}
+.reg tr.item:hover td{background:#ffffff04}
+.reg tr.item[aria-expanded=true] td{background:var(--raised);border-bottom-color:transparent}
+.reg tr.detail td{background:var(--raised);padding:4px 14px 16px 14px}
+.reg .what{min-width:0;max-width:640px}
+.reg .what .txt{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;color:var(--ink-2);font-size:14px}
+.reg .what b{color:var(--ink);font-weight:600;margin-right:6px}
+.reg .tagbox{display:inline-block;font:700 10.5px/1.5 var(--body);padding:0 5px;border-radius:2px;background:#64dce4;color:#0a1730;margin-right:6px;letter-spacing:.02em}
+.reg .why{color:var(--muted);font-size:12.5px;max-width:240px}
+.reg .when{font:500 12.5px/1.35 var(--mono);white-space:nowrap}
+.reg .when small{display:block;color:var(--muted);font-size:11px}
+.reg td.acts{white-space:nowrap;text-align:right}
+.reg tr.muted td{opacity:.55}
+.reg tr.kind-sep td{background:var(--well);font:500 10.5px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--muted);padding:9px 10px;cursor:default}
+.badge.s-eas{background:#3a0f0c;border-color:#7a2620;color:#ffd0cc}.badge.s-nws{background:#2a1f0b;border-color:#7a5a1d;color:#ffd9a0}
+.badge.s-rail{background:#0e2233;border-color:#245a85;color:#bfe3ff}.badge.s-bus{background:#0c2418;border-color:#1f6b42;color:#b6f0cf}
+.badge.s-alertdc{background:#1d1630;border-color:#4f3e85;color:#ddd0ff}.badge.s-manual{background:#5a1712;border-color:#a3322a;color:#fff}
+.airing{font:600 11px/1 var(--mono);letter-spacing:.08em}
+.airing.first{color:var(--touch)}.airing.repeat{color:var(--ink-2)}
+.st{display:inline-flex;align-items:center;gap:6px;font:500 11px/1 var(--mono);letter-spacing:.08em;text-transform:uppercase;white-space:nowrap}
+.timeline text{font-size:10.5px}
+.tabs-panel>.body{padding:16px}
+.seg-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px}
+.seg-card{display:grid;gap:8px;align-content:start;padding:14px;border:1px solid var(--line);border-radius:var(--r-lg);background:var(--well)}
+.seg-card.off{opacity:.6}
+.seg-card ul{margin:0;padding-left:16px;font-size:13px;color:var(--ink-2)}.seg-card li{margin:3px 0}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chips button{height:24px;font-size:12px;padding:0 9px;border-radius:99px;border-color:var(--touch-line);background:var(--touch-bg);color:#d7eeff}
+.pick{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:2px 14px;max-height:340px;overflow:auto}
+.msg{padding:14px;border:1px solid var(--line);border-radius:var(--r-lg);background:var(--well);display:grid;gap:10px}
+.msg.off{opacity:.6}
+.days{display:flex;gap:4px 12px;flex-wrap:wrap}
+@media (max-width:1100px){.top{grid-template-columns:1fr}}
+@media (max-width:900px){
+  .reg thead{display:none}
+  .reg tr.item{display:grid;grid-template-columns:auto 1fr;gap:4px 10px;padding:10px 12px;border-top:1px solid var(--line)}
+  .reg tr.item td{border:0;padding:0;background:none!important}
+  .reg tr.item td.c-status{grid-column:1/-1}.reg tr.item td.c-what{grid-column:1/-1}
+  .reg tr.item td.acts{grid-column:1/-1;text-align:left}
+  .reg tr.detail{display:block}.reg tr.detail td{display:block}
+  .reg .why{max-width:none}
+  .filters input{width:100%}
+}
+</style>
+</head>
+<body>
+<header class="topbar" data-page="crawl"></header><script src="static/ui/vv.js"></script>
+<script src="static/ui/bar.js"></script>
+<main class="page">
+  <div class="page-head"><div><h1>Crawl</h1><p>Everything the crawl can air, from every source: alerts first, each with where it stands (on air, first airing, repeat) and when it airs next.</p></div></div>
+  <div class="stack" id="workspace">
+    <div class="top">
+      <section class="panel" aria-label="On the bar now"><div class="head"><span class="lamp" id="bar-lamp"></span><h2>On the bar now</h2><div class="end row" id="state" role="status" aria-live="polite"></div></div>
+        <div class="body stack tight"><div id="screen"></div><p class="tiny muted" id="bar-note">A mimic of master's bar: same colours and wording, 120 px a second at 720p.</p>
+          <div><span class="label">Coming up on the bar</span><ul class="list coming" id="coming"></ul></div></div></section>
+      <section class="panel" aria-label="Layers"><div class="head"><h2>Who holds the bar</h2></div>
+        <div class="body"><ol class="layers" id="layers"></ol></div></section>
+    </div>
+
+    <section class="machine machinery" aria-label="How it works: the plan"><div class="head"><span class="title">How it works · the next three hours</span><span class="tiny muted" id="plan-note"></span></div>
+      <div class="body"><svg class="diagram timeline" id="timeline" viewBox="0 0 1200 210" role="img" aria-label="The crawl's planned pop-ups"></svg>
+        <p class="hint" style="margin-top:8px">Bands are the contexts ahead (from the schedule) and the rule each follows. Blocks are planned pop-ups, as <code>CrawlDesk.plan()</code> plays the rules forward: at most <span id="r-hour">4</span> an hour, <span id="r-gap">5</span> min apart (shaded), the most overdue segment first, new items at once. It assumes nothing new arrives.</p></div></section>
+
+    <section class="panel" id="register" aria-label="Alerts and items">
+      <div class="head"><span class="lamp" id="reg-lamp"></span><h2>Alerts &amp; items</h2><div class="end"><span class="tiny muted" id="reg-updated"></span></div></div>
+      <div class="filters">
+        <div class="seg" role="tablist" aria-label="Which items"><button type="button" data-scope="alert" aria-selected="true">Alerts <span class="count" id="n-alert"></span></button><button type="button" data-scope="all" aria-selected="false">Everything <span class="count" id="n-all"></span></button></div>
+        <div class="seg" aria-label="Status"><button type="button" data-status="" aria-pressed="true">Any</button><button type="button" data-status="live" aria-pressed="false">On air</button><button type="button" data-status="next" aria-pressed="false">Next</button><button type="button" data-status="held" aria-pressed="false">Held</button><button type="button" data-status="muted" aria-pressed="false">Muted</button></div>
+        <select id="source-filter" aria-label="Source"><option value="">Every source</option></select>
+        <input type="search" id="reg-search" data-search placeholder="Search items  ( / )" aria-label="Search items">
+      </div>
+      <div class="scroll-x"><table class="reg" id="reg"><thead><tr><th>Status</th><th>Source</th><th>Item</th><th>Airing</th><th>Last aired</th><th>Next</th><th>Why</th><th></th></tr></thead><tbody id="reg-body"></tbody></table></div>
+      <p class="hint" id="reg-empty" style="padding:16px" hidden></p>
+      <details class="more" style="margin:0 16px 14px" id="gone-box"><summary>Ended in the last six hours</summary><ul class="list" id="gone"></ul></details>
+    </section>
+
+    <section class="panel tabs-panel" aria-label="Crawl controls">
+      <div class="head" style="padding:0 8px;border-bottom:0"><div class="tabs" role="tablist" id="tabs" style="margin:0;border:0">
+        <button type="button" role="tab" data-tab="manual">Messages on the bar</button><button type="button" role="tab" data-tab="rules">Rules</button><button type="button" role="tab" data-tab="segments">Segments</button>
+        <button type="button" role="tab" data-tab="feeds">Sources</button><button type="button" role="tab" data-tab="teams">Teams</button><button type="button" role="tab" data-tab="messages">Station messages</button><button type="button" role="tab" data-tab="history">History</button></div></div>
+      <div class="body" style="border-top:1px solid var(--line)">
+        <div data-panel="manual" class="cols-2">
+          <section class="stack tight" aria-label="Important message"><div class="row"><span class="lamp" id="important-lamp"></span><strong>Important message</strong><span class="tiny muted" id="important-state"></span></div>
+            <p class="hint">For genuinely severe news: it runs continuously in red, over everything, with any severe weather alert. Nothing else interrupts it.</p>
+            <label class="field"><span>Message</span><textarea data-id="important-text" maxlength="500" rows="2"></textarea></label>
+            <div class="fields"><label class="field"><span>Label box</span><input data-id="important-label" maxlength="24"></label><label class="field"><span>For</span><select data-id="important-minutes"></select></label></div>
+            <div class="actions"><button type="button" class="take" data-id="important-go">Put on air</button><button type="button" class="quiet" data-id="important-clear">Clear</button></div></section>
+          <section class="stack tight" aria-label="Manual override"><div class="row"><span class="lamp" id="override-lamp"></span><strong>Override</strong><span class="tiny muted" id="override-state"></span></div>
+            <p class="hint">Takes the bar now and holds it, ahead of the rotation; only important news comes first. <b>Hold</b> on an item puts it here.</p>
+            <label class="field"><span>Message</span><textarea data-id="override-text" maxlength="500" rows="2"></textarea></label>
+            <div class="fields"><label class="field"><span>Label box</span><input data-id="override-label" maxlength="24" placeholder="Optional"></label>
+              <label class="field"><span>Style</span><select data-id="override-style"><option value="station">Station · navy and cyan</option><option value="urgent">Urgent · red</option></select></label>
+              <label class="field"><span>For</span><select data-id="override-minutes"></select></label></div>
+            <div id="draft"></div>
+            <div class="actions"><button type="button" class="primary" data-id="override-go">Put on air</button><button type="button" class="quiet" data-id="override-clear">Clear</button></div></section>
+        </div>
+        <div data-panel="rules" hidden class="stack">
+          <p class="hint">What the rotation does in each context. <b>Pop-ups</b>: one segment at a time, one pass, then the bar slides away. <b>Always on</b>: every segment's items loop. <b>Important only</b>: no rotation; important news, severe alerts and the override still run.</p>
+          <div class="fields" data-id="rules"></div>
+          <div class="fields"><label class="field"><span>Pop-ups an hour, at most</span><input type="number" data-id="per-hour" min="1" max="60"></label><label class="field"><span>Minutes between pop-ups, at least</span><input type="number" data-id="gap" min="0" max="120"></label></div>
+          <div class="actions"><button type="button" class="primary" data-id="save-rules">Save rules</button><span class="tiny" data-id="rules-dirty" style="color:var(--warn)"></span></div>
+        </div>
+        <div data-panel="segments" hidden class="stack">
+          <p class="hint">Each segment is a source of items. It pops up every <i>n</i> minutes (if <b>Repeat</b> is on), only in the contexts it may air in; <b>new items at once</b> pops up items never seen before, once each, ahead of the timer.</p>
+          <div class="seg-cards" data-id="segments"></div>
+          <div class="actions"><button type="button" class="primary" data-id="save-segments">Save segments</button><span class="tiny" data-id="segments-dirty" style="color:var(--warn)"></span></div>
+        </div>
+        <div data-panel="feeds" hidden class="cols-2">
+          <section class="stack tight" aria-label="Weather and emergency alerts"><strong>Weather and emergency alerts</strong>
+            <label class="check"><input type="checkbox" data-id="eas"><span>EAS alerts for <span data-id="areas"></span><small>From the decoder at <code data-id="eas-source"></code> · <span data-id="eas-health"></span></small></span></label>
+            <label class="check"><input type="checkbox" data-id="eas-transcript"><span>Follow an EAS warning with its spoken message<small>The decoder's transcript: speech recognition, can mishear names.</small></span></label>
+            <label class="check"><input type="checkbox" data-id="eas-tests"><span>Include required weekly and monthly tests<small>As pop-ups in the weather alerts segment.</small></span></label>
+            <label class="check"><input type="checkbox" data-id="nws"><span>NWS alerts for zones <span data-id="zones"></span><small>api.weather.gov · <span data-id="nws-health"></span></small></span></label>
+            <p class="hint">Severe alerts (EAS warnings; NWS Severe or Extreme that are immediate or expected) run continuously as important news. Watches, advisories and statements pop up in Weather alerts. When NWS and EAS both have an alert, the NWS wording runs.</p></section>
+          <div class="stack">
+            <section class="stack tight" aria-label="Metro and bus"><strong>Metro and bus</strong>
+              <label class="check"><input type="checkbox" data-id="rail"><span>Metrorail incidents</span></label>
+              <label class="check"><input type="checkbox" data-id="bus"><span>Metrobus alerts</span></label>
+              <p class="tiny muted">Bus routes to show; with none chosen, every route's alerts can air.</p>
+              <div class="chips" data-id="routes"></div>
+              <label class="field"><span>Find a route</span><input data-id="route-filter" placeholder="e.g. D60 or Silver Spring" autocomplete="off"></label>
+              <div class="pick" data-id="route-list"></div>
+              <div class="actions"><button type="button" class="primary sm" data-id="save-transit">Save Metro and bus</button><span class="tiny" data-id="transit-dirty" style="color:var(--warn)"></span></div></section>
+            <section class="stack tight" aria-label="Weather location"><strong>Weather location</strong>
+              <div class="row"><input data-id="zip" inputmode="numeric" maxlength="5" pattern="[0-9]{5}" placeholder="ZIP, e.g. 20011" style="width:150px"><button type="button" class="primary sm" data-id="save-zip">Use this ZIP</button><button type="button" class="quiet sm" data-id="clear-zip">Back to the default</button></div>
+              <p class="tiny muted" data-id="zip-state"></p></section>
+          </div>
+        </div>
+        <div data-panel="teams" hidden class="stack tight">
+          <p class="hint">The Scores segment shows these teams' games today: when and where before, the score while live, the final after (and last night's finals until 10 AM). Changes save as you check them.</p>
+          <div class="chips" data-id="followed"></div>
+          <div class="fields"><label class="field"><span>League</span><select data-id="league"></select></label><label class="field"><span>Filter</span><input data-id="team-filter" placeholder="Team or city"></label></div>
+          <div class="pick" data-id="teams"></div>
+        </div>
+        <div data-panel="messages" hidden class="stack">
+          <p class="hint">Your own items, each on its days, between its times (empty: all day) and within its dates. They air in the Station messages segment.</p>
+          <label class="switch"><input type="checkbox" data-id="cycle"><span>One message per pop-up, taking turns (off: every active message each time)</span></label>
+          <div class="stack tight" data-id="messages"></div>
+          <div class="actions"><button type="button" class="quiet" data-id="add-message">+ Add message</button><button type="button" class="primary" data-id="save-messages">Save messages</button><span class="tiny" data-id="messages-dirty" style="color:var(--warn)"></span></div>
+        </div>
+        <div data-panel="history" hidden class="scroll-x" data-id="history"></div>
+      </div>
+    </section>
+  </div>
+</main>
+<script src="static/ui/crawl.js"></script>
+</body>
+</html>

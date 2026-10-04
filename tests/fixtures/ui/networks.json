@@ -1,0 +1,59 @@
+{
+ "networks": [
+  {
+   "network": "NBC",
+   "call_sign": "WRC",
+   "youtube_tv": "NBC",
+   "antenna": {
+    "source_id": "tv-thing-digital",
+    "channel_id": "wrc_hd_4_1",
+    "number": "4.1",
+    "name": "WRC-HD"
+   }
+  },
+  {
+   "network": "FOX",
+   "call_sign": "WTTG",
+   "youtube_tv": "FOX",
+   "antenna": {
+    "source_id": "tv-thing-digital",
+    "channel_id": "wttg_dt_5_1",
+    "number": "5.1",
+    "name": "WTTG-DT"
+   }
+  },
+  {
+   "network": "ABC",
+   "call_sign": "WJLA",
+   "youtube_tv": "ABC",
+   "antenna": {
+    "source_id": "tv-thing-digital",
+    "channel_id": "wjla_7_1",
+    "number": "7.1",
+    "name": "WJLA"
+   }
+  },
+  {
+   "network": "CBS",
+   "call_sign": "WUSA",
+   "youtube_tv": "CBS",
+   "antenna": {
+    "source_id": "tv-thing-digital",
+    "channel_id": "wusa_hd_9_1",
+    "number": "9.1",
+    "name": "WUSA-HD"
+   }
+  },
+  {
+   "network": "The CW",
+   "call_sign": "WDCW",
+   "youtube_tv": "The CW",
+   "antenna": {
+    "source_id": "tv-thing-digital",
+    "channel_id": "wdcw_dt_50_1",
+    "number": "50.1",
+    "name": "WDCW-DT"
+   }
+  }
+ ]
+}

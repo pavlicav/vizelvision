@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=67"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vizel-roku-stream"
+version = "0.1.0"
+description = "Local, timer-driven YouTube TV control for a Roku cable-channel source"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.optional-dependencies]
+captions = ["faster-whisper>=1.1,<2"]
+
+[project.scripts]
+roku-stream = "roku_stream.__main__:main"
+
+[tool.setuptools.packages.find]
+include = ["roku_stream*"]
+
+[tool.setuptools.package-data]
+roku_stream = ["static/ui/*.html", "static/ui/*.js", "static/ui/*.css", "static/*.webp", "static/fonts/*", "static/vendor/*"]

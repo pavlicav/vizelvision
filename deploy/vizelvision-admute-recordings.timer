@@ -1,0 +1,11 @@
+[Unit]
+Description=VizelVision ad mute: training recordings, every 10 minutes
+PartOf=vizelvision-stack.target
+
+[Timer]
+OnBootSec=5min
+OnUnitInactiveSec=10min
+Persistent=true
+
+[Install]
+WantedBy=vizelvision-stack.target

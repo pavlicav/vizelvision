@@ -1,0 +1,15 @@
+{
+ "ready": true,
+ "required": "direct:/dev/v4l/by-id/usb-AMBA_Hauppauge_HD_PVR_00A4E5AC-video-index0",
+ "selected": "direct:/dev/v4l/by-id/usb-AMBA_Hauppauge_HD_PVR_00A4E5AC-video-index0",
+ "sources": [
+  {
+   "available": true,
+   "detail": "/dev/v4l/by-id/usb-AMBA_Hauppauge_HD_PVR_00A4E5AC-video-index0",
+   "key": "direct:/dev/v4l/by-id/usb-AMBA_Hauppauge_HD_PVR_00A4E5AC-video-index0",
+   "name": "Hauppauge HD PVR \u2014 Component",
+   "source": "direct",
+   "source_id": "direct:/dev/v4l/by-id/usb-AMBA_Hauppauge_HD_PVR_00A4E5AC-video-index0"
+  }
+ ]
+}

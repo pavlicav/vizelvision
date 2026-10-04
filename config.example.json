@@ -1,0 +1,279 @@
+{
+  "server": {
+    "host": "127.0.0.1",
+    "port": 6969,
+    "api_key": null
+  },
+  "tv_thing": {
+    "enabled": false,
+    "base_url": "http://127.0.0.1:8080/",
+    "request_timeout_seconds": 4,
+    "catalog_cache_seconds": 300,
+    "guide_cache_seconds": 60,
+    "retry_seconds": 15
+  },
+  "roku": {
+    "url": "http://10.0.0.111:8060",
+    "app_name": "YouTube TV",
+    "app_id": "195316"
+  },
+  "prime_video": {
+    "profile_name": "Vivian"
+  },
+  "navigation": {
+    "guide_scan_lookbehind": 2,
+    "guide_scan_max_rows": 14,
+    "open_live_guide_keys": [
+      "Right",
+      "Select",
+      "Down",
+      "Down"
+    ]
+  },
+  "feedback": {
+    "backend": "direct",
+    "device": "/dev/v4l/by-id/usb-AMBA_Hauppauge_HD_PVR_00A4E5AC-video-index0",
+    "input_format": "mpegts",
+    "contribution_url": null,
+    "video_standard": null,
+    "input_index": 0,
+    "network_page_fallback": true,
+    "template_dir": "state/templates-720p",
+    "guide_correlation_threshold": 0.96,
+    "guide_correlation_margin": 0.02,
+    "network_template_margin": 1.0,
+    "ocr_enabled": true,
+    "ocr_required": true,
+    "tesseract_path": "auto",
+    "source_name": "Hauppauge HD PVR \u2014 Component"
+  },
+  "channels": [
+    {
+      "name": "NBC",
+      "aliases": [
+        "WRC",
+        "WRC-TV",
+        "NBC 4",
+        "NBC4",
+        "NBC4 Washington"
+      ],
+      "guide_index": 0
+    },
+    {
+      "name": "FOX",
+      "aliases": [
+        "WTTG",
+        "FOX 5",
+        "FOX5",
+        "FOX 5 DC"
+      ],
+      "guide_index": 1
+    },
+    {
+      "name": "ABC",
+      "aliases": [
+        "WJLA",
+        "ABC 7",
+        "ABC7"
+      ],
+      "guide_index": 2
+    },
+    {
+      "name": "CBS",
+      "aliases": [
+        "WUSA",
+        "WUSA 9",
+        "WUSA9",
+        "CBS 9"
+      ],
+      "guide_index": 3
+    },
+    {
+      "name": "PBS",
+      "aliases": [
+        "WHUT",
+        "WHUT PBS"
+      ],
+      "guide_index": 4,
+      "anchor_safe": false
+    },
+    {
+      "name": "The CW",
+      "aliases": [
+        "CW",
+        "WDCW",
+        "DCW 50",
+        "DCW50",
+        "CW 50"
+      ],
+      "guide_index": 7
+    },
+    {
+      "name": "ESPN",
+      "aliases": [
+        "ESPN HD"
+      ],
+      "guide_index": 21
+    },
+    {
+      "name": "ESPN2",
+      "aliases": [
+        "ESPN 2"
+      ],
+      "guide_index": 22,
+      "network_page": "ESPN"
+    },
+    {
+      "name": "FS1",
+      "aliases": [
+        "Fox Sports 1"
+      ],
+      "guide_index": 23
+    },
+    {
+      "name": "FS2",
+      "aliases": [
+        "Fox Sports 2"
+      ],
+      "guide_index": 24,
+      "network_page": "FS1"
+    },
+    {
+      "name": "NBC Sports Network",
+      "aliases": [
+        "NBCSN",
+        "NBC Sports"
+      ],
+      "guide_index": 25
+    },
+    {
+      "name": "Big Ten Network",
+      "aliases": [
+        "BTN",
+        "B1G Network"
+      ],
+      "guide_index": 26
+    },
+    {
+      "name": "NFL Network",
+      "aliases": [
+        "NFLN"
+      ],
+      "guide_index": 27
+    },
+    {
+      "name": "TBS",
+      "aliases": [],
+      "guide_index": 28
+    },
+    {
+      "name": "TNT",
+      "aliases": [],
+      "guide_index": 29
+    },
+    {
+      "name": "SEC Network",
+      "aliases": [
+        "SECN",
+        "SEC"
+      ],
+      "guide_index": 44,
+      "network_page": "ESPN"
+    },
+    {
+      "name": "ACC Network",
+      "aliases": [
+        "ACCN",
+        "ACC"
+      ],
+      "guide_index": 45,
+      "network_page": "ESPN"
+    },
+    {
+      "name": "ESPNU",
+      "aliases": [
+        "ESPN U"
+      ],
+      "guide_index": 46,
+      "network_page": "ESPN"
+    },
+    {
+      "name": "ESPNEWS",
+      "aliases": [
+        "ESPN News"
+      ],
+      "guide_index": 47,
+      "network_page": "ESPN"
+    },
+    {
+      "name": "NBA TV",
+      "aliases": [
+        "NBATV"
+      ],
+      "guide_index": 48
+    },
+    {
+      "name": "CBS Sports Network",
+      "aliases": [
+        "CBS Sports",
+        "CBSSN"
+      ],
+      "guide_index": 50
+    },
+    {
+      "name": "T2",
+      "aliases": [
+        "Tennis Channel 2",
+        "Tennis 2"
+      ],
+      "guide_index": 51
+    },
+    {
+      "name": "Golf Channel",
+      "aliases": [
+        "Golf"
+      ],
+      "guide_index": 54
+    },
+    {
+      "name": "Pickleball TV",
+      "aliases": [
+        "PickleballTV",
+        "PBTV"
+      ],
+      "guide_index": 55
+    }
+  ],
+  "state_file": "state/jobs.json",
+  "master": {
+    "enabled": false,
+    "socket_path": "state/master.sock",
+    "rtsp_url": "rtsp://127.0.0.1:18554/master",
+    "status_url": "http://127.0.0.1:19997/v3/paths/get/master",
+    "width": 1280,
+    "height": 720,
+    "fps": 30,
+    "bitrate": 2500,
+    "roku_prepare_max_age_seconds": 900,
+    "hls_url": "http://127.0.0.1:18888/master/",
+    "eas_url": "http://127.0.0.1:8090/eas",
+    "eas_areas": ["011001"],
+    "nws_zones": ["DCZ001", "DCC001"]
+  },
+  "crawl": {
+    "keys_file": null,
+    "weather_station": "KDCA",
+    "weather_place": "Reagan National",
+    "forecast_point": [38.8951, -77.0364]
+  },
+  "library": {
+    "enabled": false,
+    "roots": [
+      {
+        "id": "tv-recordings",
+        "name": "TV Recordings",
+        "path": "/mnt/sda1/media/TV Recordings"
+      }
+    ]
+  }
+}

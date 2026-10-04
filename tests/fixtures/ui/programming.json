@@ -1,0 +1,1065 @@
+{
+ "game_check_minutes": 10,
+ "game_gone_minutes": 20,
+ "games_checked_at": "2026-10-02T02:08:57.024043+00:00",
+ "last_sync": "2026-10-02T02:16:26.918691+00:00",
+ "lookahead_minutes": 10,
+ "now": "2026-10-02T02:16:36.632711+00:00",
+ "on_now": {
+  "backup": {
+   "channel_id": "schedule",
+   "source_id": "schedule"
+  },
+  "backup_title": "Schedule",
+  "color": null,
+  "end": "2026-10-02T04:00:00+00:00",
+  "game": {
+   "game_date": "2026-10-01",
+   "game_pk": 849844,
+   "league": "mlb",
+   "title": "Philadelphia Phillies at Atlanta Braves"
+  },
+  "kind": "game",
+  "ref": "4c61739c27af4efa8961bdcef828f32e",
+  "start": "2026-10-02T02:16:36.632711+00:00",
+  "target": {
+   "channel_id": "NBC",
+   "source_id": "youtube-tv"
+  },
+  "title": "Philadelphia Phillies at Atlanta Braves"
+ },
+ "settings": {
+  "blocks": [
+   {
+    "color": "#3a6f8f",
+    "id": "muelbpzvjazj65fh",
+    "name": "Jeopardy",
+    "target": {
+     "channel_id": "wjla_7_1",
+     "quality": "medium",
+     "source_id": "tv-thing-digital"
+    }
+   },
+   {
+    "color": "#7a4f9a",
+    "id": "muelx4tgqlvrzh10",
+    "name": "News 10",
+    "target": {
+     "channel_id": "NBC",
+     "source_id": "youtube-tv"
+    }
+   },
+   {
+    "color": "#2f7d5b",
+    "id": "muh3klvg2w0rqy32",
+    "name": "The View",
+    "target": {
+     "channel_id": "wjla_7_1",
+     "quality": "medium",
+     "source_id": "tv-thing-digital"
+    }
+   },
+   {
+    "color": "#a0582f",
+    "id": "muh3lciot2q5hol7",
+    "name": "6 News",
+    "target": {
+     "channel_id": "CBS",
+     "source_id": "youtube-tv"
+    }
+   }
+  ],
+  "enabled": true,
+  "grid": {
+   "fri": [
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    "muh3klvg2w0rqy32",
+    "muh3klvg2w0rqy32",
+    "muh3lciot2q5hol7",
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    "muelx4tgqlvrzh10",
+    null,
+    null,
+    "muelbpzvjazj65fh",
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
+   ],
+   "mon": [
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    "muh3klvg2w0rqy32",
+    "muh3klvg2w0rqy32",
+    "muh3lciot2q5hol7",
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    "muelx4tgqlvrzh10",
+    null,
+    null,
+    "muelbpzvjazj65fh",
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
+   ],
+   "sat": [
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
+   ],
+   "sun": [
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
+   ],
+   "thu": [
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    "muh3klvg2w0rqy32",
+    "muh3klvg2w0rqy32",
+    "muh3lciot2q5hol7",
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    "muelx4tgqlvrzh10",
+    null,
+    null,
+    "muelbpzvjazj65fh",
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
+   ],
+   "tue": [
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    "muh3klvg2w0rqy32",
+    "muh3klvg2w0rqy32",
+    "muh3lciot2q5hol7",
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    "muelx4tgqlvrzh10",
+    null,
+    null,
+    "muelbpzvjazj65fh",
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
+   ],
+   "wed": [
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    "muh3klvg2w0rqy32",
+    "muh3klvg2w0rqy32",
+    "muh3lciot2q5hol7",
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    "muelx4tgqlvrzh10",
+    null,
+    null,
+    "muelbpzvjazj65fh",
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
+   ]
+  },
+  "removed": [
+   {
+    "at": "2026-10-01T16:04:26.661767+00:00",
+    "league": "mlb",
+    "removed": true,
+    "show_id": "39e56d0eca764f5cb4e3482de9879195",
+    "start": "2026-10-02T00:00:00+00:00",
+    "text": "No longer on the MLB schedule",
+    "title": "Boston Red Sox at New York Yankees"
+   },
+   {
+    "at": "2026-10-01T16:04:26.661767+00:00",
+    "league": "mlb",
+    "removed": true,
+    "show_id": "e01033a0402e4a24b020fb400a94531a",
+    "start": "2026-10-02T02:00:00+00:00",
+    "text": "No longer on the MLB schedule",
+    "title": "Chicago Cubs at San Diego Padres"
+   }
+  ],
+  "shows": [
+   {
+    "backup": {
+     "channel_id": "schedule",
+     "source_id": "schedule"
+    },
+    "backup_title": "Schedule",
+    "end": "2026-09-29T04:00:00+00:00",
+    "game": {
+     "game_date": "2026-09-28",
+     "game_pk": 401872963,
+     "league": "nfl",
+     "title": "Philadelphia Eagles at Chicago Bears"
+    },
+    "id": "dfc1027ea9f1407aacee4665fc9a1ea5",
+    "mode": "game",
+    "start": "2026-09-29T00:15:00+00:00",
+    "target": {
+     "channel_id": "ESPN",
+     "source_id": "youtube-tv"
+    },
+    "title": "Philadelphia Eagles at Chicago Bears"
+   },
+   {
+    "backup": {
+     "channel_id": "schedule",
+     "source_id": "schedule"
+    },
+    "backup_title": "Schedule",
+    "end": "2026-09-30T22:00:00+00:00",
+    "game": {
+     "game_date": "2026-09-30",
+     "game_pk": 849841,
+     "league": "mlb",
+     "title": "Philadelphia Phillies at Atlanta Braves"
+    },
+    "id": "0c77d3ffcd1046db90cc1a1b90adca14",
+    "mode": "game",
+    "start": "2026-09-30T18:00:00+00:00",
+    "target": {
+     "channel_id": "849841",
+     "date": "2026-09-30",
+     "source_id": "mlb"
+    },
+    "title": "Philadelphia Phillies at Atlanta Braves"
+   },
+   {
+    "backup": {
+     "channel_id": "schedule",
+     "source_id": "schedule"
+    },
+    "backup_title": "Schedule",
+    "end": "2026-10-01T01:00:00+00:00",
+    "game": {
+     "game_date": "2026-09-30",
+     "game_pk": 849846,
+     "league": "mlb",
+     "title": "Chicago White Sox at Houston Astros"
+    },
+    "id": "2fac82293ba4492889282dc0fe81b776",
+    "mode": "game",
+    "start": "2026-09-30T21:00:00+00:00",
+    "target": {
+     "channel_id": "NBC Sports Network",
+     "source_id": "youtube-tv"
+    },
+    "title": "Chicago White Sox at Houston Astros"
+   },
+   {
+    "backup": {
+     "channel_id": "schedule",
+     "source_id": "schedule"
+    },
+    "backup_title": "Schedule",
+    "end": "2026-10-01T04:00:00+00:00",
+    "game": {
+     "game_date": "2026-09-30",
+     "game_pk": 849848,
+     "league": "mlb",
+     "title": "Boston Red Sox at New York Yankees"
+    },
+    "id": "41b8a3345e734ebba0821e1cea8e5899",
+    "mode": "game",
+    "start": "2026-10-01T00:00:00+00:00",
+    "target": {
+     "channel_id": "NBC",
+     "source_id": "youtube-tv"
+    },
+    "title": "Boston Red Sox at New York Yankees"
+   },
+   {
+    "backup": {
+     "channel_id": "schedule",
+     "source_id": "schedule"
+    },
+    "backup_title": "Schedule",
+    "end": "2026-10-01T06:00:00+00:00",
+    "game": {
+     "game_date": "2026-09-30",
+     "game_pk": 849842,
+     "league": "mlb",
+     "title": "Chicago Cubs at San Diego Padres"
+    },
+    "id": "e5169186b55e4225bcbb7265546cf2fb",
+    "mode": "game",
+    "start": "2026-10-01T02:00:00+00:00",
+    "target": {
+     "channel_id": "NBC Sports Network",
+     "source_id": "youtube-tv"
+    },
+    "title": "Chicago Cubs at San Diego Padres"
+   },
+   {
+    "end": "2026-10-01T19:30:00+00:00",
+    "id": "757cb5ebaeb8466cae41e5362b9e2161",
+    "mode": "program",
+    "start": "2026-10-01T19:25:00+00:00",
+    "target": {
+     "channel_id": "nhk_wld_22_4",
+     "quality": "medium",
+     "source_id": "tv-thing-digital"
+    },
+    "title": "Easy Japanese"
+   },
+   {
+    "end": "2026-10-01T20:00:00+00:00",
+    "id": "eb941939a8704f97b7a562988016f060",
+    "mode": "program",
+    "start": "2026-10-01T19:30:00+00:00",
+    "target": {
+     "channel_id": "wdvm_sd_25_1",
+     "quality": "medium",
+     "source_id": "tv-thing-digital"
+    },
+    "title": "Judy Justice"
+   },
+   {
+    "backup": {
+     "channel_id": "schedule",
+     "source_id": "schedule"
+    },
+    "backup_title": "Schedule",
+    "end": "2026-10-02T04:00:00+00:00",
+    "game": {
+     "game_date": "2026-10-01",
+     "game_pk": 849844,
+     "league": "mlb",
+     "title": "Philadelphia Phillies at Atlanta Braves"
+    },
+    "game_start": "2026-10-02T00:00:00+00:00",
+    "id": "4c61739c27af4efa8961bdcef828f32e",
+    "mode": "game",
+    "start": "2026-10-02T00:00:00+00:00",
+    "target": {
+     "channel_id": "NBC",
+     "source_id": "youtube-tv"
+    },
+    "title": "Philadelphia Phillies at Atlanta Braves",
+    "update": {
+     "at": "2026-10-01T15:41:51.530259+00:00",
+     "text": "Moved from 2:00 PM"
+    }
+   },
+   {
+    "backup": {
+     "channel_id": "schedule",
+     "source_id": "schedule"
+    },
+    "backup_title": "Schedule",
+    "end": "2026-10-03T21:00:00+00:00",
+    "game": {
+     "game_date": "2026-10-03",
+     "game_pk": 849829,
+     "league": "mlb",
+     "title": "Chicago White Sox at Cleveland Guardians"
+    },
+    "game_start": "2026-10-03T17:00:00+00:00",
+    "id": "02097b9320ec40e2b66d46d21a7a4e49",
+    "mode": "game",
+    "start": "2026-10-03T17:00:00+00:00",
+    "target": {
+     "channel_id": "TBS",
+     "source_id": "youtube-tv"
+    },
+    "title": "Chicago White Sox at Cleveland Guardians"
+   },
+   {
+    "backup": {
+     "channel_id": "schedule",
+     "source_id": "schedule"
+    },
+    "backup_title": "Schedule",
+    "end": "2026-10-04T00:00:00+00:00",
+    "game": {
+     "game_date": "2026-10-03",
+     "game_pk": 849828,
+     "league": "mlb",
+     "title": "ATL/PHI at Los Angeles Dodgers"
+    },
+    "game_start": "2026-10-03T20:00:00+00:00",
+    "id": "d11bdc1f199148048d30ac15d7b8baaf",
+    "mode": "game",
+    "start": "2026-10-03T20:00:00+00:00",
+    "target": {
+     "channel_id": "FOX",
+     "source_id": "youtube-tv"
+    },
+    "title": "ATL/PHI at Los Angeles Dodgers"
+   },
+   {
+    "backup": {
+     "channel_id": "schedule",
+     "source_id": "schedule"
+    },
+    "backup_title": "Schedule",
+    "end": "2026-10-04T02:30:00+00:00",
+    "game": {
+     "game_date": "2026-10-03",
+     "game_pk": 849835,
+     "league": "mlb",
+     "title": "New York Yankees at Tampa Bay Rays"
+    },
+    "game_start": "2026-10-03T22:30:00+00:00",
+    "id": "db770d244ddd45a5b44a1f56a19d0e56",
+    "mode": "game",
+    "start": "2026-10-03T22:30:00+00:00",
+    "target": {
+     "channel_id": "TBS",
+     "source_id": "youtube-tv"
+    },
+    "title": "New York Yankees at Tampa Bay Rays",
+    "update": {
+     "at": "2026-10-01T15:41:51.530259+00:00",
+     "text": "Was NYY/BOS at Tampa Bay Rays"
+    }
+   },
+   {
+    "backup": {
+     "channel_id": "schedule",
+     "source_id": "schedule"
+    },
+    "backup_title": "Schedule",
+    "end": "2026-10-04T04:30:00+00:00",
+    "game": {
+     "game_date": "2026-10-03",
+     "game_pk": 849830,
+     "league": "mlb",
+     "title": "San Diego Padres at Milwaukee Brewers"
+    },
+    "game_start": "2026-10-04T00:30:00+00:00",
+    "id": "bc6e9fb0d9df4d5dbec2c486aa4b0430",
+    "mode": "game",
+    "start": "2026-10-04T00:30:00+00:00",
+    "target": {
+     "channel_id": "FS1",
+     "source_id": "youtube-tv"
+    },
+    "title": "San Diego Padres at Milwaukee Brewers"
+   },
+   {
+    "backup": {
+     "channel_id": "schedule",
+     "source_id": "schedule"
+    },
+    "backup_title": "Schedule",
+    "end": "2026-10-04T17:15:00+00:00",
+    "game": {
+     "game_date": "2026-10-04",
+     "game_pk": 401872965,
+     "league": "nfl",
+     "title": "Indianapolis Colts at Washington Commanders"
+    },
+    "game_start": "2026-10-04T13:30:00+00:00",
+    "id": "0e8a2d726f9f41298bc2a0e929260ba7",
+    "mode": "game",
+    "start": "2026-10-04T13:30:00+00:00",
+    "target": {
+     "channel_id": "NFL Network",
+     "source_id": "youtube-tv"
+    },
+    "title": "Indianapolis Colts at Washington Commanders"
+   },
+   {
+    "backup": {
+     "channel_id": "schedule",
+     "source_id": "schedule"
+    },
+    "backup_title": "Schedule",
+    "end": "2026-10-05T04:00:00+00:00",
+    "game": {
+     "game_date": "2026-10-04",
+     "game_pk": 849823,
+     "league": "mlb",
+     "title": "ATL/PHI at Los Angeles Dodgers"
+    },
+    "game_start": "2026-10-05T00:00:00+00:00",
+    "id": "42b93cb30f6240d09aeb3e1e4aa7864e",
+    "mode": "game",
+    "start": "2026-10-05T00:00:00+00:00",
+    "target": {
+     "channel_id": "FS1",
+     "source_id": "youtube-tv"
+    },
+    "title": "ATL/PHI at Los Angeles Dodgers"
+   },
+   {
+    "backup": {
+     "channel_id": "schedule",
+     "source_id": "schedule"
+    },
+    "backup_title": "Schedule",
+    "end": "2026-10-05T04:05:00+00:00",
+    "game": {
+     "game_date": "2026-10-04",
+     "game_pk": 401872978,
+     "league": "nfl",
+     "title": "Detroit Lions at Carolina Panthers"
+    },
+    "game_start": "2026-10-05T00:20:00+00:00",
+    "id": "733b5476afb24bb5a036bc1080d2ed19",
+    "mode": "game",
+    "start": "2026-10-05T00:20:00+00:00",
+    "target": {
+     "channel_id": "NBC",
+     "source_id": "youtube-tv"
+    },
+    "title": "Detroit Lions at Carolina Panthers"
+   },
+   {
+    "backup": {
+     "channel_id": "schedule",
+     "source_id": "schedule"
+    },
+    "backup_title": "Schedule",
+    "end": "2026-10-06T01:00:00+00:00",
+    "game": {
+     "game_date": "2026-10-05",
+     "game_pk": 849834,
+     "league": "mlb",
+     "title": "Chicago White Sox at Cleveland Guardians"
+    },
+    "game_start": "2026-10-05T21:00:00+00:00",
+    "id": "eb2a4f62d48a48649c4e4d5e57495f59",
+    "mode": "game",
+    "start": "2026-10-05T21:00:00+00:00",
+    "target": {
+     "channel_id": "TBS",
+     "source_id": "youtube-tv"
+    },
+    "title": "Chicago White Sox at Cleveland Guardians"
+   },
+   {
+    "backup": {
+     "channel_id": "schedule",
+     "source_id": "schedule"
+    },
+    "backup_title": "Schedule",
+    "end": "2026-10-06T04:00:00+00:00",
+    "game": {
+     "game_date": "2026-10-05",
+     "game_pk": 849839,
+     "league": "mlb",
+     "title": "New York Yankees at Tampa Bay Rays"
+    },
+    "game_start": "2026-10-06T00:00:00+00:00",
+    "id": "75712accede448a084dfdc5c94c17f4e",
+    "mode": "game",
+    "start": "2026-10-06T00:00:00+00:00",
+    "target": {
+     "channel_id": "TBS",
+     "source_id": "youtube-tv"
+    },
+    "title": "New York Yankees at Tampa Bay Rays",
+    "update": {
+     "at": "2026-10-01T15:41:51.530259+00:00",
+     "text": "Was NYY/BOS at Tampa Bay Rays"
+    }
+   },
+   {
+    "backup": {
+     "channel_id": "schedule",
+     "source_id": "schedule"
+    },
+    "backup_title": "Schedule",
+    "end": "2026-10-06T04:00:00+00:00",
+    "game": {
+     "game_date": "2026-10-05",
+     "game_pk": 401872979,
+     "league": "nfl",
+     "title": "Atlanta Falcons at New Orleans Saints"
+    },
+    "game_start": "2026-10-06T00:15:00+00:00",
+    "id": "13f19a8724544c638921e1f48ea0f1ff",
+    "mode": "game",
+    "start": "2026-10-06T00:15:00+00:00",
+    "target": {
+     "channel_id": "ESPN",
+     "source_id": "youtube-tv"
+    },
+    "title": "Atlanta Falcons at New Orleans Saints"
+   }
+  ],
+  "version": 1
+ },
+ "timeline": [
+  {
+   "backup": {
+    "channel_id": "schedule",
+    "source_id": "schedule"
+   },
+   "backup_title": "Schedule",
+   "color": null,
+   "end": "2026-10-02T04:00:00+00:00",
+   "game": {
+    "game_date": "2026-10-01",
+    "game_pk": 849844,
+    "league": "mlb",
+    "title": "Philadelphia Phillies at Atlanta Braves"
+   },
+   "kind": "game",
+   "ref": "4c61739c27af4efa8961bdcef828f32e",
+   "start": "2026-10-02T02:16:36.632711+00:00",
+   "target": {
+    "channel_id": "NBC",
+    "source_id": "youtube-tv"
+   },
+   "title": "Philadelphia Phillies at Atlanta Braves"
+  },
+  {
+   "color": null,
+   "end": "2026-10-02T15:00:00+00:00",
+   "kind": "off_air",
+   "ref": null,
+   "start": "2026-10-02T04:00:00+00:00",
+   "target": {
+    "channel_id": "off-air",
+    "source_id": "off-air"
+   },
+   "title": "OFF AIR"
+  },
+  {
+   "color": "#2f7d5b",
+   "end": "2026-10-02T16:00:00+00:00",
+   "kind": "block",
+   "ref": "muh3klvg2w0rqy32",
+   "start": "2026-10-02T15:00:00+00:00",
+   "target": {
+    "channel_id": "wjla_7_1",
+    "quality": "medium",
+    "source_id": "tv-thing-digital"
+   },
+   "title": "The View"
+  },
+  {
+   "color": "#a0582f",
+   "end": "2026-10-02T16:30:00+00:00",
+   "kind": "block",
+   "ref": "muh3lciot2q5hol7",
+   "start": "2026-10-02T16:00:00+00:00",
+   "target": {
+    "channel_id": "CBS",
+    "source_id": "youtube-tv"
+   },
+   "title": "6 News"
+  },
+  {
+   "color": null,
+   "end": "2026-10-02T22:00:00+00:00",
+   "kind": "off_air",
+   "ref": null,
+   "start": "2026-10-02T16:30:00+00:00",
+   "target": {
+    "channel_id": "off-air",
+    "source_id": "off-air"
+   },
+   "title": "OFF AIR"
+  },
+  {
+   "color": "#7a4f9a",
+   "end": "2026-10-02T22:30:00+00:00",
+   "kind": "block",
+   "ref": "muelx4tgqlvrzh10",
+   "start": "2026-10-02T22:00:00+00:00",
+   "target": {
+    "channel_id": "NBC",
+    "source_id": "youtube-tv"
+   },
+   "title": "News 10"
+  },
+  {
+   "color": null,
+   "end": "2026-10-02T23:30:00+00:00",
+   "kind": "off_air",
+   "ref": null,
+   "start": "2026-10-02T22:30:00+00:00",
+   "target": {
+    "channel_id": "off-air",
+    "source_id": "off-air"
+   },
+   "title": "OFF AIR"
+  },
+  {
+   "color": "#3a6f8f",
+   "end": "2026-10-03T00:00:00+00:00",
+   "kind": "block",
+   "ref": "muelbpzvjazj65fh",
+   "start": "2026-10-02T23:30:00+00:00",
+   "target": {
+    "channel_id": "wjla_7_1",
+    "quality": "medium",
+    "source_id": "tv-thing-digital"
+   },
+   "title": "Jeopardy"
+  },
+  {
+   "color": null,
+   "end": "2026-10-03T02:16:36.632711+00:00",
+   "kind": "off_air",
+   "ref": null,
+   "start": "2026-10-03T00:00:00+00:00",
+   "target": {
+    "channel_id": "off-air",
+    "source_id": "off-air"
+   },
+   "title": "OFF AIR"
+  }
+ ],
+ "timezone": "US/Eastern",
+ "upcoming_transitions": [
+  {
+   "key": "2026-10-02T04:00:00+00:00|off_air|None|{\"channel_id\": \"off-air\", \"date\": null, \"source_id\": \"off-air\"}",
+   "kind": "off_air",
+   "run_at": "2026-10-02T04:00:00+00:00",
+   "skip_after": "2026-10-02T15:00:00+00:00",
+   "target": {
+    "channel_id": "off-air",
+    "source_id": "off-air"
+   },
+   "title": "OFF AIR"
+  },
+  {
+   "key": "2026-10-02T15:00:00+00:00|block|muh3klvg2w0rqy32|{\"channel_id\": \"wjla_7_1\", \"date\": null, \"source_id\": \"tv-thing-digital\"}",
+   "kind": "block",
+   "run_at": "2026-10-02T15:00:00+00:00",
+   "skip_after": "2026-10-02T16:00:00+00:00",
+   "target": {
+    "channel_id": "wjla_7_1",
+    "quality": "medium",
+    "source_id": "tv-thing-digital"
+   },
+   "title": "The View"
+  },
+  {
+   "key": "2026-10-02T16:00:00+00:00|block|muh3lciot2q5hol7|{\"channel_id\": \"CBS\", \"date\": null, \"source_id\": \"youtube-tv\"}",
+   "kind": "block",
+   "run_at": "2026-10-02T16:00:00+00:00",
+   "skip_after": "2026-10-02T16:30:00+00:00",
+   "target": {
+    "channel_id": "CBS",
+    "source_id": "youtube-tv"
+   },
+   "title": "6 News"
+  },
+  {
+   "key": "2026-10-02T16:30:00+00:00|off_air|None|{\"channel_id\": \"off-air\", \"date\": null, \"source_id\": \"off-air\"}",
+   "kind": "off_air",
+   "run_at": "2026-10-02T16:30:00+00:00",
+   "skip_after": "2026-10-02T22:00:00+00:00",
+   "target": {
+    "channel_id": "off-air",
+    "source_id": "off-air"
+   },
+   "title": "OFF AIR"
+  },
+  {
+   "key": "2026-10-02T22:00:00+00:00|block|muelx4tgqlvrzh10|{\"channel_id\": \"NBC\", \"date\": null, \"source_id\": \"youtube-tv\"}",
+   "kind": "block",
+   "run_at": "2026-10-02T22:00:00+00:00",
+   "skip_after": "2026-10-02T22:30:00+00:00",
+   "target": {
+    "channel_id": "NBC",
+    "source_id": "youtube-tv"
+   },
+   "title": "News 10"
+  },
+  {
+   "key": "2026-10-02T22:30:00+00:00|off_air|None|{\"channel_id\": \"off-air\", \"date\": null, \"source_id\": \"off-air\"}",
+   "kind": "off_air",
+   "run_at": "2026-10-02T22:30:00+00:00",
+   "skip_after": "2026-10-02T23:30:00+00:00",
+   "target": {
+    "channel_id": "off-air",
+    "source_id": "off-air"
+   },
+   "title": "OFF AIR"
+  },
+  {
+   "key": "2026-10-02T23:30:00+00:00|block|muelbpzvjazj65fh|{\"channel_id\": \"wjla_7_1\", \"date\": null, \"source_id\": \"tv-thing-digital\"}",
+   "kind": "block",
+   "run_at": "2026-10-02T23:30:00+00:00",
+   "skip_after": "2026-10-03T00:00:00+00:00",
+   "target": {
+    "channel_id": "wjla_7_1",
+    "quality": "medium",
+    "source_id": "tv-thing-digital"
+   },
+   "title": "Jeopardy"
+  },
+  {
+   "key": "2026-10-03T00:00:00+00:00|off_air|None|{\"channel_id\": \"off-air\", \"date\": null, \"source_id\": \"off-air\"}",
+   "kind": "off_air",
+   "run_at": "2026-10-03T00:00:00+00:00",
+   "skip_after": "2026-10-03T17:00:00+00:00",
+   "target": {
+    "channel_id": "off-air",
+    "source_id": "off-air"
+   },
+   "title": "OFF AIR"
+  }
+ ]
+}

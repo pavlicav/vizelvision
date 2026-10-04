@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>On Air · VizelVision</title>
+<link rel="stylesheet" href="static/ui/vv.css"><link rel="stylesheet" href="static/ui/testcard.css">
+<style>
+.air{display:grid;grid-template-columns:minmax(0,1fr) 420px;gap:var(--gap);align-items:start}
+.pgm .screen{border-radius:var(--r) var(--r) 0 0;border:0}
+.pgm .bug .chip{backdrop-filter:blur(4px);background:#000a}
+.pgm .dark{position:absolute;inset:0;width:100%;height:100%;border:0;border-radius:0;background:radial-gradient(80% 80% at 50% 40%,#1b1012,#060708);color:var(--muted);font:500 12px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;gap:10px}
+.pgm .dark:hover{color:var(--ink);background:radial-gradient(80% 80% at 50% 40%,#2a1416,#060708)}
+.pgm-title{font:800 clamp(26px,3vw,38px)/1.02 var(--display);letter-spacing:.02em;text-transform:uppercase;overflow-wrap:anywhere}
+.pgm-meta{display:grid;gap:10px;padding:16px}
+.times{display:flex;justify-content:space-between;font:500 12px/1 var(--mono);color:var(--muted);margin-top:6px}
+.pvw-row{display:flex;gap:12px;align-items:center;flex-wrap:wrap;padding:12px 16px;border-top:1px solid var(--line);background:var(--well)}
+.pvw-row .what{flex:1 1 220px;min-width:0}
+.tile{display:grid;gap:8px;align-content:start}
+.tile .big{font:700 20px/1.15 var(--display);letter-spacing:.02em;text-transform:uppercase;overflow-wrap:anywhere}
+.flow text{font-size:11px}
+.flow .box{fill:var(--well);stroke:var(--line-2)}
+.flow .box.pgm{stroke:var(--pgm)}.flow .box.pvw{stroke:var(--pvw)}.flow .box.warn{stroke:var(--warn)}
+.flow .wire{stroke:var(--line-3);stroke-width:1.5;fill:none}.flow .wire.on{stroke:var(--pgm);stroke-width:2}
+.flow .title{fill:var(--ink);font-weight:500;letter-spacing:.08em}
+@media (max-width:1180px){.air{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header class="topbar" data-page="air"></header><script src="static/ui/vv.js"></script>
+<script src="static/ui/testcard.js"></script><script src="static/ui/onair.js"></script><script src="static/ui/queue.js"></script><script src="static/ui/find.js"></script><script src="static/ui/bar.js"></script>
+<main class="page">
+  <div class="air">
+    <div class="stack">
+      <section class="panel pgm" id="pgm" aria-label="Master output">
+        <div class="head"><span class="lamp" id="pgm-lamp"></span><h2 id="master-title">Program</h2><span class="chip" id="master-state">—</span>
+          <div class="end"><span class="tiny muted" id="monitor-status" role="status">Monitor off</span>
+            <button class="sm" id="watch-master" type="button">▶ Watch</button><button class="sm quiet" id="stop-monitor" type="button" disabled>Stop</button>
+            <button class="sm quiet icon" id="mute-master" type="button" title="Sound" aria-label="Unmute the monitor" hidden></button></div></div>
+        <div class="screen" id="master-view"><div class="bug" id="bug"></div><video id="master-video" playsinline muted preload="none" aria-label="Published master video" hidden></video></div>
+        <div class="pgm-meta">
+          <div class="pgm-title" id="pgm-title" aria-live="polite">—</div>
+          <div class="muted" id="master-detail"></div>
+          <div id="progress-wrap" hidden><div class="meter pgm"><i id="master-progress"></i></div><div class="times"><span id="pos">0:00</span><span id="dur">0:00</span></div></div>
+          <div class="row" id="hold-row" hidden><span class="chip warn" id="hold-chip">Held</span><span class="small grow" id="hold-text"></span><button class="sm" id="hold-change-main" type="button">Change end time</button></div>
+          <div class="row" id="admute-row" hidden><div class="shot hide-empty" id="admute-shot" style="width:96px;flex:none" title="On master now: what a fix applies to (your player is a few seconds behind)"><img alt="On master now"></div>
+            <a class="chip" id="admute-chip" href="ads#admute">Ad mute</a><span class="small grow" id="admute-text"></span>
+            <button class="sm" id="admute-show" type="button" title="Bring the sound back now (u)">It's the show</button><button class="sm" id="admute-ad" type="button" title="Mute now (a)">It's an ad</button></div>
+          <p class="note bad" id="master-error" role="status"></p>
+        </div>
+        <div class="pvw-row" id="master-controls">
+          <span class="lamp" id="pvw-lamp"></span>
+          <div class="what"><div class="label">Preview · prepared next</div><div class="small" id="prepared-label">Nothing prepared</div></div>
+          <button class="sm" id="cancel-prepare" type="button">Cancel preparation</button>
+          <button class="sm danger" id="fallback" type="button" title="Cut master to the fallback test card now">Return to fallback</button>
+        </div>
+      </section>
+
+      <div class="cols-3">
+        <section class="panel tile" aria-label="Crawl"><div class="head"><span class="lamp" id="crawl-lamp"></span><h2>On the bar</h2><div class="end"><a class="btn sm quiet" href="crawl">Crawl →</a></div></div>
+          <div class="body tile"><div id="crawl-strip"></div><div class="small" id="crawl-state">—</div><div class="tiny muted" id="crawl-next"></div></div></section>
+        <section class="panel tile" aria-label="Next break"><div class="head"><span class="lamp" id="break-lamp"></span><h2>Next break</h2><div class="end"><a class="btn sm quiet" href="presentation#continuity">Continuity →</a></div></div>
+          <div class="body tile"><div class="big" id="break-who">—</div><div class="small" id="break-what"></div><div class="tiny muted" id="break-id"></div></div></section>
+        <section class="panel tile" aria-label="Schedule"><div class="head"><span class="lamp" id="sched-lamp"></span><h2>Schedule</h2><div class="end"><a class="btn sm quiet" href="schedule">Schedule →</a></div></div>
+          <div class="body tile"><div class="label">Now</div><div class="big" id="sched-now">—</div><div class="tiny muted" id="sched-now-detail"></div>
+            <div class="label" style="margin-top:6px">Next</div><div class="small" id="sched-next">—</div></div></section>
+      </div>
+
+      <section class="machine machinery" aria-label="How it works: the signal path">
+        <div class="head"><span class="title">How it works · the signal path</span><span class="tiny muted">live</span></div>
+        <div class="body"><svg class="diagram flow" id="flow" viewBox="0 0 900 230" role="img" aria-label="Signal flow from sources to viewers"></svg>
+          <p class="hint" style="margin-top:10px">A source is <b>prepared</b> first (tuned and verified while master still shows what is on air), then <b>taken</b> to master in one cut. Master mixes in the station clock, the crawl and the station ID, and the publisher sends one stream to every viewer. Lag is how far master's output runs behind its input.</p>
+          <div class="tiles" id="tracks" style="margin-top:12px"></div></div>
+      </section>
+    </div>
+    <aside id="queue-host" aria-label="Up next"></aside>
+  </div>
+</main>
+<script src="static/ui/air.js"></script>
+</body>
+</html>

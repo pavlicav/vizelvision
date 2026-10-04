@@ -1,0 +1,20 @@
+[Unit]
+Description=VizelVision ad-mute detector (finds ad breaks in the master's live inputs)
+After=vizelvision-master.service
+PartOf=vizelvision-stack.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/vivian/vizelVision
+# The detector needs numpy and onnxruntime, which the system Python lacks. It is the
+# master's helper, never in its path: stopped or crashed, master leaves the sound alone.
+ExecStart=/home/vivian/miniconda3/bin/python3 -m admute.service --config /home/vivian/vizelVision/config.master.json
+Environment=PYTHONUNBUFFERED=1 OMP_NUM_THREADS=1
+Nice=10
+CPUQuota=150%
+MemoryMax=2G
+Restart=always
+RestartSec=5
+TimeoutStopSec=10
+NoNewPrivileges=true
+UMask=0077

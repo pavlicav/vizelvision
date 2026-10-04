@@ -1,0 +1,93 @@
+{
+ "last_check": {
+  "cable": {
+   "luma_mean": 22.58,
+   "luma_range": 36,
+   "picture_has_detail": true,
+   "sample_count": 2,
+   "sample_difference": 15.76,
+   "video_received": true
+  },
+  "device": {
+   "friendly-device-name": "Roku Express",
+   "model-name": "Roku Express+",
+   "model-number": "3710X"
+  },
+  "finished_at": 1790895598.4349918,
+  "message": "VizelVision is playing; video samples received on cable 70",
+  "recovery_attempted": false,
+  "roku": {
+   "active_app": {
+    "id": "dev",
+    "name": "VizelVision",
+    "version": "1.0.3"
+   },
+   "player": {
+    "duration": "6588886 ms",
+    "error": "false",
+    "format": {
+     "audio": "aac",
+     "captions": "none",
+     "container": "hls",
+     "drm": "none",
+     "video": "mpeg4_10b"
+    },
+    "is_live": "true",
+    "plugin": {
+     "id": "dev",
+     "name": "VizelVision"
+    },
+    "position": "6577232 ms",
+    "state": "play"
+   },
+   "playing": true
+  },
+  "roku_before": {
+   "active_app": {
+    "id": "dev",
+    "name": "VizelVision",
+    "version": "1.0.3"
+   },
+   "player": {
+    "duration": "6582886 ms",
+    "error": "false",
+    "format": {
+     "audio": "aac",
+     "captions": "none",
+     "container": "hls",
+     "drm": "none",
+     "video": "mpeg4_10b"
+    },
+    "is_live": "true",
+    "plugin": {
+     "id": "dev",
+     "name": "VizelVision"
+    },
+    "position": "6572232 ms",
+    "state": "play"
+   },
+   "playing": true
+  },
+  "settings": {
+   "app_id": "dev",
+   "cable_channel": 70,
+   "enabled": true,
+   "interval_hours": 6,
+   "roku_ip": "10.0.0.111"
+  },
+  "started_at": 1790895591.6900713,
+  "status": "healthy"
+ },
+ "next_check_at": 1790917198.4350216,
+ "pending": false,
+ "retry_seconds": 900,
+ "running": false,
+ "settings": {
+  "app_id": "dev",
+  "cable_channel": 70,
+  "enabled": true,
+  "interval_hours": 6,
+  "roku_ip": "10.0.0.111"
+ },
+ "storage_error": null
+}

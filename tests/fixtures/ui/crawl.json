@@ -1,0 +1,502 @@
+{
+ "areas": [
+  {
+   "code": "011001",
+   "name": "District of Columbia"
+  }
+ ],
+ "contexts": {
+  "game": "Live games",
+  "ident": "Station ID",
+  "off_air": "Off-air card",
+  "program": "Programs"
+ },
+ "eas_url": "http://127.0.0.1:8090/eas",
+ "feeds": {
+  "segments": {
+   "alerts": {
+    "contexts": [
+     "program",
+     "game",
+     "off_air",
+     "ident"
+    ],
+    "new_now": true,
+    "repeat": true
+   },
+   "cairo": {
+    "contexts": [
+     "program",
+     "game",
+     "off_air",
+     "ident"
+    ],
+    "new_now": false,
+    "repeat": true
+   },
+   "coming_up": {
+    "contexts": [
+     "program",
+     "game",
+     "off_air",
+     "ident"
+    ],
+    "new_now": false,
+    "repeat": true
+   },
+   "dc_alerts": {
+    "contexts": [
+     "program",
+     "game",
+     "off_air",
+     "ident"
+    ],
+    "new_now": true,
+    "repeat": true
+   },
+   "messages": {
+    "contexts": [
+     "program",
+     "game",
+     "off_air",
+     "ident"
+    ],
+    "new_now": false,
+    "repeat": true
+   },
+   "scores": {
+    "contexts": [
+     "program",
+     "game",
+     "off_air",
+     "ident"
+    ],
+    "new_now": false,
+    "repeat": true
+   },
+   "transit": {
+    "contexts": [
+     "program",
+     "game",
+     "off_air",
+     "ident"
+    ],
+    "new_now": false,
+    "repeat": true
+   },
+   "weather": {
+    "contexts": [
+     "off_air"
+    ],
+    "new_now": false,
+    "repeat": true
+   }
+  },
+  "transit": {
+   "bus": true,
+   "rail": true,
+   "routes": [
+    "D60",
+    "D6X",
+    "D50",
+    "D5X",
+    "C91"
+   ]
+  },
+  "weather": {
+   "latitude": null,
+   "longitude": null,
+   "place": "",
+   "zip": ""
+  }
+ },
+ "master_error": null,
+ "modes": [
+  "always",
+  "popups",
+  "quiet"
+ ],
+ "nws_zones": [
+  "DCZ001",
+  "DCC001"
+ ],
+ "rotation": {
+  "context": "game",
+  "error": null,
+  "higher": null,
+  "history": [],
+  "last_end": null,
+  "mode": "quiet",
+  "new": {},
+  "popups_this_hour": 0,
+  "running": null,
+  "segments": {
+   "alerts": {
+    "count": 0,
+    "feed": null,
+    "last_aired": null,
+    "next_due": 1790907396.654248,
+    "next_planned": null,
+    "preview": []
+   },
+   "cairo": {
+    "count": 0,
+    "feed": {
+     "checked_at": 1790907386.1897435,
+     "error": null,
+     "fetched_at": 1790907386.1897433,
+     "running": true
+    },
+    "last_aired": null,
+    "next_due": 1790907396.654248,
+    "next_planned": null,
+    "preview": []
+   },
+   "coming_up": {
+    "count": 0,
+    "feed": {
+     "checked_at": 1790907356.4021587,
+     "error": null,
+     "fetched_at": 1790907356.4021587,
+     "running": true
+    },
+    "last_aired": null,
+    "next_due": 1790907396.654248,
+    "next_planned": null,
+    "preview": []
+   },
+   "dc_alerts": {
+    "count": 3,
+    "feed": {
+     "checked_at": 1790907235.9914749,
+     "error": null,
+     "fetched_at": 1790907235.9914746,
+     "running": true
+    },
+    "last_aired": null,
+    "next_due": 1790907396.654248,
+    "next_planned": 1790910714.710712,
+    "preview": [
+     {
+      "heading": "",
+      "id": "alertdc:2b70cb9c97",
+      "issued": "2026-10-01T13:05:00-04:00",
+      "segment": "dc_alerts",
+      "tag": "ALERTDC",
+      "text": "National Capital Region (NCR) Flyover: Friday, October 2, 2026: The U.S. Military will conduct an aircraft flyover in the National Capital Region (NCR) over Arlington National Cemetery on Friday, October 2, 2026, at 1:05PM."
+     },
+     {
+      "heading": "",
+      "id": "alertdc:548299fc78",
+      "issued": "2026-10-01T12:30:00-04:00",
+      "segment": "dc_alerts",
+      "tag": "ALERTDC",
+      "text": "74th Annual Red Mass (October 4): On Sunday, October 4, 2026, the 74th Annual Red Mass will take place in the District of Columbia. In conjunction with this event, there will be parking restrictions and street closures motorists should take"
+     },
+     {
+      "heading": "",
+      "id": "alertdc:523e0ce862",
+      "issued": "2026-10-01T11:30:00-04:00",
+      "segment": "dc_alerts",
+      "tag": "ALERTDC",
+      "text": "Woodrow Wilson Bridge Opening (October 1 11PM): The Woodrow Wilson Bridge Management reports there will be a bridge opening tonight, October 1, at 11PM for the passage of the \"Sweet Pea Boat\". The opening will last for approximately 15-20 m"
+     }
+    ]
+   },
+   "messages": {
+    "count": 0,
+    "feed": null,
+    "last_aired": null,
+    "next_due": 1790907396.654248,
+    "next_planned": null,
+    "preview": []
+   },
+   "scores": {
+    "count": 0,
+    "feed": {
+     "checked_at": 1790907371.174686,
+     "error": null,
+     "fetched_at": 1790907371.1746857,
+     "running": true
+    },
+    "last_aired": null,
+    "next_due": 1790907396.654248,
+    "next_planned": null,
+    "preview": []
+   },
+   "transit": {
+    "count": 3,
+    "feed": {
+     "checked_at": 1790907299.7173264,
+     "error": null,
+     "fetched_at": 1790907299.7173264,
+     "running": true
+    },
+    "last_aired": null,
+    "next_due": 1790907396.654248,
+    "next_planned": 1790910366.410712,
+    "preview": [
+     {
+      "expires": "2026-10-02T02:22:52+00:00",
+      "heading": "",
+      "id": "bus:d8eab872-cd51-4230-9b50-7b1612fd0cc7",
+      "issued": "2026-10-02T00:22:52+00:00",
+      "segment": "transit",
+      "tag": "BUS C91/D80/D82",
+      "text": "Expect delays in both directions on Routes C91, D80, D82, D94, D96 at Wisconsin Ave NW & Q St due to emergency activity."
+     },
+     {
+      "expires": "2026-10-02T02:45:24+00:00",
+      "heading": "",
+      "id": "bus:deff4c43-f68b-48b3-89d3-70c766de2347",
+      "issued": "2026-10-01T23:32:24+00:00",
+      "segment": "transit",
+      "tag": "BUS D6X",
+      "text": "Reduced Service. Expect delays until 10:45pm."
+     },
+     {
+      "expires": "2026-10-02T02:20:28+00:00",
+      "heading": "",
+      "id": "bus:2cb17740-b48f-4b6a-9cf7-6a3e5fb6224f",
+      "issued": "2026-10-01T21:28:28+00:00",
+      "segment": "transit",
+      "tag": "BUS D60",
+      "text": "Reduced Service. Expect delays until 10:20pm."
+     }
+    ]
+   },
+   "weather": {
+    "count": 3,
+    "feed": {
+     "checked_at": 1790906936.5291634,
+     "error": null,
+     "fetched_at": 1790906936.5291626,
+     "place": "Reagan National",
+     "running": true,
+     "station": "Reagan National",
+     "zip": ""
+    },
+    "last_aired": null,
+    "next_due": 1790907396.654248,
+    "next_planned": null,
+    "preview": [
+     {
+      "heading": "",
+      "id": "weather:now",
+      "segment": "weather",
+      "tag": "NOW",
+      "text": "Reagan National: Clear, 72\u00b0F, wind S 8 mph."
+     },
+     {
+      "heading": "",
+      "id": "weather:tonight",
+      "segment": "weather",
+      "tag": "TONIGHT",
+      "text": "Partly Cloudy, low 65\u00b0F."
+     },
+     {
+      "heading": "",
+      "id": "weather:friday",
+      "segment": "weather",
+      "tag": "FRIDAY",
+      "text": "Mostly Sunny, high 89\u00b0F."
+     }
+    ]
+   }
+  }
+ },
+ "segments": {
+  "alerts": {
+   "label": "WEATHER",
+   "name": "Weather alerts"
+  },
+  "cairo": {
+   "label": "CAIRO RADIO",
+   "name": "Now on Cairo Radio"
+  },
+  "coming_up": {
+   "label": "COMING UP",
+   "name": "Coming up"
+  },
+  "dc_alerts": {
+   "label": "DC ALERTS",
+   "name": "AlertDC"
+  },
+  "messages": {
+   "label": "VIZELVISION",
+   "name": "Station messages"
+  },
+  "scores": {
+   "label": "SCORES",
+   "name": "Scores"
+  },
+  "transit": {
+   "label": "METRO & BUS",
+   "name": "Metro and bus"
+  },
+  "weather": {
+   "label": "WEATHER",
+   "name": "Weather"
+  }
+ },
+ "settings": {
+  "cycle_messages": true,
+  "dismissed": [],
+  "eas": true,
+  "eas_tests": true,
+  "eas_transcript": true,
+  "important": {
+   "label": "IMPORTANT",
+   "text": "",
+   "until": null
+  },
+  "messages": [],
+  "nws": false,
+  "nws_dismissed": [],
+  "override": {
+   "label": "Update",
+   "style": "station",
+   "text": "",
+   "until": null
+  },
+  "rules": {
+   "game": "quiet",
+   "gap_minutes": 5,
+   "ident": "quiet",
+   "off_air": "always",
+   "per_hour": 4,
+   "program": "popups"
+  },
+  "segments": {
+   "alerts": {
+    "changed_only": false,
+    "enabled": true,
+    "every": 10
+   },
+   "cairo": {
+    "changed_only": false,
+    "enabled": true,
+    "every": 15
+   },
+   "coming_up": {
+    "changed_only": false,
+    "enabled": true,
+    "every": 30
+   },
+   "dc_alerts": {
+    "changed_only": false,
+    "enabled": true,
+    "every": 30
+   },
+   "messages": {
+    "changed_only": false,
+    "enabled": true,
+    "every": 20
+   },
+   "scores": {
+    "changed_only": false,
+    "enabled": true,
+    "every": 20
+   },
+   "transit": {
+    "changed_only": false,
+    "enabled": true,
+    "every": 15
+   },
+   "weather": {
+    "changed_only": false,
+    "enabled": true,
+    "every": 30
+   }
+  },
+  "teams": [
+   "mlb:20",
+   "nba:8",
+   "nhl:21",
+   "nhl:5",
+   "nwsl:15365",
+   "wnba:16",
+   "nfl:8"
+  ]
+ },
+ "status": {
+  "alerts": [],
+  "bulletin": null,
+  "bulletins_ended": [
+   {
+    "at": 1790890124.61116,
+    "how": "done",
+    "key": "dc_alerts-ae78c270af"
+   },
+   {
+    "at": 1790890440.3895202,
+    "how": "done",
+    "key": "coming_up-317dc22b87"
+   },
+   {
+    "at": 1790890792.028462,
+    "how": "done",
+    "key": "transit-c304c465cc"
+   },
+   {
+    "at": 1790900325.3880954,
+    "how": "done",
+    "key": "transit-1b7ddbe6a5"
+   },
+   {
+    "at": 1790900728.9307528,
+    "how": "done",
+    "key": "dc_alerts-2acae03250"
+   },
+   {
+    "at": 1790901045.7519724,
+    "how": "done",
+    "key": "coming_up-4c8f5f5cbe"
+   },
+   {
+    "at": 1790901217.2033677,
+    "how": "done",
+    "key": "transit-c948284953"
+   },
+   {
+    "at": 1790901672.5753484,
+    "how": "done",
+    "key": "dc_alerts-7a8aa5feac"
+   },
+   {
+    "at": 1790901988.7013013,
+    "how": "done",
+    "key": "coming_up-d50446b318"
+   },
+   {
+    "at": 1790902336.1918967,
+    "how": "done",
+    "key": "transit-a1c0043405"
+   }
+  ],
+  "eas": {
+   "areas": [
+    "011001"
+   ],
+   "checked_at": 1790907392.9866533,
+   "error": null,
+   "url": "http://127.0.0.1:8090/eas"
+  },
+  "error": null,
+  "items": [],
+  "key": null,
+  "kind": null,
+  "label": null,
+  "nws": {
+   "checked_at": 1790907340.809364,
+   "error": null,
+   "zones": [
+    "DCZ001",
+    "DCC001"
+   ]
+  },
+  "on_air": false,
+  "rotation_alerts": [],
+  "style": null
+ }
+}

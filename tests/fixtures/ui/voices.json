@@ -1,0 +1,70 @@
+[
+ {
+  "accent": "Filipino",
+  "id": "aura-2-amalthea-en",
+  "language": "en",
+  "tags": [
+   "feminine",
+   "engaging",
+   "natural",
+   "cheerful"
+  ]
+ },
+ {
+  "accent": "American",
+  "id": "aura-2-andromeda-en",
+  "language": "en",
+  "tags": [
+   "feminine",
+   "casual",
+   "expressive",
+   "comfortable"
+  ]
+ },
+ {
+  "accent": "American",
+  "id": "aura-2-apollo-en",
+  "language": "en",
+  "tags": [
+   "masculine",
+   "confident",
+   "comfortable",
+   "casual"
+  ]
+ },
+ {
+  "accent": "American",
+  "id": "aura-2-arcas-en",
+  "language": "en",
+  "tags": [
+   "masculine",
+   "natural",
+   "smooth",
+   "clear",
+   "comfortable"
+  ]
+ },
+ {
+  "accent": "American",
+  "id": "aura-2-aries-en",
+  "language": "en",
+  "tags": [
+   "masculine",
+   "warm",
+   "energetic",
+   "caring"
+  ]
+ },
+ {
+  "accent": "American",
+  "id": "aura-2-asteria-en",
+  "language": "en",
+  "tags": [
+   "feminine",
+   "clear",
+   "confident",
+   "knowledgeable",
+   "energetic"
+  ]
+ }
+]

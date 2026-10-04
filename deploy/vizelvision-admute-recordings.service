@@ -1,0 +1,17 @@
+[Unit]
+Description=VizelVision ad mute: record over-the-air games on TV-Thing for training, and learn from them
+After=vizelvision-web.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/vivian/vizelVision
+# Plans TV-Thing timers for upcoming games and processes finished recordings (features,
+# Whisper words, fingerprints, play-by-play labels). Processing a game takes a while, at
+# the lowest priority; the timer simply waits for it.
+ExecStart=/home/vivian/miniconda3/bin/python3 -m admute.recordings sync --config /home/vivian/vizelVision/config.master.json
+Environment=PYTHONUNBUFFERED=1 OMP_NUM_THREADS=2
+Nice=19
+CPUQuota=200%
+MemoryMax=4G
+NoNewPrivileges=true
+UMask=0007

@@ -1,0 +1,44 @@
+{
+  "ok": true,
+  "hardware_opened": false,
+  "phases": [
+    "capture and master concurrently",
+    "fresh observations during MediaMTX outage",
+    "recovered contribution"
+  ],
+  "limitations": "Generated input; hardware reception and lip sync require a separate live gate.",
+  "tracks": {
+    "video": {
+      "buffers": 1184,
+      "backwards": 0,
+      "max_pts_gap_seconds": 0.033449154,
+      "max_arrival_gap_seconds": 0.09117894800147042
+    },
+    "audio": {
+      "buffers": 1847,
+      "backwards": 0,
+      "max_pts_gap_seconds": 0.228127108,
+      "max_arrival_gap_seconds": 0.12921665600151755
+    }
+  },
+  "same_capture_process": true,
+  "same_master_publisher_and_reader": true,
+  "hls_streams": [
+    {
+      "codec_name": "h264",
+      "codec_type": "video",
+      "width": 1280,
+      "height": 720,
+      "sample_rate": null,
+      "channels": null
+    },
+    {
+      "codec_name": "aac",
+      "codec_type": "audio",
+      "width": null,
+      "height": null,
+      "sample_rate": "48000",
+      "channels": 2
+    }
+  ]
+}

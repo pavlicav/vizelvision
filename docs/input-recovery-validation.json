@@ -1,0 +1,65 @@
+{
+  "ok": true,
+  "hardware_opened": false,
+  "roku_controls": "simulated",
+  "phases": [
+    "fallback confirmed before simulated navigation",
+    "prepared-source HLS manifest, renditions and media proxied through selection ID",
+    "verified selection and fresh A/V taken",
+    "legacy navigation invalidates on-air Roku and its preview first",
+    "fallback confirmed before simulated navigation",
+    "prepared-source HLS manifest, renditions and media proxied through selection ID",
+    "verified selection and fresh A/V taken",
+    "fallback confirmed before simulated navigation",
+    "persistent source queue prepared and confirmed an automatic master take",
+    "1.5-second decoded-video interruption: fallback then same-source recovery",
+    "web shutdown returns master to fallback"
+  ],
+  "recovery": {
+    "target": {
+      "id": "985658f0e16147868595419dde2d5ac1",
+      "source_id": "youtube-tv",
+      "channel_id": "NBC",
+      "generation": "0112a0adf43d4604ae7b6f5480297d05",
+      "resolved_source": {
+        "provider": "youtube_tv",
+        "label": "NBC"
+      }
+    },
+    "at": 1789594628.2050648,
+    "seconds_on_fallback": 1.059
+  },
+  "tracks": {
+    "video": {
+      "buffers": 1133,
+      "backwards": 0,
+      "max_pts_gap_seconds": 0.853766817,
+      "max_arrival_gap_seconds": 0.7848276799777523
+    },
+    "audio": {
+      "buffers": 1805,
+      "backwards": 0,
+      "max_pts_gap_seconds": 0.021333608,
+      "max_arrival_gap_seconds": 0.09572738409042358
+    }
+  },
+  "same_master_publisher_and_reader": true,
+  "hls_streams": [
+    {
+      "codec_name": "h264",
+      "codec_type": "video",
+      "width": 1280,
+      "height": 720,
+      "sample_rate": null,
+      "channels": null
+    },
+    {
+      "codec_name": "aac",
+      "codec_type": "audio",
+      "width": null,
+      "height": null,
+      "sample_rate": "48000",
+      "channels": 2
+    }
+  ]
+}

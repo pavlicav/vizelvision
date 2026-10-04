@@ -1,0 +1,659 @@
+{
+ "library": {
+  "channels": [],
+  "guide": {
+   "available": true,
+   "kind": "library"
+  },
+  "items": [
+   {
+    "aired": 1790411400.0,
+    "audio": {
+     "codec": "aac"
+    },
+    "bytes": 350112252,
+    "channel": "7.1 WJLA",
+    "collection": "TV Recordings",
+    "duration": 1978.398,
+    "id": "tv-recordings/Jeopardy! - 7.1 WJLA - 2026-09-26 0430.mp4",
+    "modified": 1790413324,
+    "path": "Jeopardy! - 7.1 WJLA - 2026-09-26 0430.mp4",
+    "playable": true,
+    "probe": "ok",
+    "reason": null,
+    "root": "tv-recordings",
+    "title": "Jeopardy!",
+    "variant": null,
+    "video": {
+     "codec": "h264",
+     "height": 720,
+     "width": 1280
+    }
+   },
+   {
+    "aired": 1790292600.0,
+    "audio": {
+     "codec": "aac"
+    },
+    "bytes": 278775884,
+    "channel": "7.1 WJLA",
+    "collection": "TV Recordings",
+    "duration": 1505.492,
+    "id": "tv-recordings/Jeopardy! - 7.1 WJLA - 2026-09-24 1930 (2).mp4",
+    "modified": 1790294524,
+    "path": "Jeopardy! - 7.1 WJLA - 2026-09-24 1930 (2).mp4",
+    "playable": true,
+    "probe": "ok",
+    "reason": null,
+    "root": "tv-recordings",
+    "title": "Jeopardy!",
+    "variant": "2",
+    "video": {
+     "codec": "h264",
+     "height": 720,
+     "width": 1280
+    }
+   },
+   {
+    "aired": 1790897400.0,
+    "audio": {
+     "codec": "aac"
+    },
+    "bytes": 362631329,
+    "channel": "7.1 WJLA",
+    "collection": "TV Recordings",
+    "duration": 1977.948,
+    "id": "tv-recordings/Jeopardy! - 7.1 WJLA - 2026-10-01 1930.mp4",
+    "modified": 1790899324,
+    "path": "Jeopardy! - 7.1 WJLA - 2026-10-01 1930.mp4",
+    "playable": true,
+    "probe": "ok",
+    "reason": null,
+    "root": "tv-recordings",
+    "title": "Jeopardy!",
+    "variant": null,
+    "video": {
+     "codec": "h264",
+     "height": 720,
+     "width": 1280
+    }
+   },
+   {
+    "aired": 1790292600.0,
+    "audio": {
+     "codec": "aac"
+    },
+    "bytes": 89147749,
+    "channel": "7.1 WJLA",
+    "collection": "TV Recordings",
+    "duration": 460.982,
+    "id": "tv-recordings/Jeopardy! - 7.1 WJLA - 2026-09-24 1930.mp4",
+    "modified": 1790293013,
+    "path": "Jeopardy! - 7.1 WJLA - 2026-09-24 1930.mp4",
+    "playable": true,
+    "probe": "ok",
+    "reason": null,
+    "root": "tv-recordings",
+    "title": "Jeopardy!",
+    "variant": null,
+    "video": {
+     "codec": "h264",
+     "height": 720,
+     "width": 1280
+    }
+   },
+   {
+    "aired": 1790638200.0,
+    "audio": {
+     "codec": "aac"
+    },
+    "bytes": 367880624,
+    "channel": "7.1 WJLA",
+    "collection": "TV Recordings",
+    "duration": 1978.115,
+    "id": "tv-recordings/Jeopardy! - 7.1 WJLA - 2026-09-28 1930.mp4",
+    "modified": 1790640125,
+    "path": "Jeopardy! - 7.1 WJLA - 2026-09-28 1930.mp4",
+    "playable": true,
+    "probe": "ok",
+    "reason": null,
+    "root": "tv-recordings",
+    "title": "Jeopardy!",
+    "variant": null,
+    "video": {
+     "codec": "h264",
+     "height": 720,
+     "width": 1280
+    }
+   }
+  ],
+  "roots": [
+   {
+    "available": true,
+    "count": 14,
+    "error": null,
+    "id": "tv-recordings",
+    "name": "TV Recordings"
+   }
+  ],
+  "scanned_at": 1790907384.966215,
+  "source_id": "library",
+  "stale": false
+ },
+ "mlb": {
+  "channels": [
+   {
+    "game": {
+     "end": null,
+     "end_kind": "game_status",
+     "game_pk": 849844,
+     "id": "mlb:849844",
+     "preferred_source": {
+      "availability": "scheduled",
+      "broadcast": "NBC/Peacock",
+      "channel": "NBC",
+      "label": "NBC",
+      "provider": "youtube_tv"
+     },
+     "sources": [
+      {
+       "availability": "scheduled",
+       "broadcast": "NBC/Peacock",
+       "channel": "NBC",
+       "label": "NBC",
+       "provider": "youtube_tv"
+      },
+      {
+       "availability": "verify_in_app",
+       "feeds": [
+        {
+         "home_away": "home",
+         "media_id": "c18c1358-c68a-4b52-8126-5cbd56b78fca",
+         "name": "NBC/Peacock"
+        }
+       ],
+       "label": "MLB.TV",
+       "provider": "mlb"
+      }
+     ],
+     "start": 1790899200.0,
+     "state": "live",
+     "status": "In Progress",
+     "title": "Philadelphia Phillies at Atlanta Braves"
+    },
+    "id": "849844",
+    "name": "Philadelphia Phillies at Atlanta Braves",
+    "now": {
+     "end": null,
+     "end_kind": "game_status",
+     "game_pk": 849844,
+     "id": "mlb:849844",
+     "preferred_source": {
+      "availability": "scheduled",
+      "broadcast": "NBC/Peacock",
+      "channel": "NBC",
+      "label": "NBC",
+      "provider": "youtube_tv"
+     },
+     "sources": [
+      {
+       "availability": "scheduled",
+       "broadcast": "NBC/Peacock",
+       "channel": "NBC",
+       "label": "NBC",
+       "provider": "youtube_tv"
+      },
+      {
+       "availability": "verify_in_app",
+       "feeds": [
+        {
+         "home_away": "home",
+         "media_id": "c18c1358-c68a-4b52-8126-5cbd56b78fca",
+         "name": "NBC/Peacock"
+        }
+       ],
+       "label": "MLB.TV",
+       "provider": "mlb"
+      }
+     ],
+     "start": 1790899200.0,
+     "state": "live",
+     "status": "In Progress",
+     "title": "Philadelphia Phillies at Atlanta Braves"
+    },
+    "number": null,
+    "upcoming": []
+   }
+  ],
+  "date": "2026-10-01",
+  "guide": {
+   "available": true,
+   "kind": "games"
+  },
+  "source_id": "mlb",
+  "stale": false
+ },
+ "sunday-ticket": {
+  "channels": [
+   {
+    "game": {
+     "end": null,
+     "end_kind": "game_status",
+     "id": "nfl:401872964",
+     "networks": [],
+     "note": "Thursday Night Football on Prime Video. Sign in on the Roku if prompted.",
+     "start": 1790900100.0,
+     "state": "live",
+     "status": "In Progress",
+     "title": "Pittsburgh Steelers at Cleveland Browns"
+    },
+    "id": "401872964",
+    "name": "Pittsburgh Steelers at Cleveland Browns",
+    "now": {
+     "end": null,
+     "end_kind": "game_status",
+     "id": "nfl:401872964",
+     "networks": [],
+     "note": "Thursday Night Football on Prime Video. Sign in on the Roku if prompted.",
+     "start": 1790900100.0,
+     "state": "live",
+     "status": "In Progress",
+     "title": "Pittsburgh Steelers at Cleveland Browns"
+    },
+    "number": null,
+    "upcoming": []
+   }
+  ],
+  "date": "2026-10-01",
+  "guide": {
+   "available": true,
+   "kind": "games"
+  },
+  "source_id": "sunday-ticket",
+  "stale": false
+ },
+ "thursday-night-football": {
+  "channels": [
+   {
+    "game": {
+     "end": null,
+     "end_kind": "game_status",
+     "id": "nfl:401872964",
+     "networks": [],
+     "note": "Thursday Night Football on Prime Video. Sign in on the Roku if prompted.",
+     "start": 1790900100.0,
+     "state": "live",
+     "status": "In Progress",
+     "title": "Pittsburgh Steelers at Cleveland Browns"
+    },
+    "id": "401872964",
+    "name": "Pittsburgh Steelers at Cleveland Browns",
+    "now": {
+     "end": null,
+     "end_kind": "game_status",
+     "id": "nfl:401872964",
+     "networks": [],
+     "note": "Thursday Night Football on Prime Video. Sign in on the Roku if prompted.",
+     "start": 1790900100.0,
+     "state": "live",
+     "status": "In Progress",
+     "title": "Pittsburgh Steelers at Cleveland Browns"
+    },
+    "number": null,
+    "upcoming": []
+   }
+  ],
+  "date": "2026-10-01",
+  "guide": {
+   "available": true,
+   "kind": "games"
+  },
+  "source_id": "thursday-night-football",
+  "stale": false
+ },
+ "tv-thing-analog": {
+  "channels": [
+   {
+    "id": 2,
+    "name": "Channel 2",
+    "now": null,
+    "number": "2",
+    "upcoming": []
+   },
+   {
+    "id": 3,
+    "name": "Channel 3",
+    "now": null,
+    "number": "3",
+    "upcoming": []
+   },
+   {
+    "id": 4,
+    "name": "Channel 4",
+    "now": null,
+    "number": "4",
+    "upcoming": []
+   },
+   {
+    "id": 1,
+    "name": "Channel 1",
+    "now": null,
+    "number": "1",
+    "upcoming": []
+   },
+   {
+    "id": 5,
+    "name": "Channel 5",
+    "now": null,
+    "number": "5",
+    "upcoming": []
+   }
+  ],
+  "fetched_at": 1790907397.2775958,
+  "guide": {
+   "age_seconds": null,
+   "available": false,
+   "coverage_hours": null,
+   "generated_at": null,
+   "reason": "Program listings unavailable",
+   "stale": false
+  },
+  "source_id": "tv-thing-analog",
+  "stale": false,
+  "warnings": []
+ },
+ "tv-thing-digital": {
+  "channels": [
+   {
+    "id": "wrc_hd_4_1",
+    "name": "WRC-HD",
+    "now": {
+     "end": 1790910000,
+     "end_kind": "scheduled",
+     "event_id": 5102,
+     "id": "tv-thing-digital:wrc_hd_4_1:5102:1790899200",
+     "start": 1790899200,
+     "state": "current",
+     "title": "2026 MLB Playoffs"
+    },
+    "number": "4.1",
+    "upcoming": [
+     {
+      "end": 1790912100,
+      "end_kind": "scheduled",
+      "event_id": 5103,
+      "id": "tv-thing-digital:wrc_hd_4_1:5103:1790910000",
+      "start": 1790910000,
+      "state": "upcoming",
+      "title": "News4 at 11 pm"
+     },
+     {
+      "end": 1790915820,
+      "end_kind": "scheduled",
+      "event_id": 5104,
+      "id": "tv-thing-digital:wrc_hd_4_1:5104:1790912100",
+      "start": 1790912100,
+      "state": "upcoming",
+      "title": "The Tonight Show Starring Jimmy Fallon"
+     },
+     {
+      "end": 1790919480,
+      "end_kind": "scheduled",
+      "event_id": 5105,
+      "id": "tv-thing-digital:wrc_hd_4_1:5105:1790915820",
+      "start": 1790915820,
+      "state": "upcoming",
+      "title": "Late Night with Seth Meyers"
+     },
+     {
+      "end": 1790921580,
+      "end_kind": "scheduled",
+      "event_id": 5106,
+      "id": "tv-thing-digital:wrc_hd_4_1:5106:1790919480",
+      "start": 1790919480,
+      "state": "upcoming",
+      "title": "News4 at 11 pm"
+     }
+    ]
+   },
+   {
+    "id": "wttg_dt_5_1",
+    "name": "WTTG-DT",
+    "now": null,
+    "number": "5.1",
+    "upcoming": []
+   },
+   {
+    "id": "wjla_7_1",
+    "name": "WJLA",
+    "now": {
+     "end": 1790910000,
+     "end_kind": "scheduled",
+     "event_id": 12,
+     "id": "tv-thing-digital:wjla_7_1:12:1790906400",
+     "start": 1790906400,
+     "state": "current",
+     "title": "9-1-1: Nashville"
+    },
+    "number": "7.1",
+    "upcoming": [
+     {
+      "end": 1790912100,
+      "end_kind": "scheduled",
+      "event_id": 13,
+      "id": "tv-thing-digital:wjla_7_1:13:1790910000",
+      "start": 1790910000,
+      "state": "upcoming",
+      "title": "7News ON YOUR SIDE at 11"
+     },
+     {
+      "end": 1790915820,
+      "end_kind": "scheduled",
+      "event_id": 14,
+      "id": "tv-thing-digital:wjla_7_1:14:1790912100",
+      "start": 1790912100,
+      "state": "upcoming",
+      "title": "Jimmy Kimmel Live!"
+     },
+     {
+      "end": 1790917560,
+      "end_kind": "scheduled",
+      "event_id": 15,
+      "id": "tv-thing-digital:wjla_7_1:15:1790915820",
+      "start": 1790915820,
+      "state": "upcoming",
+      "title": "Nightline"
+     },
+     {
+      "end": 1790919360,
+      "end_kind": "scheduled",
+      "event_id": 16,
+      "id": "tv-thing-digital:wjla_7_1:16:1790917560",
+      "start": 1790917560,
+      "state": "upcoming",
+      "title": "Paid Programming"
+     },
+     {
+      "end": 1790921160,
+      "end_kind": "scheduled",
+      "event_id": 17,
+      "id": "tv-thing-digital:wjla_7_1:17:1790919360",
+      "start": 1790919360,
+      "state": "upcoming",
+      "title": "America's Funniest Home Videos"
+     }
+    ]
+   },
+   {
+    "id": "wusa_hd_9_1",
+    "name": "WUSA-HD",
+    "now": {
+     "end": 1790910000,
+     "end_kind": "scheduled",
+     "event_id": 12,
+     "id": "tv-thing-digital:wusa_hd_9_1:12:1790904600",
+     "start": 1790904600,
+     "state": "current",
+     "title": "The Amazing Race"
+    },
+    "number": "9.1",
+    "upcoming": [
+     {
+      "end": 1790912100,
+      "end_kind": "scheduled",
+      "event_id": 13,
+      "id": "tv-thing-digital:wusa_hd_9_1:13:1790910000",
+      "start": 1790910000,
+      "state": "upcoming",
+      "title": "WUSA 9 News at 11pm"
+     },
+     {
+      "end": 1790913900,
+      "end_kind": "scheduled",
+      "event_id": 14,
+      "id": "tv-thing-digital:wusa_hd_9_1:14:1790912100",
+      "start": 1790912100,
+      "state": "upcoming",
+      "title": "Comics Unleashed"
+     },
+     {
+      "end": 1790915700,
+      "end_kind": "scheduled",
+      "event_id": 15,
+      "id": "tv-thing-digital:wusa_hd_9_1:15:1790913900",
+      "start": 1790913900,
+      "state": "upcoming",
+      "title": "Comics Unleashed"
+     },
+     {
+      "end": 1790917500,
+      "end_kind": "scheduled",
+      "event_id": 16,
+      "id": "tv-thing-digital:wusa_hd_9_1:16:1790915700",
+      "start": 1790915700,
+      "state": "upcoming",
+      "title": "Funny You Should Ask"
+     },
+     {
+      "end": 1790919300,
+      "end_kind": "scheduled",
+      "event_id": 17,
+      "id": "tv-thing-digital:wusa_hd_9_1:17:1790917500",
+      "start": 1790917500,
+      "state": "upcoming",
+      "title": "Funny You Should Ask"
+     },
+     {
+      "end": 1790921100,
+      "end_kind": "scheduled",
+      "event_id": 18,
+      "id": "tv-thing-digital:wusa_hd_9_1:18:1790919300",
+      "start": 1790919300,
+      "state": "upcoming",
+      "title": "Entertainment Tonight"
+     }
+    ]
+   },
+   {
+    "id": "wdco_10_1",
+    "name": "WDCO",
+    "now": {
+     "end": 1790910000,
+     "end_kind": "scheduled",
+     "event_id": 11,
+     "id": "tv-thing-digital:wdco_10_1:11:1790906400",
+     "start": 1790906400,
+     "state": "current",
+     "title": "Saturday Night Live"
+    },
+    "number": "10.1",
+    "upcoming": [
+     {
+      "end": 1790913600,
+      "end_kind": "scheduled",
+      "event_id": 12,
+      "id": "tv-thing-digital:wdco_10_1:12:1790910000",
+      "start": 1790910000,
+      "state": "upcoming",
+      "title": "Saturday Night Live"
+     },
+     {
+      "end": 1790917200,
+      "end_kind": "scheduled",
+      "event_id": 13,
+      "id": "tv-thing-digital:wdco_10_1:13:1790913600",
+      "start": 1790913600,
+      "state": "upcoming",
+      "title": "Saturday Night Live"
+     },
+     {
+      "end": 1790920800,
+      "end_kind": "scheduled",
+      "event_id": 14,
+      "id": "tv-thing-digital:wdco_10_1:14:1790917200",
+      "start": 1790917200,
+      "state": "upcoming",
+      "title": "Saturday Night Live"
+     }
+    ]
+   }
+  ],
+  "fetched_at": 1790907275.1372807,
+  "guide": {
+   "age_seconds": 26196.267287015915,
+   "available": true,
+   "coverage_hours": 4.222981309162246,
+   "generated_at": 1790881201,
+   "reason": null,
+   "stale": false
+  },
+  "source_id": "tv-thing-digital",
+  "stale": false,
+  "warnings": []
+ },
+ "youtube-tv": {
+  "channels": [
+   {
+    "id": "NBC",
+    "name": "NBC",
+    "now": null,
+    "number": null,
+    "upcoming": []
+   },
+   {
+    "id": "FOX",
+    "name": "FOX",
+    "now": null,
+    "number": null,
+    "upcoming": []
+   },
+   {
+    "id": "ABC",
+    "name": "ABC",
+    "now": null,
+    "number": null,
+    "upcoming": []
+   },
+   {
+    "id": "CBS",
+    "name": "CBS",
+    "now": null,
+    "number": null,
+    "upcoming": []
+   },
+   {
+    "id": "PBS",
+    "name": "PBS",
+    "now": null,
+    "number": null,
+    "upcoming": []
+   }
+  ],
+  "guide": {
+   "available": false,
+   "reason": "No program guide configured"
+  },
+  "source_id": "youtube-tv",
+  "stale": false
+ }
+}

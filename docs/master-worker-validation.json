@@ -1,0 +1,100 @@
+{
+  "ok": true,
+  "phases": [
+    {
+      "phase": "startup fallback",
+      "luma": 103,
+      "audio_energy": 0.005
+    },
+    {
+      "phase": "HLS input take 1",
+      "luma": 63,
+      "audio_energy": 0.3199
+    },
+    {
+      "phase": "manual fallback",
+      "luma": 103,
+      "audio_energy": 0.005
+    },
+    {
+      "phase": "HLS input take 2",
+      "luma": 63,
+      "audio_energy": 0.3194
+    },
+    {
+      "phase": "generation-loss fallback",
+      "luma": 103,
+      "audio_energy": 0.005
+    }
+  ],
+  "limitations": "Generated HLS and fake tuner API; no reception, hardware sync, Roku capture, or long-duration resource soak tested.",
+  "same_publisher_and_reader": true,
+  "tuner_released": true,
+  "hls_streams": [
+    {
+      "codec_name": "h264",
+      "codec_type": "video",
+      "width": 320,
+      "height": 180,
+      "sample_rate": null,
+      "channels": null
+    },
+    {
+      "codec_name": "aac",
+      "codec_type": "audio",
+      "width": null,
+      "height": null,
+      "sample_rate": "48000",
+      "channels": 2
+    }
+  ],
+  "hls_sequences": {
+    "video": [
+      1,
+      16,
+      17,
+      49,
+      52
+    ],
+    "audio": [
+      1,
+      16,
+      18,
+      50,
+      52
+    ]
+  },
+  "tracks": {
+    "video": {
+      "buffers": 537,
+      "backwards": 0,
+      "max_pts_gap_seconds": 0.100000532,
+      "max_arrival_gap_seconds": 0.1086359079927206
+    },
+    "audio": {
+      "buffers": 2512,
+      "backwards": 0,
+      "max_pts_gap_seconds": 0.021424802,
+      "max_arrival_gap_seconds": 0.08484765002503991
+    }
+  },
+  "api_calls": [
+    "lock",
+    "tune",
+    "lock",
+    "lock",
+    "release",
+    "lock",
+    "tune",
+    "lock",
+    "lock",
+    "release"
+  ],
+  "publisher_restart_recovered_to_fallback_without_retune": true,
+  "process_observations": {
+    "peak_rss_mib": 179.3,
+    "cpu_seconds": 18.33,
+    "elapsed_seconds": 68.27,
+    "scope": "Python process and its GStreamer threads, excluding MediaMTX/ffmpeg children; short test, not a soak"
+  }
+}

@@ -1,0 +1,4 @@
+.test-card{position:relative;aspect-ratio:16/9;width:100%;background:#000 url('../test-pattern.webp') center/100% 100%;border-radius:6px;overflow:hidden;container-type:inline-size;display:flex;align-items:center;justify-content:center;color:#fff;text-align:center;margin:10px 0}
+.test-card-copy{max-width:96%;background:rgba(0,0,0,.9);padding:3cqw 2cqw;font:2.25cqw/1.55 'DejaVu Sans Mono',monospace;white-space:pre-line;overflow-wrap:anywhere}
+.test-card-copy strong{display:block;font-size:3.5cqw;line-height:1.35;letter-spacing:.02em}.test-card-copy span{display:block;margin-top:2cqw}.test-card-copy span:empty{display:none}
+.test-card[hidden]{display:none!important}

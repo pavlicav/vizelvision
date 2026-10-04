@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<component name="MainScene" extends="Scene">
+  <interface>
+    <field id="streamUrl" type="string" onChange="OnStreamUrl"/>
+  </interface>
+  <script type="text/brightscript" uri="pkg:/components/MainScene.brs"/>
+  <children>
+    <Rectangle color="0x000000ff" width="1280" height="720"/>
+    <Video id="videoPlayer" width="1280" height="720" enableUI="false"/>
+    <Label id="status"
+           text="Connecting to VizelVision master..."
+           font="font:SmallSystemFont"
+           color="0x888888ff"
+           width="1280"
+           horizAlign="center"
+           translation="[0, 340]"/>
+    <Timer id="retryTimer" duration="3" repeat="false"/>
+  </children>
+</component>

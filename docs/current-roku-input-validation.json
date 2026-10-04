@@ -1,0 +1,43 @@
+{
+  "ok": true,
+  "roku_navigation_calls": 0,
+  "device_open_calls": 0,
+  "on_air_observation_seconds": 300,
+  "preview_frames": 51,
+  "limitations": "Current Roku picture only; no channel navigation or lip-sync measurement.",
+  "tracks": {
+    "video": {
+      "buffers": 9365,
+      "backwards": 0,
+      "max_pts_gap_seconds": 0.033466611,
+      "max_arrival_gap_seconds": 0.08714008599054068
+    },
+    "audio": {
+      "buffers": 14632,
+      "backwards": 0,
+      "max_pts_gap_seconds": 0.021333794,
+      "max_arrival_gap_seconds": 0.09117322298698127
+    }
+  },
+  "same_single_device_owner": true,
+  "same_contribution_publisher": true,
+  "same_master_publisher_and_reader": true,
+  "hls_streams": [
+    {
+      "codec_name": "h264",
+      "codec_type": "video",
+      "width": 1280,
+      "height": 720,
+      "sample_rate": null,
+      "channels": null
+    },
+    {
+      "codec_name": "aac",
+      "codec_type": "audio",
+      "width": null,
+      "height": null,
+      "sample_rate": "48000",
+      "channels": 2
+    }
+  ]
+}

@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Engineering · VizelVision</title>
+<link rel="stylesheet" href="static/ui/vv.css">
+<style>
+.health{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px}
+.health .panel>.body{padding:12px 14px}
+.health .kv{font-size:13px}
+.feeds{width:100%;border-collapse:collapse;font-size:13px}
+.feeds td{padding:4px 0;border-top:1px solid var(--line)}
+.feeds tr:first-child td{border-top:0}
+.explorer{display:grid;grid-template-columns:300px minmax(0,1fr);gap:var(--gap);align-items:start}
+.endpoints{max-height:640px;overflow:auto}
+.endpoints h3{font:500 10.5px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--muted);padding:12px 14px 6px}
+.endpoints button{width:100%;justify-content:flex-start;height:auto;padding:6px 14px;border:0;border-radius:0;background:none;font:12.5px/1.3 var(--mono);color:var(--ink-2);text-align:left;white-space:normal}
+.endpoints button:hover{background:var(--raised)}
+.endpoints button small{display:block;font-family:var(--body);color:var(--muted);font-size:11.5px}
+.req{display:grid;grid-template-columns:110px minmax(0,1fr) auto;gap:8px}
+.map text{font-size:11px}.map .proc{fill:var(--well);stroke:var(--line-3)}.map .ext{fill:none;stroke:var(--line-2);stroke-dasharray:4 3}
+.map .t{fill:var(--ink);font-weight:500;letter-spacing:.06em}.map .wire{stroke:var(--line-3);fill:none}
+.howto{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px}
+.howto a{display:grid;gap:6px;padding:14px;border:1px dashed var(--warn-line);border-radius:var(--r-lg);color:var(--ink);background:var(--panel)}
+.howto a:hover{text-decoration:none;border-style:solid}
+#monitor-image{width:100%;max-width:480px;height:auto;border-radius:var(--r);border:1px solid var(--line)}
+@media (max-width:900px){.explorer{grid-template-columns:1fr}.req{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header class="topbar" data-page="engineering"></header><script src="static/ui/vv.js"></script>
+<main class="page">
+  <div class="page-head"><div><h1>Engineering</h1><p>How everything is running, the viewer monitor, the Roku capture, how the parts fit, and every endpoint by hand.</p></div></div>
+  <div class="tabs" role="tablist" aria-label="Engineering">
+    <button type="button" role="tab" data-tab="health">Health</button><button type="button" role="tab" data-tab="monitor">Viewer monitor</button>
+    <button type="button" role="tab" data-tab="roku">Roku capture</button><button type="button" role="tab" data-tab="how">How it works</button>
+    <button type="button" role="tab" data-tab="api">API explorer</button><button type="button" role="tab" data-tab="interface">Interface</button>
+  </div>
+
+  <div data-panel="health" class="stack">
+    <div class="row"><span class="tiny muted" id="health-note">Every tile reads the same endpoints the other pages use.</span></div>
+    <div class="health" id="health"></div>
+  </div>
+
+  <div data-panel="monitor" hidden>
+    <section id="monitor" class="cols-2" aria-labelledby="monitor-title">
+      <form id="monitor-settings" class="panel"><div class="head"><span class="lamp" id="monitor-lamp"></span><h2 id="monitor-title">Viewer Roku · cable return</h2></div><div class="body stack tight">
+        <p class="hint">Checks Roku playback and compares the cable picture with the VizelVision master every few hours. Each comparison samples about 30 seconds to allow for playback delay. A missing or stopped app gets one launch attempt. TV-Thing locks are always respected; a locked or busy check waits 15 minutes.</p>
+        <label class="switch"><input id="monitor-enabled" type="checkbox"><span>Periodic checks and recovery</span></label>
+        <div class="fields"><label class="field"><span>Streaming Roku IP</span><input id="monitor-ip" required placeholder="10.0.0.111" autocomplete="off"></label>
+          <label class="field"><span>Cable channel</span><input id="monitor-channel" type="number" min="1" max="135" required></label>
+          <label class="field"><span>VizelVision app ID</span><input id="monitor-app" required pattern="dev|[0-9]{1,12}"></label>
+          <label class="field"><span>Every (hours)</span><input id="monitor-hours" type="number" min="1" max="168" step="0.5" required></label></div>
+        <div class="actions"><button id="monitor-save" class="primary sm">Save monitor settings</button><button id="monitor-check" type="button" class="sm">Check now / recover</button><button id="monitor-launch" type="button" class="sm">Launch VizelVision app</button></div>
+        <p class="tiny muted" id="monitor-launch-message" role="status" aria-live="polite"></p>
+        <details class="more"><summary>Details</summary><p class="hint" style="margin-top:6px">Check now uses saved settings and can relaunch VizelVision; it works while periodic checks are off. An active cable tuner on another channel is left alone. Launch sends only a Roku launch to the saved IP and app ID; it skips TV-Thing, so it works while TV-Thing is locked.</p></details></div></form>
+      <article class="panel"><div class="head"><h2>Latest check</h2></div><div class="body stack tight">
+        <p id="monitor-message" role="status" aria-live="polite">Loading monitor…</p><p class="tiny muted mono" id="monitor-timing"></p>
+        <img id="monitor-image" hidden alt="Cable return from the latest production check">
+        <p class="tiny muted">Healthy requires a sequence of cable pictures matching the VizelVision master. Static, blank video, and other programming cannot pass on detail alone. An unavailable reference is inconclusive. Picture mismatches do not trigger a relaunch or prove a television’s power/input state.</p>
+        <details class="more"><summary>Diagnostics and recent checks</summary><div id="monitor-diagnostics" style="margin-top:8px"></div></details></div></article>
+    </section>
+  </div>
+
+  <div data-panel="roku" hidden class="cols-2">
+    <section class="panel"><div class="head"><span class="lamp" id="roku-lamp"></span><h2>Source Roku</h2><div class="end"><button class="sm quiet" id="roku-refresh" type="button">Refresh</button></div></div>
+      <div class="body stack tight"><dl class="kv" id="roku-kv"></dl>
+        <label class="field"><span>Capture input</span><select id="roku-input"></select></label>
+        <div class="actions"><button class="sm" id="roku-apply" type="button">Apply capture input</button><button class="sm danger" id="roku-stop" type="button">Stop Roku cue</button></div>
+        <p class="tiny muted" id="roku-status" role="status"></p></div></section>
+    <section class="panel"><div class="head"><h2>Calibration</h2></div><div class="body stack tight">
+      <p class="hint">Roku → converter → Hauppauge component input. Watch the input signal live while a resolution change finishes, and get back to 720p60.</p>
+      <dl class="kv" id="calibration-kv"></dl>
+      <div class="actions"><a class="btn primary" href="calibration">Open calibration →</a><a class="btn quiet" href="sources">Live capture on Sources →</a></div></div></section>
+  </div>
+
+  <div data-panel="how" hidden class="stack">
+    <section class="panel"><div class="head"><h2>What runs where</h2><div class="end"><span class="tiny muted">user systemd units · vizelvision-stack.target</span></div></div>
+      <div class="body" style="overflow-x:auto"><svg class="diagram map" id="map" viewBox="0 0 1100 430" role="img" aria-label="VizelVision's processes and what they talk to"></svg></div></section>
+    <div><span class="label">The machinery, page by page (switches the diagrams on)</span></div>
+    <div class="howto">
+      <a href="air" data-machinery><span class="label" style="color:var(--warn)">On Air</span><strong>The signal path</strong><span class="hint">Sources → preview → master → publisher, with crawl, ID and clock mixed in; live track lag.</span></a>
+      <a href="crawl" data-machinery><span class="label" style="color:var(--warn)">Crawl</span><strong>The next three hours</strong><span class="hint">Contexts ahead, the rule each follows, every planned pop-up and the gap between them.</span></a>
+      <a href="schedule" data-machinery><span class="label" style="color:var(--warn)">Schedule</span><strong>Who gets master</strong><span class="hint">Games until final, then games under way, recordings, the schedule; how games follow the feeds.</span></a>
+    </div>
+  </div>
+
+  <div data-panel="api" hidden class="explorer">
+    <section class="panel"><div class="head"><h2>Endpoints</h2></div><div class="endpoints" id="endpoints"></div></section>
+    <section class="panel"><div class="head"><h2>Request</h2><div class="end"><span class="tiny muted" id="api-meta"></span></div></div>
+      <div class="body stack tight">
+        <div class="req"><select id="api-method" aria-label="Method"><option>GET</option><option>POST</option><option>DELETE</option></select><input id="api-path" class="mono" value="v1/master" aria-label="Path" spellcheck="false"><button id="api-send" class="primary" type="button">Send</button></div>
+        <label class="field" id="api-body-field" hidden><span>JSON body</span><textarea id="api-body" class="mono" rows="5" spellcheck="false">{}</textarea></label>
+        <p class="note warn tiny" id="api-warn" hidden>POST and DELETE change the station. You will be asked to confirm.</p>
+        <div id="api-out"><p class="hint">Pick an endpoint, or type a path. Responses are shown as JSON.</p></div></div></section>
+  </div>
+
+  <div data-panel="interface" hidden class="cols-2">
+    <section class="panel"><div class="head"><h2>This browser</h2></div><div class="body stack tight">
+      <label class="switch"><input type="checkbox" id="pref-machinery"><span>Show the machinery (how-it-works diagrams) on every page <kbd>m</kbd></span></label>
+      <label class="switch"><input type="checkbox" id="pref-palette"><span>Command palette <kbd>Ctrl/⌘ K</kbd></span></label>
+      <label class="switch"><input type="checkbox" id="pref-seconds"><span>Seconds on the top bar's clock</span></label>
+      <div class="actions"><button class="sm" id="show-keys" type="button">Keyboard shortcuts</button><button class="sm danger" id="forget-key" type="button">Forget the API key</button></div>
+      <p class="tiny muted" id="key-state"></p></div></section>
+    <section class="panel"><div class="head"><h2>Polling now</h2><div class="end"><span class="tiny muted">one request per endpoint, shared by everything on the page</span></div></div>
+      <div class="body flush scroll-x"><table class="data" id="watchers"></table></div></section>
+  </div>
+</main>
+<script src="static/ui/engineering.js"></script>
+</body>
+</html>

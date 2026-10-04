@@ -1,0 +1,197 @@
+{
+ "league": "nhl",
+ "teams": [
+  {
+   "abbreviation": "ANA",
+   "id": "25",
+   "name": "Anaheim Ducks",
+   "short": "Ducks"
+  },
+  {
+   "abbreviation": "BOS",
+   "id": "1",
+   "name": "Boston Bruins",
+   "short": "Bruins"
+  },
+  {
+   "abbreviation": "BUF",
+   "id": "2",
+   "name": "Buffalo Sabres",
+   "short": "Sabres"
+  },
+  {
+   "abbreviation": "CGY",
+   "id": "3",
+   "name": "Calgary Flames",
+   "short": "Flames"
+  },
+  {
+   "abbreviation": "CAR",
+   "id": "7",
+   "name": "Carolina Hurricanes",
+   "short": "Hurricanes"
+  },
+  {
+   "abbreviation": "CHI",
+   "id": "4",
+   "name": "Chicago Blackhawks",
+   "short": "Blackhawks"
+  },
+  {
+   "abbreviation": "COL",
+   "id": "17",
+   "name": "Colorado Avalanche",
+   "short": "Avalanche"
+  },
+  {
+   "abbreviation": "CBJ",
+   "id": "29",
+   "name": "Columbus Blue Jackets",
+   "short": "Blue Jackets"
+  },
+  {
+   "abbreviation": "DAL",
+   "id": "9",
+   "name": "Dallas Stars",
+   "short": "Stars"
+  },
+  {
+   "abbreviation": "DET",
+   "id": "5",
+   "name": "Detroit Red Wings",
+   "short": "Red Wings"
+  },
+  {
+   "abbreviation": "EDM",
+   "id": "6",
+   "name": "Edmonton Oilers",
+   "short": "Oilers"
+  },
+  {
+   "abbreviation": "FLA",
+   "id": "26",
+   "name": "Florida Panthers",
+   "short": "Panthers"
+  },
+  {
+   "abbreviation": "LA",
+   "id": "8",
+   "name": "Los Angeles Kings",
+   "short": "Kings"
+  },
+  {
+   "abbreviation": "MIN",
+   "id": "30",
+   "name": "Minnesota Wild",
+   "short": "Wild"
+  },
+  {
+   "abbreviation": "MTL",
+   "id": "10",
+   "name": "Montreal Canadiens",
+   "short": "Canadiens"
+  },
+  {
+   "abbreviation": "NSH",
+   "id": "27",
+   "name": "Nashville Predators",
+   "short": "Predators"
+  },
+  {
+   "abbreviation": "NJ",
+   "id": "11",
+   "name": "New Jersey Devils",
+   "short": "Devils"
+  },
+  {
+   "abbreviation": "NYI",
+   "id": "12",
+   "name": "New York Islanders",
+   "short": "Islanders"
+  },
+  {
+   "abbreviation": "NYR",
+   "id": "13",
+   "name": "New York Rangers",
+   "short": "Rangers"
+  },
+  {
+   "abbreviation": "OTT",
+   "id": "14",
+   "name": "Ottawa Senators",
+   "short": "Senators"
+  },
+  {
+   "abbreviation": "PHI",
+   "id": "15",
+   "name": "Philadelphia Flyers",
+   "short": "Flyers"
+  },
+  {
+   "abbreviation": "PIT",
+   "id": "16",
+   "name": "Pittsburgh Penguins",
+   "short": "Penguins"
+  },
+  {
+   "abbreviation": "SJ",
+   "id": "18",
+   "name": "San Jose Sharks",
+   "short": "Sharks"
+  },
+  {
+   "abbreviation": "SEA",
+   "id": "124292",
+   "name": "Seattle Kraken",
+   "short": "Kraken"
+  },
+  {
+   "abbreviation": "STL",
+   "id": "19",
+   "name": "St. Louis Blues",
+   "short": "Blues"
+  },
+  {
+   "abbreviation": "TB",
+   "id": "20",
+   "name": "Tampa Bay Lightning",
+   "short": "Lightning"
+  },
+  {
+   "abbreviation": "TOR",
+   "id": "21",
+   "name": "Toronto Maple Leafs",
+   "short": "Maple Leafs"
+  },
+  {
+   "abbreviation": "UTAH",
+   "id": "129764",
+   "name": "Utah Mammoth",
+   "short": "Mammoth"
+  },
+  {
+   "abbreviation": "VAN",
+   "id": "22",
+   "name": "Vancouver Canucks",
+   "short": "Canucks"
+  },
+  {
+   "abbreviation": "VGK",
+   "id": "37",
+   "name": "Vegas Golden Knights",
+   "short": "Golden Knights"
+  },
+  {
+   "abbreviation": "WSH",
+   "id": "23",
+   "name": "Washington Capitals",
+   "short": "Capitals"
+  },
+  {
+   "abbreviation": "WPG",
+   "id": "28",
+   "name": "Winnipeg Jets",
+   "short": "Jets"
+  }
+ ]
+}

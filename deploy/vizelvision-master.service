@@ -1,0 +1,18 @@
+[Unit]
+Description=VizelVision continuous master publisher
+After=network-online.target vizelvision-mediamtx.service
+Wants=network-online.target vizelvision-mediamtx.service
+PartOf=vizelvision-stack.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/vivian/vizelVision
+ExecStart=/usr/bin/python3 -m roku_stream --config /home/vivian/vizelVision/config.master.json master-worker
+Environment=PYTHONUNBUFFERED=1
+# Whisper runs in a disposable helper; GStreamer stays under the system Python.
+Environment=VIZELVISION_WHISPER_PYTHON=/home/vivian/miniconda3/bin/python3
+Restart=always
+RestartSec=5
+TimeoutStopSec=30
+NoNewPrivileges=true
+UMask=0077

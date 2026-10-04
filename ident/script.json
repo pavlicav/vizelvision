@@ -1,0 +1,10 @@
+{
+  "host": "DJ Low Tide",
+  "model": "aura-2-orpheus-en",
+  "lines": [
+    {"id": "watching", "at": 7.8, "text": "You're watching Vizel Vision."},
+    {"id": "good-stuff", "at": 12.9, "text": "The good stuff. All day, all night."},
+    {"id": "stay-put", "at": 16.9, "text": "So get comfortable... and don't touch that dial."},
+    {"id": "more", "at": 21.2, "text": "There's more coming up, right here."}
+  ]
+}

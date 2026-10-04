@@ -1,0 +1,15 @@
+[Unit]
+Description=VizelVision local MediaMTX master output
+After=network-online.target
+Wants=network-online.target
+PartOf=vizelvision-stack.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/vivian/vizelVision
+ExecStart=/home/vivian/vizelVision/vendor/mediamtx/1.21.0/mediamtx /home/vivian/vizelVision/deploy/mediamtx-master.yml
+Restart=always
+RestartSec=5
+TimeoutStopSec=15
+NoNewPrivileges=true
+UMask=0077
