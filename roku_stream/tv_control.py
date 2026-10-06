@@ -45,9 +45,11 @@ class TvControl:
                           data=json.dumps(body).encode() if body is not None else None,
                           headers={"Accept": "application/json", "Content-Type": "application/json"})
         try:
-            # A retune can wait for the old encoder and hardware to stop;
+            # A retune can wait for the old encoder and hardware to stop, and
+            # a Roku tune may first check that the Roku still plays (about 5 s);
             # ordinary status/lease calls retain the short control timeout.
-            timeout = 15 if path == "tune" else min(4, self.config.request_timeout_seconds)
+            timeout = 15 if path in ("tune", "roku/check", "roku/cancel") \
+                else min(4, self.config.request_timeout_seconds)
             with self.opener(request, timeout=timeout) as response:
                 raw = response.read(4 * 1024 * 1024 + 1)
             if len(raw) > 4 * 1024 * 1024:
@@ -80,12 +82,13 @@ class Lease:
     def __init__(self, client, target):
         self.client, self.target = client, target
         self.lane = "digital" if target["source_id"] == "tv-thing-digital" else "analog"
+        self.owner = client.owner
         self.token = None
         self.deadline = self.renew_at = 0.
         self.generation = None
 
     def _lock(self, renew):
-        body = {"lane": self.lane, "owner": self.client.owner, "duration_seconds": 90, "until": "duration"}
+        body = {"lane": self.lane, "owner": self.owner, "duration_seconds": 90, "until": "duration"}
         if renew:
             if not self.token or time.monotonic() >= self.deadline:
                 raise MasterStreamError("Tuner lease expired; prepare the source again")
@@ -150,7 +153,7 @@ class Lease:
 
     def _check_owner(self, status):
         public = status.get("locks", {}).get(self.lane) or {}
-        if not isinstance(public, dict) or public.get("owner") != self.client.owner or time.monotonic() >= self.deadline:
+        if not isinstance(public, dict) or public.get("owner") != self.owner or time.monotonic() >= self.deadline:
             raise MasterStreamError("TV-Thing tuner ownership was lost")
 
     def check(self):
@@ -237,3 +240,73 @@ class SharedLease(Lease):
 
     def release(self):
         return True
+
+
+# The web app holds the Roku lane's lock (tv_roku.RokuHold) under this name:
+# it navigates under it and keeps it while the worker plays the Roku. The
+# worker's lease only checks that the lock is still ours.
+ROKU_OWNER = "VizelVision master"
+
+
+def same_roku_target(left, right):
+    return all((left or {}).get(key) == (right or {}).get(key) for key in ("source_id", "channel_id", "date"))
+
+
+class RokuLease(Lease):
+    """The worker's view of TV Thing's Roku lane, while it plays a verified selection.
+
+    It never locks, navigates, renews or releases: the web app holds the lock
+    and moves the Roku. It fails closed when the lock is not ours any more, or
+    the Roku's generation changes -- a navigation, the remote, a capture
+    restart -- or its selection stops being the target.
+    """
+
+    def __init__(self, client, target, *, generation=None, resolved_source=None):
+        super().__init__(client, target)
+        self.lane = "roku"
+        self.owner = ROKU_OWNER
+        self.generation = generation
+        self.resolved_source = resolved_source
+        # The lock's expiry is TV Thing's to enforce; _check_owner reads it each check.
+        self.deadline = float("inf")
+
+    @classmethod
+    def adopt(cls, client, target, handoff):
+        """The worker's side of a handoff: the generation the web app verified."""
+        if not isinstance(handoff, dict) or not isinstance(handoff.get("generation"), str) \
+                or not handoff["generation"]:
+            raise MasterStreamError("The Roku must be prepared by master control before its feed is used")
+        return cls(client, target, generation=handoff["generation"],
+                   resolved_source=handoff.get("resolved_source"))
+
+    def acquire(self):
+        raise MasterStreamError("The Roku lane is locked by the web app, not the worker")
+
+    def renew(self, *, force=False):
+        pass
+
+    def release(self):
+        return True
+
+    def _check_owner(self, status):
+        public = status.get("locks", {}).get(self.lane) or {}
+        if not isinstance(public, dict) or public.get("owner") != self.owner:
+            who = public.get("owner") if isinstance(public, dict) else None
+            raise MasterStreamError(f"The Roku's lock was taken over{f' by {who}' if who else ''}")
+
+    def _verify(self, lane):
+        if not isinstance(lane, dict) or not isinstance(lane.get("stream"), dict):
+            raise MasterStreamError("TV-Thing returned invalid Roku lane metadata")
+        selection = lane.get("selection") or {}
+        if selection.get("manual") or not same_roku_target(selection, self.target):
+            raise MasterStreamError("The Roku no longer shows the verified selection; prepare it again")
+        stream = lane["stream"]
+        if stream.get("generation") != self.generation:
+            raise MasterStreamError("The Roku changed since it was verified; prepare it again")
+        return stream
+
+    def tune(self):
+        # Adopting is not tuning: confirm the Roku still shows what was verified, under our lock.
+        status = self.client.request("status")
+        self._check_owner(status)
+        self._verify((status.get("lanes", {}) or {}).get("roku") or {})

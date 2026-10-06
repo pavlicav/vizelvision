@@ -30,10 +30,10 @@
 <body>
 <header class="topbar" data-page="engineering"></header><script src="static/ui/vv.js"></script>
 <main class="page">
-  <div class="page-head"><div><h1>Engineering</h1><p>How everything is running, the viewer monitor, the Roku capture, how the parts fit, and every endpoint by hand.</p></div></div>
+  <div class="page-head"><div><h1>Engineering</h1><p>How everything is running, the viewer monitor, the source Roku, how the parts fit, and every endpoint by hand.</p></div></div>
   <div class="tabs" role="tablist" aria-label="Engineering">
     <button type="button" role="tab" data-tab="health">Health</button><button type="button" role="tab" data-tab="monitor">Viewer monitor</button>
-    <button type="button" role="tab" data-tab="roku">Roku capture</button><button type="button" role="tab" data-tab="how">How it works</button>
+    <button type="button" role="tab" data-tab="roku">Roku</button><button type="button" role="tab" data-tab="how">How it works</button>
     <button type="button" role="tab" data-tab="api">API explorer</button><button type="button" role="tab" data-tab="interface">Interface</button>
   </div>
 
@@ -65,13 +65,12 @@
   <div data-panel="roku" hidden class="cols-2">
     <section class="panel"><div class="head"><span class="lamp" id="roku-lamp"></span><h2>Source Roku</h2><div class="end"><button class="sm quiet" id="roku-refresh" type="button">Refresh</button></div></div>
       <div class="body stack tight"><dl class="kv" id="roku-kv"></dl>
-        <label class="field"><span>Capture input</span><select id="roku-input"></select></label>
-        <div class="actions"><button class="sm" id="roku-apply" type="button">Apply capture input</button><button class="sm danger" id="roku-stop" type="button">Stop Roku cue</button></div>
+        <div class="actions"><button class="sm danger" id="roku-stop" type="button">Stop Roku navigation</button></div>
         <p class="tiny muted" id="roku-status" role="status"></p></div></section>
-    <section class="panel"><div class="head"><h2>Calibration</h2></div><div class="body stack tight">
-      <p class="hint">Roku → converter → Hauppauge component input. Watch the input signal live while a resolution change finishes, and get back to 720p60.</p>
+    <section class="panel"><div class="head"><h2>In TV Thing</h2></div><div class="body stack tight">
+      <p class="hint">Since 6 October 2026 the source Roku is TV Thing's Roku lane: TV Thing reads the Hauppauge capture, navigates and verifies channels and games, records, and has a remote and a lock of its own. Master control asks it for a channel or game and plays its feed.</p>
       <dl class="kv" id="calibration-kv"></dl>
-      <div class="actions"><a class="btn primary" href="calibration">Open calibration →</a><a class="btn quiet" href="sources">Live capture on Sources →</a></div></div></section>
+      <div class="actions"><a class="btn primary" id="tv-roku-page" target="_blank" rel="noopener">Capture and calibration →</a><a class="btn quiet" id="tv-roku-watch" target="_blank" rel="noopener">Watch and drive it →</a></div></div></section>
   </div>
 
   <div data-panel="how" hidden class="stack">

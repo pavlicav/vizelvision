@@ -28,8 +28,8 @@ from .master import MasterStreamError, _gst
 from .master_media import DecodedInput, FileInput, MasterMedia
 from .ident import IDENT_HOLD_AT, IDENT_HOLD_LIMIT, IDENT_PATH, IDENT_SECONDS, IDENT_SLOT, IdentLease
 from .library import FileLease, LIBRARY_SOURCE_ID, library_target
-from .tv_control import SharedLease, TvControl, target_from
-from .roku_input import RokuLease, ROKU_SOURCE_IDS, roku_target
+from .tv_control import RokuLease, SharedLease, TvControl, target_from
+from .roku_input import ROKU_SOURCE_IDS, roku_target
 from .production import ProductionSettings
 from .caption_settings import CaptionSettings
 from .radio_info import RadioInfo
@@ -84,7 +84,8 @@ class MasterWorker:
         self.bulletin = None
         self.bulletin_log = []
         self.crawl_wake = False
-        self.roku_enabled = bool(getattr(getattr(config, 'feedback', None), 'contribution_url', None))
+        # The source Roku is TV Thing's Roku lane, played like its tuners.
+        self.roku_enabled = bool(config.tv_thing.enabled)
         self.tv = tv or TvControl(config.tv_thing)
         self.tv_enabled = config.tv_thing.enabled
         self.library_config = getattr(config, 'library', None)
@@ -212,8 +213,9 @@ class MasterWorker:
                 body = {**library_target(body), 'after_input_id': after}
             elif body.get('source_id') in ROKU_SOURCE_IDS:
                 if not self.roku_enabled:
-                    raise ConfigError('Shared Roku capture is not configured')
-                body = {**roku_target(body), 'selection_id': body.get('selection_id')}
+                    raise ConfigError('The Roku is played from TV-Thing, which is disabled')
+                # The web app's lease on the Roku lane, by token (tv_roku.py).
+                body = {**roku_target(body), 'roku': body.get('roku')}
             else:
                 body = target_from(body)
         if action == "take" and (not isinstance(body.get("prepared_id"), str) or not body["prepared_id"]):
@@ -254,11 +256,7 @@ class MasterWorker:
                 # Library files have no HLS preview; the master monitor shows them.
                 if (entry and entry['decoder'] and entry['decoder'].ready() and entry.get('url')
                         and not isinstance(entry['lease'], FileLease)):
-                    url = entry['url']
-                    if isinstance(entry['lease'], RokuLease):
-                        path = self.app_config.feedback.contribution_url.rsplit('/', 1)[1]
-                        url = self.config.hls_url.rstrip('/').rsplit('/', 1)[0] + '/' + path + '/index.m3u8'
-                    previews[key] = {'input_id': key, 'url': url, 'expires': time.monotonic() + 3}
+                    previews[key] = {'input_id': key, 'url': entry['url'], 'expires': time.monotonic() + 3}
         with self.lock:
             self.preview_inputs = previews
         self._publish(state=("live" if self.active else "fallback") if healthy else "reconnecting",
@@ -911,7 +909,11 @@ class MasterWorker:
                 except (ConfigError, OSError) as exc:
                     raise MasterStreamError(str(exc)) from exc
             else:
-                lease = RokuLease(self.app_config, target) if is_roku else self.tv.acquire(target)
+                if is_roku:
+                    handoff = target.pop('roku', None)
+                    lease = RokuLease.adopt(self.tv, target, handoff)
+                else:
+                    lease = self.tv.acquire(target)
         except MasterStreamError as exc:
             if exc.details.get('http_status') == 423:
                 # An explicit lease refusal happened before any tune command.

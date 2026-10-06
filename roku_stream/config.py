@@ -224,8 +224,19 @@ class AppConfig:
     continuity: ContinuityConfig = field(default_factory=ContinuityConfig)
     crawl: CrawlConfig = field(default_factory=CrawlConfig)
     prime_video: PrimeVideoConfig = field(default_factory=PrimeVideoConfig)
+    # Since 2026-10-06 the source Roku is TV Thing's Roku lane: with no
+    # configured channels, YouTube TV's channels come from its catalog.
+    channel_catalog: object | None = field(default=None, repr=False, compare=False)
+
+    def youtube_tv_channels(self) -> tuple[ChannelConfig, ...]:
+        """YouTube TV's channels in Live-guide order: configured, or TV Thing's."""
+        if self.channels or self.channel_catalog is None:
+            return self.channels
+        return self.channel_catalog.channels()
 
     def resolve_channel(self, requested: str) -> tuple[int, ChannelConfig]:
+        if not self.channels and self.channel_catalog is not None:
+            return self.channel_catalog.resolve(requested)
         key = normalize_channel_name(requested)
         index = self._channel_lookup.get(key)
         if index is None:
@@ -594,8 +605,11 @@ def load_config(path: str | Path) -> AppConfig:
             raise ConfigError(f"feedback.{boolean_key} must be true or false")
 
     channels_raw = root.get("channels", [])
-    if not isinstance(channels_raw, list) or not channels_raw:
-        raise ConfigError("channels must be a non-empty array in exact Live-guide order")
+    # The channels belong to the Roku, which TV Thing now drives: a
+    # configuration without them reads TV Thing's catalog instead.
+    if not isinstance(channels_raw, list) or (not channels_raw and not tv_thing.enabled):
+        raise ConfigError("channels must be a non-empty array in exact Live-guide order "
+                          "(or enable tv_thing, whose Roku lane lists them)")
     channels: list[ChannelConfig] = []
     lookup: dict[str, int] = {}
     for index, item in enumerate(channels_raw):
@@ -730,7 +744,13 @@ def load_config(path: str | Path) -> AppConfig:
         network_page_fallback=feedback_raw.get("network_page_fallback", False),
     )
 
+    channel_catalog = None
+    if not channels and tv_thing.enabled:
+        from .tv_thing import TvThingChannels
+        channel_catalog = TvThingChannels(tv_thing, state_file.with_name("youtube-tv-channels.json"))
+
     return AppConfig(
+        channel_catalog=channel_catalog,
         server=server,
         roku=roku,
         mlb=mlb,

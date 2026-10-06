@@ -1,3 +1,8 @@
+> **Retired 2026-10-06.** The source Roku is TV Thing's Roku lane: TV Thing is the only reader
+> of the HD PVR and copies its H.264/AAC to HLS (`/tv/stream/roku.m3u8`), which master control
+> plays like a tuner's feed. There is no RTSP contribution and no MediaMTX `roku` path. What
+> follows describes the earlier design.
+
 # Shared Roku audio/video contribution
 
 The master-control web service now keeps one Hauppauge reader alive and uses it

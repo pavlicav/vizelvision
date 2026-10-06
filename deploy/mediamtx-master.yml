@@ -28,17 +28,9 @@ authInternalUsers:
         path: master
       - action: read
         path: master
-      - action: publish
-        path: roku
-      - action: read
-        path: roku
       - action: api
 paths:
   master:
-    source: publisher
-    overridePublisher: no
-    record: no
-  roku:
     source: publisher
     overridePublisher: no
     record: no

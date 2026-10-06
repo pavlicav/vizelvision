@@ -10,25 +10,6 @@ from roku_stream.scheduler import utc_now
 
 
 class ApiTests(unittest.TestCase):
-    def test_prime_play_route_resolves_the_espn_game_and_checks_authorization(self):
-        from tests.test_prime_video import GAME
-        config = SimpleNamespace(server=SimpleNamespace(api_key=None), channels=(), master=MasterConfig())
-        controller, sports = Mock(feedback=None), Mock()
-        sports.game.return_value = GAME
-        controller.play_prime_game.return_value = {'ok': True, 'events': []}
-        handler = object.__new__(handler_factory(config, controller, SimpleNamespace(), sports=sports))
-        handler.path = '/v1/thursday-night-football/play'
-        handler._body = Mock(return_value={'game_id': GAME['game_id'], 'date': '2026-10-01'})
-        handler._json = Mock()
-        handler._authorize = lambda: False
-        handler.do_POST()
-        controller.play_prime_game.assert_not_called()
-        handler._authorize = lambda: True
-        handler.do_POST()
-        sports.game.assert_called_once_with('nfl', GAME['game_id'], '2026-10-01')
-        controller.play_prime_game.assert_called_once_with(GAME)
-        handler._json.assert_called_once_with(200, {'ok': True})
-
     def test_take_route_passes_only_the_requested_prepared_selection(self):
         config = SimpleNamespace(server=SimpleNamespace(api_key=None), channels=(), master=MasterConfig())
         coordinator = Mock()
@@ -100,14 +81,8 @@ class ApiTests(unittest.TestCase):
 
     def test_queue_route_includes_items_and_confirmed_on_air_source(self) -> None:
         config = SimpleNamespace(server=SimpleNamespace(api_key=None), channels=(), master=MasterConfig())
-        controller = SimpleNamespace(
-            feedback=None,
-            on_air_source=lambda: {
-                "type": "baseball",
-                "game_pk": 123,
-                "title": "Away at Home",
-            },
-        )
+        controller = SimpleNamespace(snapshot=lambda: {
+            "target": {"source_id": "mlb", "channel_id": "123", "date": "2026-09-02"}, "reusable": True})
         item = QueueItem(
             id="item-1",
             position=0,
@@ -134,86 +109,54 @@ class ApiTests(unittest.TestCase):
 
         self.assertEqual(response["status"], 200)
         self.assertEqual(response["payload"]["items"][0]["channel"], "ESPN")
-        self.assertEqual(response["payload"]["on_air"]["game_pk"], 123)
-
-    def test_state_route_returns_controller_observation(self) -> None:
-        config = SimpleNamespace(server=SimpleNamespace(api_key=None), channels=(), master=MasterConfig())
-        controller = SimpleNamespace(
-            feedback=None,
-            current_state=lambda: {"ok": True, "state": "live_guide"},
-        )
-        handler_type = handler_factory(config, controller, SimpleNamespace())
-        handler = object.__new__(handler_type)
-        handler.path = "/v1/state"
-        handler._authorize = lambda: True
-        response = {}
-        handler._json = lambda status, payload: response.update(
-            status=status, payload=payload
-        )
-
-        handler.do_GET()
-
-        self.assertEqual(response["status"], 200)
-        self.assertEqual(response["payload"]["state"], "live_guide")
-
-    def test_operation_route_does_not_require_the_controller_play_lock(self) -> None:
-        config = SimpleNamespace(server=SimpleNamespace(api_key=None), channels=(), master=MasterConfig())
-        controller = SimpleNamespace(
-            feedback=None,
-            operation_status=lambda: {
-                "active": True,
-                "channel": "NBC",
-                "app_state": "live_guide",
-            },
-        )
-        handler_type = handler_factory(config, controller, SimpleNamespace())
-        handler = object.__new__(handler_type)
-        handler.path = "/v1/operation"
-        handler._authorize = lambda: True
-        response = {}
-        handler._json = lambda status, payload: response.update(
-            status=status, payload=payload
-        )
-
-        handler.do_GET()
-
-        self.assertEqual(response["status"], 200)
-        self.assertTrue(response["payload"]["active"])
-        self.assertEqual(response["payload"]["app_state"], "live_guide")
-
-    def test_preview_stream_is_same_origin_mjpeg(self) -> None:
-        first = b"\xff\xd8first\xff\xd9"
-        second = b"\xff\xd8second\xff\xd9"
-
-        class Feedback:
-            def preview_frames(self):
-                yield first
-                yield second
-
-        config = SimpleNamespace(
-            server=SimpleNamespace(api_key=None),
-            channels=(),
-            master=MasterConfig(),
-        )
-        controller = SimpleNamespace(feedback=Feedback())
-        handler_type = handler_factory(config, controller, SimpleNamespace())
-        handler = object.__new__(handler_type)
-        handler.wfile = io.BytesIO()
-        response = {}
-        headers = {}
-        handler.send_response = lambda status: response.update(status=status)
-        handler.send_header = lambda name, value: headers.update({name: value})
-        handler.end_headers = lambda: None
-
-        handler._preview()
-
-        body = handler.wfile.getvalue()
-        self.assertEqual(response["status"], 200)
-        self.assertIn("multipart/x-mixed-replace", headers["Content-Type"])
-        self.assertIn(first, body)
-        self.assertIn(second, body)
-        self.assertIn(b"--vizelvision-frame", body)
-
+        self.assertEqual(response["payload"]["on_air"]["target"]["channel_id"], "123")
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RokuMovedTests(unittest.TestCase):
+    """The source Roku is TV Thing's Roku lane since 2026-10-06: the routes of the controller
+    vizelVision ran answer 410 and say where it went; its status and cue progress come from TV Thing."""
+
+    def handler(self, roku=None, path='/', body=None, coordinator=None):
+        config = SimpleNamespace(server=SimpleNamespace(api_key=None), channels=(), master=MasterConfig())
+        handler = object.__new__(handler_factory(config, roku, SimpleNamespace(), coordinator=coordinator))
+        handler.path = path
+        handler._authorize = lambda: True
+        handler._body = Mock(return_value=body or {})
+        response = {}
+        handler._json = lambda status, payload: response.update(status=status, payload=payload)
+        return handler, response
+
+    def test_controller_routes_point_at_tv_thing(self):
+        for method, path in (('GET', '/v1/preview'), ('GET', '/v1/state'), ('GET', '/v1/roku/signal'),
+                             ('GET', '/v1/operations/abc'), ('POST', '/v1/play'),
+                             ('POST', '/v1/thursday-night-football/play'), ('POST', '/v1/calibrate'),
+                             ('POST', '/v1/baseball/play'), ('POST', '/v1/sunday-ticket/find')):
+            with self.subTest(path):
+                handler, response = self.handler(path=path)
+                handler.do_GET() if method == 'GET' else handler.do_POST()
+                self.assertEqual(response['status'], 410)
+                self.assertEqual(response['payload']['error']['code'], 'moved_to_tv_thing')
+                self.assertIn('/tv/roku.html', response['payload']['error']['message'])
+
+    def test_operation_is_tv_things_navigation(self):
+        lane = {'selection': None, 'roku': {'operation': {
+            'active': True, 'state': 'running', 'phase': 'live_guide', 'message': 'Finding NBC',
+            'target': {'source_id': 'youtube-tv', 'channel_id': 'NBC'}}}}
+        handler, response = self.handler(SimpleNamespace(lane=lambda: (lane, {'owner': 'VizelVision master'})),
+                                         '/v1/operation')
+        handler.do_GET()
+        self.assertEqual(response['status'], 200)
+        self.assertTrue(response['payload']['active'])
+        self.assertEqual(response['payload']['channel'], 'NBC')
+        self.assertEqual(response['payload']['message'], 'Finding NBC')
+
+    def test_stop_goes_through_master_control(self):
+        coordinator = Mock(enabled=True)
+        coordinator.request.return_value = {'accepted': True}
+        handler, response = self.handler(path='/v1/operation/cancel', coordinator=coordinator)
+        handler.do_POST()
+        coordinator.request.assert_called_once_with('cancel', {})
+        self.assertEqual(response['status'], 200)

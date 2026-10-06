@@ -14,7 +14,7 @@ const assert = require('node:assert/strict');
 const ROOT = path.resolve(__dirname, '..');
 const STATIC = path.join(ROOT, 'roku_stream', 'static');
 const FIXTURES = path.join(__dirname, 'fixtures', 'ui');
-const PAGES = new Set(['/air', '/sources', '/schedule', '/crawl', '/presentation', '/ads', '/engineering', '/sonic', '/calibration']);
+const PAGES = new Set(['/air', '/sources', '/schedule', '/crawl', '/presentation', '/ads', '/engineering', '/sonic']);
 const NOW = new Date('2026-10-02T02:16:40Z');
 const TYPES = {js: 'text/javascript', css: 'text/css', html: 'text/html', woff2: 'font/woff2', webp: 'image/webp', mp3: 'audio/mpeg'};
 
@@ -37,8 +37,8 @@ function reads(F) {
     [/^\/v1\/continuity$/, () => F.continuity], [/^\/v1\/production$/, () => F.production], [/^\/v1\/production\/monitor$/, () => F.monitor],
     [/^\/v1\/sports\/week$/, () => F.nfl], [/^\/v1\/sports\/upcoming$/, () => F.mlb], [/^\/v1\/sports\/teams$/, () => F.teams_nhl],
     [/^\/v1\/sports\/games$/, () => ({games: F.nfl.games.slice(0, 3)})],
-    [/^\/v1\/roku\/signal$/, () => F.signal], [/^\/v1\/roku\/sources$/, () => F.roku_sources], [/^\/v1\/operation$/, () => F.operation],
-    [/^\/v1\/roku\/calibration$/, () => F.calibration], [/^\/v1\/roku\/status$/, () => ({})], [/^\/v1\/roku\/capture$/, () => ({})],
+    // The source Roku is TV Thing's Roku lane: its status and navigation, as vizelVision relays them.
+    [/^\/v1\/operation$/, () => F.operation], [/^\/v1\/roku\/status$/, () => F.roku_status],
     [/^\/v1\/master\/end-options$/, () => ({games: [], program: null, warnings: []})],
     [/^\/v1\/channels$/, () => ({channels: []})], [/^\/health$/, () => ({ready: true})],
   ];

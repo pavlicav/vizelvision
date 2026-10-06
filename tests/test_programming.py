@@ -1,3 +1,4 @@
+import contextlib
 import copy
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -387,7 +388,7 @@ class OffAirTakeTests(unittest.TestCase):
                                  tv_thing=TvThingConfig(enabled=True))
         master = FakeMaster()
         master.state.update(state='live', on_air={'id': 'x', **NBC})
-        coordinator = SourceCoordinator(config, Mock(), Mock(), master=master, publisher_reader=lambda: 'p')
+        coordinator = SourceCoordinator(config, None, Mock(), master=master)
         self.addCleanup(coordinator.close)
         queue = SourceQueue(Path(tmp.name) / 'queue.json', coordinator.execute_queue, lambda *_: {'finished': True},
                             poll_seconds=.01)
@@ -686,7 +687,7 @@ class CoordinatorPrerollTests(unittest.TestCase):
         navigated = []
 
         def play(channel):
-            with coordinator.navigation_guard():
+            with contextlib.nullcontext():
                 navigated.append((channel, copy.deepcopy(master.state['on_air'])))
                 return case.result
         case.controller.play.side_effect = play

@@ -109,9 +109,10 @@ run(async browser => {
   const roku = page.locator('.input-card[data-source=roku]');
   assert.equal(await roku.isVisible(), true);
   assert.ok(await roku.locator('optgroup').count() >= 2, 'one group per Roku service');
+  // The Roku itself is TV Thing's: what it is doing, and the way there.
   assert.equal(await page.locator('#roku-live').isVisible(), true);
-  await page.locator('#roku-tools summary').click();
-  await page.waitForFunction(() => document.querySelector('#roku-input').options.length > 0);
+  await page.waitForFunction(() => /^Showing .*NBC.* · held by VizelVision master$/.test(document.querySelector('#roku-live-detail').textContent));
+  assert.match(await page.locator('#roku-live a.btn').getAttribute('href'), /\/tv\/#roku$/);
 
   // Sports: games by league with the same buttons; the filter is remembered.
   await page.locator('#sources [data-source=sports]').click();

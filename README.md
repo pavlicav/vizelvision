@@ -1,5 +1,26 @@
 # VizelVision Roku Stream
 
+> **The source Roku moved to TV Thing on 2026-10-06.** TV Thing's *Roku lane* now owns the
+> Roku (10.0.0.240) and its Hauppauge HD PVR: the YouTube TV, MLB, Thursday Night Football and
+> Sunday Ticket navigation and screen recognition described below (now TV Thing's
+> `roku_control/` package), the capture (the HD PVR's own H.264 copied to
+> `/tv/stream/roku.m3u8`), its calibration (`/tv/roku.html`), recording, and a Manual Roku
+> remote (the Roku tab of `/tv/`). The Roku has its own lock there, separate from the tuners.
+>
+> VizelVision asks TV Thing for a channel or game under that lock
+> (`roku_stream/tv_roku.py`) and plays the lane's feed like a tuner's
+> (`tv_control.RokuLease`): a navigation, the remote or a capture restart changes the lane's
+> generation and fails the feed closed, and TV Thing reuses a recent verification, or
+> checks that the Roku still plays, before it navigates again. The lock is held while a
+> Roku feed is prepared or on air and kept across a web restart, which no longer drops it.
+> YouTube TV's channels come from TV Thing's catalog when `config.master.json` has no
+> `channels`. The controller routes below (`/v1/play`, `/v1/baseball/play`,
+> `/v1/sunday-ticket/*`, `/v1/thursday-night-football/play`, `/v1/calibrate*`, `/v1/verify`,
+> `/v1/preview`, `/v1/roku/signal|sources|capture|calibration`, `/v1/state`) answer **410**
+> and point at TV Thing; `/v1/roku/status` and `/v1/operation` relay TV Thing's Roku lane.
+> The CLI keeps `serve`, the `master-*` commands and `roku-status`. MediaMTX no longer has a
+> `roku` path. See TV Thing's `API.md` ("The Roku lane").
+
 **The web UI** ([docs/web-ui.md](docs/web-ui.md)) is a control room in six areas:
 **On Air** (`/air`, the home: master's output, its monitor and Up next), **Sources** (every
 channel, game and recording, with Play now, + Queue and Schedule), **Schedule**, **Crawl**

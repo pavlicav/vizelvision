@@ -1,11 +1,19 @@
 {
  "active": false,
- "app_state": null,
- "channel": null,
- "game": null,
- "game_pk": null,
- "message": "No channel cue is running",
- "phase": "idle",
- "provider": null,
- "updated_at": "2026-10-02T01:58:54.770343+00:00"
+ "phase": "succeeded",
+ "message": "NBC is playing",
+ "channel": "NBC",
+ "provider": "youtube-tv",
+ "error": null,
+ "state": "succeeded",
+ "selection": {
+  "source_id": "youtube-tv",
+  "channel_id": "NBC",
+  "name": "NBC",
+  "reusable": true
+ },
+ "lock": {
+  "owner": "VizelVision master",
+  "seconds_remaining": 80
+ }
 }

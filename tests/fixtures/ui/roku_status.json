@@ -1,0 +1,45 @@
+{
+ "lane": {
+  "id": "roku",
+  "selection": {
+   "source_id": "youtube-tv",
+   "channel_id": "NBC",
+   "name": "NBC",
+   "reusable": true
+  },
+  "stream": {
+   "active": true,
+   "state": "ready",
+   "generation": "cap-1.2"
+  },
+  "roku": {
+   "operation": {
+    "state": "succeeded",
+    "active": false,
+    "message": "NBC is playing"
+   },
+   "player": {
+    "data": {
+     "app": {
+      "id": "195316",
+      "name": "YouTube TV"
+     }
+    }
+   }
+  }
+ },
+ "lock": {
+  "owner": "VizelVision master",
+  "seconds_remaining": 80
+ },
+ "last_prepared": {
+  "target": {
+   "source_id": "youtube-tv",
+   "channel_id": "NBC"
+  },
+  "prepared_at": 1791255400,
+  "reusable": true,
+  "age_seconds": 30,
+  "max_age_seconds": 900
+ }
+}

@@ -482,7 +482,7 @@ class IdentCoordinatorTests(unittest.TestCase):
                                  feedback=SimpleNamespace(contribution_url=None), tv_thing=TvThingConfig(enabled=False),
                                  library=LibraryConfig(False, ()))
         self.master = FakeMaster()
-        self.coordinator = SourceCoordinator(config, Mock(), Mock(), master=self.master, publisher_reader=lambda: 'p')
+        self.coordinator = SourceCoordinator(config, None, Mock(), master=self.master)
         self.addCleanup(self.coordinator.close)
         self.master.state['ident'] = {'ready': True}
 

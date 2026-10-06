@@ -3,7 +3,7 @@
 // node tests/browser_ui_pages.cjs /path/to/playwright
 const {open, run, overflow, assert, PAGES} = require('./ui_harness.cjs');
 
-const AREA = {'/sonic': 'Presentation', '/calibration': 'Engineering'};
+const AREA = {'/sonic': 'Presentation'};
 const NAMES = {'/air': 'On Air', '/sources': 'Sources', '/schedule': 'Schedule', '/crawl': 'Crawl', '/presentation': 'Presentation', '/ads': 'Ads', '/engineering': 'Engineering'};
 
 run(async browser => {

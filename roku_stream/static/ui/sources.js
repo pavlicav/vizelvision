@@ -126,41 +126,34 @@
     renderRoku();
   }
   setInterval(() => { for (const card of cards.values()) if (card.key && card.started && Date.now() - card.started > 3000) card.status.textContent = card.video.paused ? 'Preview paused' : 'Preview buffering…'; }, 1000);
-  window.addEventListener('pagehide', () => { for (const c of cards.values()) stopInput(c); stopCapture(); });
+  window.addEventListener('pagehide', () => { for (const c of cards.values()) stopInput(c); if (rokuTimer) clearInterval(rokuTimer); });
 
-  /* Roku: the live capture (menus included) and its controls ---------------------------------------------- */
-  let rokuPanel = null, capture = null, captureUrl = null, captureWanted = false, captureRetry = null;
+  /* Roku: TV Thing's Roku lane since 2026-10-06 -------------------------------------------------------------- */
+  // The Roku's live picture (menus and all), its remote and its calibration are on TV Thing; this panel
+  // says what the Roku is doing for master control and links there.
+  let rokuPanel = null, rokuTimer = null;
+  const tvThing = path => location.protocol + '//' + location.hostname + '/tv/' + path;
   function buildRoku() {
-    const status = h('span', {class: 'tiny muted', id: 'roku-preview-status', role: 'status'}, 'Capture off');
-    const show = h('button', {class: 'sm', type: 'button', id: 'show-roku'}, 'Show Roku capture');
-    const hide = h('button', {class: 'sm quiet', type: 'button', id: 'hide-roku'}, 'Hide');
-    const img = h('img', {id: 'roku-capture', alt: 'Live Roku capture', hidden: true});
-    const input = h('select', {id: 'roku-input', 'aria-label': 'Capture input'});
-    const toolsStatus = h('p', {class: 'tiny muted', id: 'roku-tools-status', role: 'status'});
-    const stop = h('button', {class: 'sm danger', type: 'button', id: 'stop-roku'}, 'Stop Roku cue');
-    const apply = h('button', {class: 'sm', type: 'button', id: 'apply-roku-input'}, 'Apply capture input');
-    const refresh = h('button', {class: 'sm quiet', type: 'button', id: 'refresh-roku'}, 'Refresh Roku status');
-    const tools = h('details', {class: 'more', id: 'roku-tools'}, h('summary', 'Roku controls and capture settings'),
-      h('div', {class: 'stack tight', style: {marginTop: '10px'}}, h('label', {class: 'field'}, h('span', 'Capture input'), input),
-        h('div', {class: 'actions'}, apply, refresh, stop, h('a', {class: 'btn sm quiet', href: 'calibration'}, 'Calibration →')), toolsStatus));
-    rokuPanel = h('section', {class: 'panel', id: 'roku-live', 'aria-label': 'Roku live preview'},
-      h('div', {class: 'head'}, h('span', {class: 'lamp', id: 'roku-lamp'}), h('h2', 'Roku live capture'), h('div', {class: 'end'}, status, show, hide)),
-      h('div', {class: 'body stack tight'}, h('p', {class: 'small muted', id: 'roku-live-detail'}), img, tools));
+    const status = h('p', {class: 'small muted', id: 'roku-live-detail', role: 'status'}, 'Asking TV Thing…');
+    const stop = h('button', {class: 'sm danger', type: 'button', id: 'stop-roku', hidden: true}, 'Stop');
+    rokuPanel = h('section', {class: 'panel', id: 'roku-live', 'aria-label': 'The Roku in TV Thing'},
+      h('div', {class: 'head'}, h('span', {class: 'lamp', id: 'roku-lamp'}), h('h2', 'Roku · TV Thing'),
+        h('div', {class: 'end'}, stop, h('a', {class: 'btn sm', href: tvThing('#roku'), target: '_blank', rel: 'noopener'}, 'Watch and drive it →'))),
+      h('div', {class: 'body stack tight'}, status,
+        h('p', {class: 'tiny muted'}, 'TV Thing shows the Roku live, menus and all, with a remote and its own lock; its calibration is on ',
+          h('a', {href: tvThing('roku.html'), target: '_blank', rel: 'noopener'}, 'TV Thing’s Roku page'), '.')));
     id('roku-host').append(rokuPanel);
-    const load = async () => {
-      try {
-        const [catalog, signal, operation] = await Promise.all([api('v1/roku/sources'), api('v1/roku/signal'), api('v1/operation')]);
-        input.replaceChildren(...catalog.sources.map(s => { const o = new Option(s.name, s.key); o.disabled = !s.available; return o; }));
-        input.value = catalog.selected || catalog.required || '';
-        toolsStatus.textContent = (signal.label || '') + ' · ' + (operation.message || 'Roku idle');
-      } catch (e) { toolsStatus.textContent = e.message; }
-    };
-    tools.ontoggle = () => { if (tools.open) load(); };
-    refresh.onclick = load;
-    show.onclick = () => { captureWanted = true; startCapture(); };
-    hide.onclick = () => { captureWanted = false; stopCapture(); };
-    stop.onclick = async () => { try { await api('v1/operation/cancel', {}); await load(); } catch (e) { toolsStatus.textContent = e.message; } };
-    apply.onclick = async () => { try { await api('v1/roku/source', {key: input.value}); await load(); } catch (e) { toolsStatus.textContent = e.message; } };
+    stop.onclick = async () => { try { await api('v1/operation/cancel', {}); loadRoku(); } catch (e) { status.textContent = e.message; } };
+  }
+  async function loadRoku() {
+    try {
+      const op = await api('v1/operation');
+      const who = op.lock ? ' · held by ' + op.lock.owner : '';
+      id('roku-live-detail').textContent = (op.active ? 'Navigating: ' + (op.message || op.phase) : op.selection?.manual ? 'Manual Roku (someone is using the remote)'
+        : op.selection ? 'Showing ' + label({source_id: op.selection.source_id, channel_id: op.selection.channel_id}) : op.message || 'Roku idle') + who;
+      id('roku-lamp').className = 'lamp ' + (op.active ? 'warn blink' : op.selection && !op.selection.manual ? 'pvw' : '');
+      id('stop-roku').hidden = !op.active;
+    } catch (e) { id('roku-live-detail').textContent = e.message; }
   }
   function renderRoku() {
     const configured = state.sources.some(s => isRoku(s.id) && s.configured);
@@ -168,48 +161,10 @@
     if (!rokuPanel) return;
     const visible = state.sources.some(s => isRoku(s.id) && s.configured && matchesSource(s.id)) && state.filter !== 'sports' && state.filter !== 'all';
     const pending = state.master.operation?.state === 'pending' ? state.master.operation.target : null;
-    // Navigating until the worker has the selection prepared; the qualified preview takes over then.
-    const selecting = pending && isRoku(pending.source_id) && !state.master.operation?.reused && state.master.operation?.action !== 'take-known' && !same(state.master.prepared, pending);
+    const selecting = pending && isRoku(pending.source_id);
     rokuPanel.hidden = !(visible || selecting);
-    id('hide-roku').disabled = !!selecting;
-    id('roku-lamp').className = 'lamp ' + (selecting ? 'warn blink' : capture ? 'pvw' : '');
-    id('roku-live-detail').textContent = selecting ? 'Selecting ' + label(pending) + '…' : 'The raw capture, menus and all: what the Roku shows while a channel or game is being selected.';
-    const wanted = (visible || selecting) && (captureWanted || selecting);
-    if (wanted && !capture && !captureRetry) startCapture();
-    else if (!wanted) stopCapture();
-  }
-  function stopCapture() {
-    clearTimeout(captureRetry); captureRetry = null; if (capture) capture.abort(); capture = null;
-    if (captureUrl) URL.revokeObjectURL(captureUrl); captureUrl = null;
-    const img = id('roku-capture'); if (img) { img.removeAttribute('src'); img.hidden = true; id('roku-preview-status').textContent = 'Capture off'; }
-  }
-  // /v1/preview is MJPEG: frames are read off the stream as they arrive.
-  async function startCapture() {
-    stopCapture(); const abort = new AbortController(); capture = abort;
-    id('roku-preview-status').textContent = 'Connecting…';
-    let reader;
-    try {
-      const response = await fetch('v1/preview', {headers: VV.key ? {'X-API-Key': VV.key} : {}, signal: abort.signal});
-      if (!response.ok) { const r = await response.json().catch(() => null); throw Error(r?.error?.message || 'Capture unavailable (HTTP ' + response.status + ')'); }
-      reader = response.body.getReader(); let bytes = new Uint8Array();
-      while (!abort.signal.aborted) {
-        const result = await reader.read(); if (result.done) break;
-        const merged = new Uint8Array(bytes.length + result.value.length); merged.set(bytes); merged.set(result.value, bytes.length); bytes = merged;
-        if (abort.signal.aborted) break;
-        for (;;) {
-          let start = -1, end = -1;
-          for (let i = 0; i < bytes.length - 1; i++) { if (start < 0 && bytes[i] === 255 && bytes[i + 1] === 216) start = i; if (start >= 0 && bytes[i] === 255 && bytes[i + 1] === 217) { end = i + 2; break; } }
-          if (end < 0) break;
-          const url = URL.createObjectURL(new Blob([bytes.slice(start, end)], {type: 'image/jpeg'}));
-          id('roku-capture').src = url; id('roku-capture').hidden = false; if (captureUrl) URL.revokeObjectURL(captureUrl); captureUrl = url; bytes = bytes.slice(end);
-          id('roku-preview-status').textContent = 'Live';
-        }
-        if (bytes.length > 4000000) throw Error('Capture exceeded the buffer limit');
-      }
-      if (!abort.signal.aborted) throw Error('Capture ended');
-    } catch (e) {
-      if (!abort.signal.aborted) { stopCapture(); id('roku-preview-status').textContent = e.message + ' · reconnecting…'; captureRetry = setTimeout(() => { captureRetry = null; renderCards(); }, 1500); }
-    } finally { if (reader) await reader.cancel().catch(() => {}); }
+    if (!rokuPanel.hidden && !rokuTimer) { loadRoku(); rokuTimer = setInterval(() => { if (!document.hidden) loadRoku(); }, 3000); }
+    else if (rokuPanel.hidden && rokuTimer) { clearInterval(rokuTimer); rokuTimer = null; }
   }
 
   /* The guide ------------------------------------------------------------------------------------------- */

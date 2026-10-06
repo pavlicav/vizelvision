@@ -34,6 +34,8 @@ class TvThingClient:
         "analog": "api/v1/sources/cable",
         "guide": "api/v1/guide?hours=24",
         "status": "api/v1/status",
+        # The source Roku is TV Thing's Roku lane: its YouTube TV channels.
+        "youtube-tv": "api/v1/sources/youtube-tv",
     }
     MAX_BYTES = 4 * 1024 * 1024
 
@@ -53,11 +55,11 @@ class TvThingClient:
         if key != "guide" and data.get("api_version") != "v1":
             raise ValueError("Unsupported or missing TV-Thing API version")
         field = {"sources": "sources", "digital": "items", "analog": "items",
-                 "guide": "channels", "status": "lanes"}[key]
+                 "guide": "channels", "status": "lanes", "youtube-tv": "items"}[key]
         expected = list if field in ("sources", "items") else dict
         if not isinstance(data.get(field), expected):
             raise ValueError(f"Invalid {field} in TV-Thing response")
-        if key in ("digital", "analog") and not isinstance(data.get("source"), dict):
+        if key in ("digital", "analog", "youtube-tv") and not isinstance(data.get("source"), dict):
             raise ValueError("Missing source metadata")
         return data
 
@@ -95,3 +97,63 @@ class TvThingClient:
                 raise SourceUnavailableError(entry.error or "TV-Thing has no cached data")
             return {"data": copy.deepcopy(entry.data), "fetched_at": entry.fetched_at,
                     "stale": entry.error is not None, "error": entry.error}
+
+
+class TvThingChannels:
+    """YouTube TV's channels, as TV Thing's Roku lane lists them, in guide order.
+
+    The last good list is kept on disk, so a TV Thing restart never empties the
+    channels that queue entries, schedules and sports suggestions resolve.
+    """
+
+    def __init__(self, config: TvThingConfig, cache_path, *, client: TvThingClient | None = None):
+        self.client = client or TvThingClient(config)
+        self.cache_path = cache_path
+        self._lock = threading.Lock()
+        self._items = None
+
+    def _load_cache(self):
+        try:
+            items = json.loads(self.cache_path.read_text())
+            return items if isinstance(items, list) else []
+        except (OSError, ValueError):
+            return []
+
+    def _current(self):
+        with self._lock:
+            try:
+                items = [item for item in self.client.get("youtube-tv")["data"]["items"]
+                         if isinstance(item, dict) and isinstance(item.get("id"), str) and item["id"]]
+            except SourceUnavailableError:
+                if self._items is None:
+                    self._items = self._load_cache()
+                return self._items
+            if items != self._items:
+                self._items = items
+                try:
+                    self.cache_path.parent.mkdir(parents=True, exist_ok=True)
+                    temporary = self.cache_path.with_suffix(".tmp")
+                    temporary.write_text(json.dumps(items))
+                    temporary.replace(self.cache_path)
+                except OSError:
+                    pass  # Only costs the fallback after a later outage.
+            return self._items
+
+    def channels(self):
+        from .config import ChannelConfig
+        return tuple(ChannelConfig(name=item["id"],
+                                   aliases=tuple(a for a in item.get("aliases") or () if isinstance(a, str)),
+                                   guide_index=item.get("guide_index") if isinstance(item.get("guide_index"), int)
+                                   else index)
+                     for index, item in enumerate(self._current()))
+
+    def resolve(self, requested):
+        from .config import normalize_channel_name
+        from .errors import ChannelNotFoundError
+        channels = self.channels()
+        key = normalize_channel_name(str(requested))
+        for index, channel in enumerate(channels):
+            if key and key in {normalize_channel_name(name) for name in (channel.name, *channel.aliases)}:
+                return index, channel
+        raise ChannelNotFoundError(f"Unknown YouTube TV channel: {requested!r}",
+                                   details={"available": [channel.name for channel in channels]})

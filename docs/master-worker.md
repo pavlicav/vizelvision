@@ -6,7 +6,8 @@ monitor that stays attached across takes and guide refreshes. Digital and analog
 use independent tuner leases. The existing Roku controls and queue now use a
 navigation guard that removes any prepared/on-air Roku input before navigating.
 
-The [shared Roku A/V contribution](roku-contribution.md) and
+The Roku feed (TV Thing's Roku lane since 2026-10-06; formerly the
+[shared Roku A/V contribution](roku-contribution.md)) and
 [verified Roku master takes](roku-master.md), and
 [the persistent mixed-source queue](source-queue.md) are implemented. Publication status and
 browser playback status are separate: the monitor reports playing only while its

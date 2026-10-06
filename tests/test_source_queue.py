@@ -314,8 +314,10 @@ class QueueApiTests(unittest.TestCase):
         self.sources = Mock()
         self.sources.programs.return_value = {'channels': [{'id': 'wrc', 'now': {'id': 'news', 'title': 'News',
             'start': utc_now().timestamp()-100, 'end': utc_now().timestamp()+100}}]}
+        # The Roku (TV Thing's Roku lane) last verified this game.
         self.controller = Mock()
-        self.controller.on_air_source.return_value = {'type': 'baseball', 'game_pk': 123, 'game_date': '2026-09-12'}
+        self.controller.snapshot.return_value = {
+            'target': {'source_id': 'mlb', 'channel_id': '123', 'date': '2026-09-12'}, 'reusable': True}
         self.baseball = Mock()
         self.baseball.game.return_value = {'title': 'Game'}
         config = SimpleNamespace(master=MasterConfig(enabled=True), server=SimpleNamespace(api_key=None),
@@ -375,7 +377,7 @@ class QueueApiTests(unittest.TestCase):
         self.assertEqual(self.request('/v1/queue/'+item['id']+'/skip', {})['payload']['status'], 'skipped')
         status = self.request('/v1/queue')['payload']
         self.assertEqual(status['master_on_air'], TARGET)
-        self.assertEqual(status['on_air']['type'], 'baseball')
+        self.assertEqual(status['on_air']['target']['source_id'], 'mlb')  # the Roku's last verified game
 
     def test_play_now_until_a_time_ends_what_is_held_on_air(self):
         at = (utc_now() + timedelta(hours=1)).isoformat()

@@ -111,8 +111,9 @@ class SourceCatalogTests(unittest.TestCase):
         }
         self.stale = set()
         self.offline = set()
-        self.config = SimpleNamespace(tv_thing=TvThingConfig(enabled=True),
-                                      channels=(SimpleNamespace(name="ESPN"),))
+        channels = (SimpleNamespace(name="ESPN"),)
+        self.config = SimpleNamespace(tv_thing=TvThingConfig(enabled=True), channels=channels,
+                                      youtube_tv_channels=lambda: channels)
         self.catalog = SourceCatalog(self.config, tv=SimpleNamespace(get=self.get), clock=lambda: 1000)
 
     def get(self, key):

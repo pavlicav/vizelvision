@@ -67,7 +67,7 @@
       src.warnings?.length ? h('p', {class: 'note warn tiny'}, src.warnings.join(' · ')) : null));
     const rk = m.roku_last_prepared;
     tiles.push(tile('Roku', m.roku_enabled ? (rk?.reusable ? 'pvw' : '') : '', [['Enabled', m.roku_enabled ? 'yes' : 'no'], ['Last verified', rk ? label(rk.target) + ' · ' + ago(rk.prepared_at) : '—'],
-      rk ? ['Reusable', rk.reusable ? 'yes, for ' + fmt.mins(rk.max_age_seconds - rk.age_seconds) : rk.reason] : null, ['Signal', S.signal?.label || '—']]));
+      rk ? ['Reusable', rk.reusable ? 'yes, for ' + fmt.mins(rk.max_age_seconds - rk.age_seconds) : rk.reason] : null, ['Where', 'TV Thing’s Roku lane']]));
     if (mon) { const last = mon.last_check; tiles.push(tile('Viewer monitor', last?.status === 'healthy' ? 'pvw' : last ? 'warn' : '', [['Checks', mon.settings.enabled ? 'every ' + mon.settings.interval_hours + ' h' : 'off'],
       ['Last', last ? last.status + ' · ' + ago(last.finished_at) : 'none'], ['Message', last?.message], ['Next', mon.settings.enabled ? fmt.when(mon.next_check_at) : '—']])); }
     const lib = src?.sources.find(s => s.id === 'library');
@@ -76,7 +76,7 @@
   }
   function startHealth() {
     const subs = [['v1/master', 5000, 'master'], ['v1/queue', 5000, 'queue'], ['v1/programming', 60000, 'programming'], ['v1/crawl', 15000, 'crawl'], ['v1/continuity', 30000, 'continuity'],
-      ['v1/sources', 60000, 'sources'], ['v1/production/monitor', 30000, 'monitor'], ['v1/roku/signal', 30000, 'signal']];
+      ['v1/sources', 60000, 'sources'], ['v1/production/monitor', 30000, 'monitor']];
     for (const [path, ms, name] of subs) stops.push(VV.watch(path, ms, (data, w) => { if (!w.error) { S[name] = data; renderHealth(); } }));
   }
 
@@ -109,24 +109,30 @@
     catch (e) { $('monitor-launch-message').textContent = e.message; } finally { monitorBusy = false; buttons(); }
   };
 
-  /* The Roku capture --------------------------------------------------------------------------------------------------- */
+  /* The source Roku: TV Thing's Roku lane ------------------------------------------------------------------------------- */
+  const tvThing = path => location.protocol + '//' + location.hostname + '/tv/' + path;
+  $('tv-roku-page').href = tvThing('roku.html');
+  $('tv-roku-watch').href = tvThing('#roku');
   async function loadRoku() {
     try {
-      const [catalog, signal, operation, status, calibration] = await Promise.all([api('v1/roku/sources'), api('v1/roku/signal'), api('v1/operation'), api('v1/roku/status').catch(() => null), api('v1/roku/calibration').catch(() => null)]);
-      $('roku-input').replaceChildren(...catalog.sources.map(s => { const o = new Option(s.name, s.key); o.disabled = !s.available; return o; }));
-      $('roku-input').value = catalog.selected || catalog.required || '';
-      $('roku-lamp').className = 'lamp ' + (signal.state === 'locked' ? 'pvw' : 'warn');
-      VV.fill($('roku-kv'), [['Device', status?.device ? status.device.name + ' · ' + status.device.software_version : '—'], ['Active app', status?.active_app?.name || '—'],
-        ['Signal', signal.label], ['Cue', operation.message + (operation.phase ? ' · ' + operation.phase : '')], ['Capture', status?.feedback?.capture ? (status.feedback.capture.error || 'frames ' + status.feedback.capture.frames + ' · age ' + status.feedback.capture.frame_age_seconds + ' s') : '—']]
+      const {lane, lock, last_prepared: known} = await api('v1/roku/status');
+      const roku = lane.roku || {}, selection = lane.selection, op = roku.operation, player = roku.player?.data || {};
+      S.roku = {lane, lock};
+      $('roku-lamp').className = 'lamp ' + (op?.active ? 'warn blink' : selection && !selection.manual ? 'pvw' : lane.stream?.active ? '' : 'warn');
+      VV.fill($('roku-kv'), [['Showing', selection ? (selection.manual ? 'Manual Roku' : selection.name || label(selection)) : 'unverified'],
+        ['Verified', known ? ago(known.prepared_at) + (known.reusable ? ' · reusable' : ' · checked again first') : '—'],
+        ['Navigation', op ? op.state + (op.message ? ' · ' + op.message : '') : 'none yet'], ['Lock', lock ? lock.owner + ' · ' + fmt.mins(lock.seconds_remaining) : 'free'],
+        ['Active app', player.app?.name || roku.player?.error || '—'], ['Capture', lane.stream?.active ? lane.stream.state : bad('stopped')]]
         .map(([k, v]) => [h('dt', k), h('dd', v)]));
-      if (calibration) VV.fill($('calibration-kv'), [['Device', calibration.device?.label], ['Path', h('code', calibration.device?.path || '—')], ['Target', calibration.target?.matches ? '720p60 detected' : 'not at 720p60']].map(([k, v]) => [h('dt', k), h('dd', v ?? '—')]));
+      VV.fill($('calibration-kv'), [['Feed', 'H.264 copy from the HD PVR · stream/roku.m3u8'], ['Generation', h('code', lane.stream?.generation || '—')]]
+        .map(([k, v]) => [h('dt', k), h('dd', v ?? '—')]));
+      $('roku-stop').disabled = !op?.active;
       $('roku-status').textContent = 'Checked ' + fmt.clockSec(new Date());
     } catch (e) { $('roku-status').textContent = e.message; }
   }
-  function startRoku() { loadRoku(); const timer = setInterval(() => { if (!document.hidden) loadRoku(); }, 10000); stops.push(() => clearInterval(timer)); }
+  function startRoku() { loadRoku(); const timer = setInterval(() => { if (!document.hidden) loadRoku(); }, 5000); stops.push(() => clearInterval(timer)); }
   $('roku-refresh').onclick = loadRoku;
-  $('roku-apply').onclick = async () => { try { await api('v1/roku/source', {key: $('roku-input').value}); toast('Capture input applied.', {ok: true}); loadRoku(); } catch (e) { toast(e.message, {error: true}); } };
-  $('roku-stop').onclick = async () => { if (!await VV.confirm('Stop the Roku channel cue that is running?', {title: 'Stop Roku cue', ok: 'Stop', danger: true})) return; try { await api('v1/operation/cancel', {}); loadRoku(); } catch (e) { toast(e.message, {error: true}); } };
+  $('roku-stop').onclick = async () => { if (!await VV.confirm('Stop the Roku navigation that is running?', {title: 'Stop the Roku', ok: 'Stop', danger: true})) return; try { await api('v1/operation/cancel', {}); loadRoku(); } catch (e) { toast(e.message, {error: true}); } };
 
   /* The system map ------------------------------------------------------------------------------------------------------ */
   function startMap() {
@@ -138,7 +144,7 @@
       const feed = s => segs[s]?.feed ? !segs[s].feed.error : undefined;
       // Who talks to whom: [title, lines, healthy?, into web, into master].
       const ext = [['TV-Thing', ['OTA tuners · HLS'], S.sources?.sources?.some(s => s.id === 'tv-thing-digital' && s.availability === 'available'), true, true],
-        ['Source Roku + Hauppauge', ['ECP · component capture'], S.signal ? S.signal.state === 'locked' : undefined, true, false],
+        ['Source Roku (TV-Thing)', ['Roku lane · HD PVR copy'], S.rokuStatus ? !!S.rokuStatus.lane?.stream?.active : undefined, true, true],
         ['Media library', ['/mnt/sda1/media'], S.sources?.sources?.some(s => s.id === 'library' && s.configured), true, true],
         ['EAS decoder :8090', ['SAME + transcripts'], c.eas ? !c.eas.error : undefined, false, true],
         ['NWS · WMATA · AlertDC', ['alerts, Metro, DC'], [feed('transit'), feed('dc_alerts'), c.nws ? !c.nws.error : undefined].every(v => v !== false), true, true],
@@ -165,7 +171,7 @@
       out += `<text class="muted" x="300" y="418">Restart web: Up next pauses and a Roku feed drops. Restart master: what is on air drops.</text>`;
       $('map').innerHTML = out;
     };
-    for (const [path, ms, name] of [['v1/master', 5000, 'master'], ['v1/crawl', 15000, 'crawl'], ['v1/continuity', 30000, 'continuity'], ['v1/sources', 60000, 'sources'], ['v1/roku/signal', 30000, 'signal'], ['v1/production/monitor', 60000, 'monitor']])
+    for (const [path, ms, name] of [['v1/master', 5000, 'master'], ['v1/crawl', 15000, 'crawl'], ['v1/continuity', 30000, 'continuity'], ['v1/sources', 60000, 'sources'], ['v1/roku/status', 30000, 'rokuStatus'], ['v1/production/monitor', 60000, 'monitor']])
       stops.push(VV.watch(path, ms, (data, w) => { if (!w.error) { S[name] = data; draw(); } }));
     draw();
   }
@@ -177,12 +183,12 @@
     'Master and Up next': [['GET', 'v1/master', 'what master is doing'], ['GET', 'v1/queue', 'Up next, holds, scheduled shows'], ['GET', 'v1/playback', 'what will air, next 24 h'],
       ['GET', 'v1/master/end-options?source_id=youtube-tv&channel_id=NBC', 'how a take could end'], ['POST', 'v1/queue/pause', 'pause Up next', '{}'], ['POST', 'v1/queue/resume', 'resume Up next', '{}']],
     'Schedule': [['GET', 'v1/programming', 'grid, blocks, shows, timeline'], ['POST', 'v1/programming/follow-games', 'check the sports feeds now', '{}'], ['POST', 'v1/programming/take-current', 'queue the current block', '{}']],
-    'Sources': [['GET', 'v1/sources', 'the catalog'], ['GET', 'v1/sources/tv-thing-digital/programs', 'TV-Thing guide'], ['GET', 'v1/sources/library/programs', 'the media library'], ['GET', 'v1/sources/youtube-tv/programs', 'YouTube TV channels'], ['GET', 'v1/channels', 'YouTube TV calibration flags']],
+    'Sources': [['GET', 'v1/sources', 'the catalog'], ['GET', 'v1/sources/tv-thing-digital/programs', 'TV-Thing guide'], ['GET', 'v1/sources/library/programs', 'the media library'], ['GET', 'v1/sources/youtube-tv/programs', 'YouTube TV channels'], ['GET', 'v1/channels', 'YouTube TV channels (from TV Thing)']],
     'Sports': [['GET', 'v1/sports/upcoming?league=mlb&days=3', 'MLB, next 3 days'], ['GET', 'v1/sports/week?league=nfl', 'this NFL week'], ['GET', 'v1/sports/games?league=nhl&date=' + today, 'NHL today'], ['GET', 'v1/sports/teams?league=nwsl', 'NWSL teams'], ['GET', 'v1/baseball/games', 'legacy MLB catalog']],
     'Crawl': [['GET', 'v1/crawl', 'settings, worker status, rotation'], ['GET', 'v1/crawl/alerts', 'the register and the plan'], ['GET', 'v1/crawl/bus-routes', 'WMATA bus routes'], ['POST', 'v1/crawl/run', 'run a segment now', '{"segment": "scores"}']],
     'Presentation': [['GET', 'v1/production', 'off-air card settings'], ['GET', 'v1/continuity', 'announcers, roster, next break'], ['GET', 'v1/production/monitor', 'the viewer monitor']],
-    'Roku and capture': [['GET', 'v1/roku/status', 'the source Roku'], ['GET', 'v1/roku/sources', 'capture inputs'], ['GET', 'v1/roku/signal', 'input signal'], ['GET', 'v1/roku/capture', 'capture status'], ['GET', 'v1/roku/calibration', 'calibration reading'], ['GET', 'v1/operation', 'the channel cue']],
-    'Legacy and service': [['GET', 'health', 'controller health'], ['GET', 'v1/state', 'legacy cue state'], ['GET', 'v1/jobs', 'legacy scheduler jobs']],
+    'Roku (TV Thing)': [['GET', 'v1/roku/status', 'the source Roku, from TV Thing'], ['GET', 'v1/operation', 'its navigation'], ['POST', 'v1/operation/cancel', 'stop its navigation', '{}']],
+    'Legacy and service': [['GET', 'health', 'web service health'], ['GET', 'v1/jobs', 'legacy scheduler jobs']],
   };
   let built = false;
   function startApi() {

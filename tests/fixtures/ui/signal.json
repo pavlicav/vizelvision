@@ -1,9 +1,0 @@
-{
- "height": 720,
- "label": "1280 \u00d7 720 \u00b7 progressive \u00b7 60.00 frames/s",
- "observed_at": "2026-10-02T02:16:37.257043+00:00",
- "rate": 60.0,
- "scan": "progressive",
- "state": "locked",
- "width": 1280
-}

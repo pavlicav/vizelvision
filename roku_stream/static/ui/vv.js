@@ -453,7 +453,7 @@ window.VV = (() => {
       set('live', 'ON AIR' + (queue?.paused ? ' · UP NEXT PAUSED' : ''), parts.filter((v, i, a) => v && a.indexOf(v) === i).join(' · '), 'pgm');
     });
     commands.add(PAGES.map(([href, name], i) => ({id: 'go:' + href, title: 'Go to ' + name, group: 'Pages', keys: 'g ' + (i + 1), run: () => { location.href = href; }})),
-      {id: 'go:calibration', title: 'Go to Calibration (Roku capture signal)', group: 'Pages', run: () => { location.href = 'calibration'; }},
+      {id: 'go:roku', title: 'Go to the source Roku (in TV Thing)', group: 'Pages', run: () => { location.href = 'engineering#roku'; }},
       {id: 'go:sonic', title: 'Go to the Sonic identity sheet', group: 'Pages', run: () => { location.href = 'sonic'; }},
       {id: 'ui:machinery', title: 'Show or hide the machinery', group: 'Interface', keys: 'm', run: () => machinery.toggle()},
       {id: 'ui:keys', title: 'Keyboard shortcuts', group: 'Interface', keys: '?', run: shortcuts},

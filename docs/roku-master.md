@@ -1,3 +1,13 @@
+> **Since 2026-10-06** the Roku is TV Thing's Roku lane. Preparing a Roku target holds TV
+> Thing's roku lock (owner `VizelVision master`, renewed while a Roku feed is prepared or on
+> air, released a minute after; its token kept 0600 in `roku-lock.json` beside the worker
+> socket) and asks TV Thing to tune it: TV Thing navigates and verifies, or reuses a recent
+> verification (900 s), or briefly checks that the Roku still plays it. The worker plays the
+> lane's HLS and checks every 2 s that the lock is still `VizelVision master`'s, the
+> selection is the target, and the lane's generation is the one prepared. That replaces the
+> selection record, its heartbeat, `roku-last-prepared.json` and the MediaMTX publisher
+> identity described below; `roku_last_prepared` in `/v1/master` now comes from TV Thing.
+
 # Verified Roku master takes
 
 Since September 30 the page puts the Roku on air only through Up next: the Roku card

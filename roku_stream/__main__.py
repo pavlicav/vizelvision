@@ -5,9 +5,8 @@ import json
 import os
 import sys
 
-from .api import serve
+from .api import build_roku, serve
 from .config import load_config
-from .controller import RokuStreamController
 from .errors import RokuStreamError
 
 
@@ -28,40 +27,7 @@ def _parser() -> argparse.ArgumentParser:
     publication = commands.add_parser("master-publication-test", help="Publish synthetic A/V to isolated MediaMTX and verify RTSP/HLS readers")
     publication.add_argument("--mediamtx", help="MediaMTX executable (default: PATH or pinned vendor copy)")
     publication.add_argument("--duration", type=float, default=20, help="Verified playout duration after startup, 16–30 seconds")
-    commands.add_parser("status", help="Probe Roku and capture readiness")
-    commands.add_parser("state", help="Detect the current Roku/YouTube TV screen")
-    plan = commands.add_parser("plan", help="Show keys without controlling the Roku")
-    plan.add_argument("channel")
-    play = commands.add_parser("play", help="Play a channel immediately")
-    play.add_argument("channel")
-    calibrate = commands.add_parser(
-        "calibrate", help="Save a visual template for the currently selected guide row"
-    )
-    calibrate.add_argument("channel")
-    calibrate_frame = commands.add_parser(
-        "calibrate-guide-frame",
-        help="Save a guide template from an observed raw PPM frame",
-    )
-    calibrate_frame.add_argument("channel")
-    calibrate_frame.add_argument("ppm_path")
-    calibrate_network = commands.add_parser(
-        "calibrate-network",
-        help="Save the logo from the currently open YouTube TV network page",
-    )
-    calibrate_network.add_argument("channel")
-    calibrate_current_network = commands.add_parser(
-        "calibrate-current-network",
-        help="Verify the selected guide row, safely open its page, and calibrate it",
-    )
-    calibrate_current_network.add_argument("channel")
-    verify = commands.add_parser(
-        "verify", help="Verify the visibly selected guide row without pressing a key"
-    )
-    verify.add_argument("channel")
-    commands.add_parser(
-        "calibrate-profile",
-        help="Save the currently selected first profile as the Vivian safety template",
-    )
+    commands.add_parser("roku-status", help="Show the source Roku, as TV Thing's Roku lane reports it")
     return parser
 
 
@@ -86,44 +52,18 @@ def main() -> None:
             from .master_worker import MasterClient
             print(json.dumps(MasterClient(config.master).request(), indent=2, sort_keys=True))
             return
-        controller = RokuStreamController(config)
         if args.command == "serve":
-            serve(config, controller)
+            serve(config)
             return
-        if args.command == "status":
-            result = controller.status()
-            exit_code = 0 if result.get("ready") else 1
-        elif args.command == "state":
-            result = controller.current_state()
-            exit_code = 0
-        elif args.command == "plan":
-            result = controller.plan(args.channel)
-            exit_code = 0
-        elif args.command == "play":
-            result = controller.play(args.channel)
-            exit_code = 0
-        elif args.command == "calibrate":
-            result = controller.calibrate(args.channel)
-            exit_code = 0
-        elif args.command == "calibrate-guide-frame":
-            result = controller.calibrate_guide_frame(args.channel, args.ppm_path)
-            exit_code = 0
-        elif args.command == "calibrate-profile":
-            result = controller.calibrate_profile()
-            exit_code = 0
-        elif args.command == "calibrate-network":
-            result = controller.calibrate_network(args.channel)
-            exit_code = 0
-        elif args.command == "calibrate-current-network":
-            result = controller.calibrate_current_network(args.channel)
-            exit_code = 0
-        elif args.command == "verify":
-            result = controller.verify_current_row(args.channel)
-            exit_code = 0
-        else:  # pragma: no cover - argparse prevents this.
-            raise AssertionError(args.command)
-        print(json.dumps(result, indent=2, sort_keys=True))
-        raise SystemExit(exit_code)
+        if args.command == "roku-status":
+            # The Roku's navigation, calibration and capture are TV Thing's since 2026-10-06.
+            roku = build_roku(config)
+            if roku is None:
+                raise SystemExit("TV-Thing is not configured (tv_thing.enabled)")
+            lane, lock = roku.lane()
+            print(json.dumps({"lane": lane, "lock": lock}, indent=2, sort_keys=True))
+            return
+        raise AssertionError(args.command)  # pragma: no cover - argparse prevents this.
     except KeyboardInterrupt:
         print(json.dumps({"error": {"code": "interrupted", "message": "Operation interrupted"}}), file=sys.stderr)
         raise SystemExit(130)

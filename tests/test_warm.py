@@ -1,5 +1,6 @@
 """Warm-ups: the Roku entry that follows a program about to end is prepared while another
 source finishes it (a game's closing stretch; a recording or a held show's last 3 minutes)."""
+import contextlib
 import copy
 from datetime import timedelta
 from pathlib import Path
@@ -264,7 +265,7 @@ class WarmQueueTests(unittest.TestCase):
 
 class WarmCoordinatorTests(unittest.TestCase):
     def setUp(self):
-        case = coordinator_tests.CoordinatorTests('test_prime_game_preparation_creates_a_game_specific_claim')
+        case = coordinator_tests.CoordinatorTests('test_prime_game_prepares_its_exact_target')
         case.setUp()
         self.addCleanup(case.doCleanups)
         self.case, self.coordinator, self.master = case, case.coordinator, case.master
@@ -272,7 +273,7 @@ class WarmCoordinatorTests(unittest.TestCase):
         self.navigated = []
 
         def play(channel):
-            with self.coordinator.navigation_guard():
+            with contextlib.nullcontext():
                 self.navigated.append((channel, copy.deepcopy(self.master.state['on_air'])))
                 return case.result
         case.controller.play.side_effect = play
@@ -315,7 +316,7 @@ class WarmCoordinatorTests(unittest.TestCase):
         self.addCleanup(stopped.set)
 
         def play(*_):
-            with self.coordinator.navigation_guard():
+            with contextlib.nullcontext():
                 self.assertTrue(stopped.wait(5))
                 raise CueCancelledError('Cue stopped by the operator')
         self.case.controller.play.side_effect = play

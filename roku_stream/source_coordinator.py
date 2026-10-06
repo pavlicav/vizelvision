@@ -13,8 +13,7 @@ from .errors import ConfigError, ControlBusyError, CueCancelledError
 from .sports import LEAGUES
 from .master import MasterStreamError
 from .master_worker import MasterClient
-from .roku_input import contribution_status, ROKU_SOURCE_IDS, roku_target, selection_path
-from .roku_preparation import RokuPreparation
+from .roku_input import ROKU_SOURCE_IDS, roku_target
 from .scheduler import parse_time, utc_now
 from .tv_control import target_from
 from .ident import IDENT_HOLD_AT, IDENT_SECONDS, IDENT_SOURCE_ID, IDENT_TAIL_SECONDS, is_sports_ident
@@ -27,28 +26,11 @@ MAX_HOLD = timedelta(hours=12)
 # YouTube TV has never changed channel on the Roku in under 8 s (20 s to over 2 min is usual):
 # with less time than this before an entry is due, the antenna goes straight on.
 ROKU_FASTEST = 10
-# A Roku feed that fails is nearly always a blip in the capture card, not the Roku. Until the
-# Roku navigates again, what it was verified playing goes back on without navigating, after a
-# brief check: the same app, its player playing, and a moving picture from the capture card
-# within PLAYING_SECONDS. The picture moved when over MOTION_SHARE of the bytes sampled every
-# MOTION_STEP changed by over MOTION_LEVELS between two fresh frames. On 2026-10-04 (Sunday
-# Ticket) play changed 46-64% of them and a near-still ad end card 2-3%; capture noise stays
-# under the level. A check that passed holds for PLAYING_FRESH s (recovery, then the reattach).
-PLAYING_SECONDS = 4
-MOTION_STEP = 211
-MOTION_LEVELS = 24
-MOTION_SHARE = .005
-PLAYING_FRESH = 20
+# A Roku feed that fails is nearly always a blip in the capture card, not the Roku. TV Thing
+# (which owns the Roku since 2026-10-06) puts what it was verified playing back on without
+# navigating, after a brief check: the same app, its player playing, and a moving picture.
 # Queue actions that reattach a Roku still playing their target instead of navigating.
 RESUMES = ('_queue', '_preroll', '_upgrade')
-
-
-def moved(before, after):
-    """Whether the picture changed between two frames, beyond capture noise."""
-    if (before.width, before.height) != (after.width, after.height):
-        return True
-    a, b = before.rgb[::MOTION_STEP], after.rgb[::MOTION_STEP]
-    return sum(1 for x, y in zip(a, b) if abs(x - y) > MOTION_LEVELS) > MOTION_SHARE * len(a)
 
 
 class SourcePrepareError(MasterStreamError):
@@ -94,13 +76,12 @@ def hold_end(value):
 
 
 class SourceCoordinator:
-    def __init__(self, config, controller, baseball, *, master=None, publisher_reader=None):
-        self.config, self.controller, self.baseball = config, controller, baseball
+    def __init__(self, config, roku, baseball, *, master=None):
+        # roku: TvRoku, the source Roku as TV Thing's Roku lane; None without one.
+        self.config, self.roku, self.baseball = config, roku, baseball
         self.master = master or MasterClient(config.master)
-        self.publisher_reader = publisher_reader or (lambda: contribution_status(config))
         self.enabled = config.master.enabled
-        self.roku_enabled = self.enabled and bool(config.feedback.contribution_url)
-        self.path = selection_path(config.master)
+        self.roku_enabled = self.enabled and roku is not None
         self.lock = threading.RLock()
         self.state_lock = threading.Lock()
         self.cancel = threading.Event()
@@ -109,13 +90,7 @@ class SourceCoordinator:
         self.operation = None
         self.thread = None
         self.navigating = False
-        self.claim = None
-        self.capture_id = None
-        self.last_prepared = RokuPreparation(config.master)
-        # What the Roku was last verified playing, until it navigates again: {'target', 'app'
-        # (the ECP app it plays in), 'claim' (the selection then), 'checked_at' (monotonic
-        # time of the last brief check that passed)}. Not persisted: a restart navigates.
-        self.playing = None
+        self.force = False  # The running operation was asked to navigate again regardless.
         self.queue = None
         self.programs = None  # QueuePrograms; a take can end with its listed program.
         self.sports = None  # SportsCatalog; resolves NFL games for Roku providers.
@@ -124,10 +99,6 @@ class SourceCoordinator:
         # A queue entry's YouTube TV navigation is stopped at this wall time (None: no limit).
         self.deadline = None
         self.late = threading.Event()
-        if self.enabled:
-            self.path.unlink(missing_ok=True)  # Never restore a verified selection after restart.
-        self.heartbeat = threading.Thread(target=self._heartbeat, name='roku-selection', daemon=True)
-        self.heartbeat.start()
 
     def status(self):
         state = self.master.request()
@@ -139,24 +110,28 @@ class SourceCoordinator:
             if self.busy:
                 state['can_prepare'] = state['can_take'] = False
             state['roku_enabled'] = self.roku_enabled and state.get('roku_enabled', False)
-            state['roku_last_prepared'] = self.last_prepared.snapshot(self.claim)
-            prepared = state.get('prepared') or {}
-            if prepared.get('source_id') in ROKU_SOURCE_IDS and not self._known_matches(prepared):
-                state['can_take'] = False
+        known = self.roku.snapshot() if self.roku_enabled else None
+        state['roku_last_prepared'] = known
+        prepared = state.get('prepared') or {}
+        if prepared.get('source_id') in ROKU_SOURCE_IDS and not self._still_selected(prepared, known):
+            state['can_take'] = False
         return state
 
     @staticmethod
     def _same_target(left, right):
         return all(left.get(key) == right.get(key) for key in ('source_id', 'channel_id', 'date'))
 
-    def _known_matches(self, target):
-        known = self.last_prepared.snapshot(self.claim)
-        return bool(known and known['reusable'] and self._same_target(known['target'], target))
+    @staticmethod
+    def _still_selected(target, known):
+        """Whether the Roku still shows target, as prepared (same generation), verified recently.
+        A lapsed verification is renewed by TV Thing's still-playing check before a take."""
+        return bool(known and known.get('reusable')
+                    and SourceCoordinator._same_target(known.get('target') or {}, target)
+                    and (not target.get('generation') or known.get('selection_id') == target.get('generation')))
 
     def roku_ready(self, target):
         """Whether the Roku holds a fresh verified preparation of target, which a take reuses."""
-        with self.state_lock:
-            return self._known_matches(target)
+        return self.roku_enabled and self.roku.ready(target)
 
     def stop_preroll(self, item_id):
         """Stop an early preparation still running for queue entry item_id, because something
@@ -167,42 +142,15 @@ class SourceCoordinator:
             if self.busy and operation.get('action') == '_preroll' and operation.get('queue_item_id') == item_id:
                 self.cancel.set()
 
-    def _invalidate(self):
-        with self.state_lock:
-            self.claim = None
-            self.capture_id = None
-            if self.enabled:
-                self.path.unlink(missing_ok=True)
-
-    def _heartbeat(self):
-        while not self.stopping.wait(.25):
-            with self.state_lock:
-                if self.deadline is not None and self.navigating and time.time() >= self.deadline:
-                    self.late.set()
-                cancel_navigation = (self.cancel.is_set() or self.late.is_set()) and self.navigating
-                if self.claim:
-                    feedback = self.controller.feedback
-                    stream = getattr(feedback, '_stream', None)
-                    if (feedback.status().get('stream_id') != self.capture_id
-                            or not feedback.status().get('ready') or stream is None
-                            or stream.process.poll() is not None):
-                        self.claim = None
-                        self.path.unlink(missing_ok=True)
-                    else:
-                        try:
-                            self._write_claim_locked()
-                        except OSError:
-                            self.claim = None  # Existing file expires; cannot keep authority alive.
-            if cancel_navigation:
-                self.controller.cancel_operation()
-
-    def _write_claim_locked(self):
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        temporary = self.path.with_suffix('.tmp')
-        fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-        with os.fdopen(fd, 'w') as handle:
-            json.dump({**self.claim, 'expires_at': time.time() + 5}, handle)
-        os.replace(temporary, self.path)
+    def _stop_reason(self):
+        """Why a Roku navigation must stop now ('cancelled', 'late'), or None. A queue entry's
+        YouTube TV navigation is stopped at self.deadline (see _racing)."""
+        if self.cancel.is_set() or self.stopping.is_set():
+            return 'cancelled'
+        if self.deadline is not None and time.time() >= self.deadline:
+            self.late.set()
+            return 'late'
+        return None
 
     def _check_cancel(self):
         if self.cancel.is_set() or self.stopping.is_set():
@@ -237,42 +185,6 @@ class SourceCoordinator:
                 return state
             time.sleep(.05)
         raise MasterStreamError('Timed out waiting for the master worker')
-
-    @contextmanager
-    def navigation_guard(self):
-        if not self.enabled:
-            yield
-            return
-        with self.state_lock:
-            owned = threading.current_thread() is self.thread
-            if self.busy and not owned:
-                raise ControlBusyError('Master control is busy; wait or cancel preparation first')
-        if not self.lock.acquire(blocking=False):
-            raise ControlBusyError('Another source operation is running')
-        try:
-            self._invalidate()
-            with self.state_lock:
-                self.playing = None  # What the Roku plays is about to change.
-            state = self.master.request()
-            if state.get('state') in ('unavailable', 'reconnecting', 'not_configured'):
-                raise MasterStreamError('Cannot confirm master fallback before Roku navigation')
-            if any((state.get(key) or {}).get('source_id') in ROKU_SOURCE_IDS
-                   for key in ('on_air', 'prepared')):
-                self._worker('fallback', cancellable=False)
-            if not owned and self.queue:
-                # A TV channel on air keeps its end time; a Roku feed was just taken off air.
-                self.queue.pause('Paused by manual Roku navigation',
-                                 keep_hold=(state.get('on_air') or {}).get('source_id') not in ROKU_SOURCE_IDS)
-            if owned:
-                self._check_cancel()
-                with self.state_lock:
-                    self.navigating = True
-            yield
-        finally:
-            if owned:
-                with self.state_lock:
-                    self.navigating = False
-            self.lock.release()
 
     def normalize_target(self, body, *, resolve_game=True):
         game = None
@@ -421,197 +333,81 @@ class SourceCoordinator:
             raise ConfigError('Choose when this should end')
         return self.queue.hold_for(on_air, end)
 
+    def _handoff(self, target, prepared):
+        """Give the worker the Roku lane to decode and take: the generation TV Thing verified.
+        The lock stays the web app's (tv_roku.RokuHold), renewed while the Roku is in use."""
+        return self._worker('prepare', {**target, 'roku': prepared})
+
+    def roku_in_use(self):
+        """Whether master wants the Roku: an operation running, or a Roku input prepared or on air."""
+        with self.state_lock:
+            if self.busy:
+                return True
+        try:
+            state = self.master.request()
+        except Exception:
+            return True  # Unknown: keep the lock rather than drop a feed on air.
+        return any((state.get(name) or {}).get('source_id') in ROKU_SOURCE_IDS for name in ('on_air', 'prepared'))
+
     def _prepare_roku(self, target, game, *, keep_air=False):
+        """Put target on the Roku through TV Thing (it navigates unless it already shows target,
+        recently verified), then hand the lane to the worker."""
         # The worker and the verified selection name a channel, not the operator's source choice.
         target = {k: v for k, v in target.items() if k != 'antenna'}
-        self._invalidate()
-        # Early preparation keeps a non-Roku program on air and only drops a stale
-        # prepared input; navigation_guard still returns a Roku feed to fallback.
+        # Early preparation keeps a non-Roku program on air and only drops a stale prepared
+        # input; otherwise a Roku feed on air goes to fallback before the Roku moves.
         self._worker('cancel' if keep_air else 'fallback')
         self._check_cancel()
-        if target['source_id'] == 'sunday-ticket':
-            result = self.controller.play_sunday_ticket(game)
-        elif target['source_id'] == 'thursday-night-football':
-            result = self.controller.play_prime_game(game)
-        else:
-            result = (self.controller.play(target['channel_id']) if game is None
-                      else self.controller.play_baseball_game(game))
-        self._check_cancel()
-        verification = result.get('verification') or {}
-        if result.get('ok') is not True or verification.get('player_state') != 'play':
-            raise MasterStreamError('Roku playback was not verified')
-        selected = (verification.get('selected_prime_event') if target['source_id'] == 'thursday-night-football'
-                    else verification.get('visible_channel_template') or verification.get('selected_game_card'))
-        if not isinstance(selected, dict) or selected.get('matched') is not True or not verification.get('playback_evidence'):
-            raise MasterStreamError('Roku selection lacks visual verification')
-        feedback = self.controller.feedback
-        capture = feedback.last_capture or {}
-        if not capture.get('fresh') or capture.get('stream_id') != feedback.status().get('stream_id'):
-            raise MasterStreamError('Roku capture changed during verification')
-        publisher = self.publisher_reader()
-        self._check_cancel()
-        app = self._roku_app()
         with self.state_lock:
-            self.capture_id = capture['stream_id']
-            self.claim = {'selection_id': uuid.uuid4().hex, 'target': target,
-                          'operation_id': result.get('operation_id'), 'contribution_id': publisher,
-                          'resolved_source': {'provider': result.get('provider', 'youtube_tv'),
-                                              'label': result.get('source') or result.get('channel') or target['channel_id']}}
-            self._write_claim_locked()
-            selection_id = self.claim['selection_id']
-            self.playing = ({'target': copy.deepcopy(target), 'app': app, 'claim': copy.deepcopy(self.claim),
-                             'checked_at': None} if app else None)
-        result = self._worker('prepare', {**target, 'selection_id': selection_id})
+            self.navigating = True
+        try:
+            prepared = self.roku.prepare(target, force=self.force, resume=False, stop=self._stop_reason)
+        finally:
+            with self.state_lock:
+                self.navigating = False
         self._check_cancel()
-        with self.state_lock:
-            if not self.claim or self.claim['selection_id'] != selection_id:
-                raise MasterStreamError('Roku capture changed during preparation')
-            self.last_prepared.remember(target, self.claim)
-        return result
+        return self._handoff(target, prepared)
 
     def _reuse_roku(self, target):
-        with self.state_lock:
-            if not self._known_matches(target):
-                return None
-            claim, capture_id = copy.deepcopy(self.claim), self.capture_id
-        feedback = self.controller.feedback
-        capture = feedback.status()
-        stream = getattr(feedback, '_stream', None)
-        if (not capture.get('ready') or capture.get('stream_id') != capture_id
-                or stream is None or stream.process.poll() is not None):
-            self._invalidate()
+        """The Roku already shows target, verified recently: what the worker has of it, or the
+        lane handed over again. Sends the Roku no key."""
+        if not self.roku.ready(target):
             return None
-        try:
-            publisher = self.publisher_reader()
-        except MasterStreamError:
-            self._invalidate()
-            raise
-        if publisher != claim['contribution_id']:
-            self._invalidate()
-            return None
-        self._check_cancel()
-        state = self.master.request()
+        state, known = self.master.request(), self.roku.snapshot() or {}
         with self.state_lock:
-            if not self._known_matches(target):
-                return None
             self.operation['reused'] = True
         for name in ('prepared', 'on_air'):
             current = state.get(name) or {}
-            if (self._same_target(current, target) and current.get('generation') == claim['selection_id']
+            if (self._same_target(current, target) and current.get('generation') == known.get('selection_id')
                     and (state.get('can_take') if name == 'prepared' else state.get('publisher_ready'))):
                 return state
-        # Reattach decoded media from the same verified selection. This sends
-        # no Roku navigation and does not extend the original verification age.
+        # Reattach decoded media from the same verified selection.
         plain = {k: v for k, v in target.items() if k != 'antenna'}
-        return self._worker('prepare', {**plain, 'selection_id': claim['selection_id']})
-
-    # The Roku still playing: a feed that failed goes back on without navigating -------------
-    def _roku_app(self):
-        """The app the Roku is in (ECP), or None when it cannot say."""
         try:
-            app = self.controller.ecp.active_app()
-        except Exception as exc:  # Only means the next recovery navigates.
-            logging.getLogger(__name__).warning('Could not read which app the Roku is in: %s', exc)
-            return None
-        return app if app.id else None
-
-    def _playing(self, target):
-        """What the Roku was last verified playing, when that is target and it has not navigated since."""
-        with self.state_lock:
-            playing = self.playing
-        return playing if playing and self._same_target(playing['target'], target) else None
-
-    def _not_playing(self, playing):
-        """The brief check: None when the Roku still plays, else why not. It is in the app it
-        was verified in, its player plays, and the capture card shows a moving picture within
-        PLAYING_SECONDS."""
-        app, ecp = playing['app'], self.controller.ecp
-        try:
-            active = ecp.active_app()
-            if active.id != app.id:
-                return f"the Roku is in {active.name or 'its home screen'}, not {app.name}"
-            player = ecp.media_player()
-        except Exception as exc:
-            return f'the Roku did not answer ({exc})'
-        plugin = player.get('plugin') if isinstance(player.get('plugin'), dict) else {}
-        if player.get('state') != 'play' or player.get('error') == 'true' or plugin.get('id') != app.id:
-            return f"its player is {player.get('state') or 'stopped'}"
-        feedback, before, age = self.controller.feedback, None, None
-        deadline = time.monotonic() + PLAYING_SECONDS
-        while True:
-            # A capture card still in its blip is waited for until the deadline, not the
-            # capture's own 15 s timeout.
-            stream = feedback.status().get('capture')
-            age = stream.get('frame_age_seconds') if isinstance(stream, dict) else None
-            if age is None or age < 1:
-                try:
-                    frame = feedback.capture()
-                except Exception as exc:
-                    return f'the capture card shows no picture ({exc})'
-                if before is not None and moved(before, frame):
-                    return None
-                before = frame
-            if time.monotonic() >= deadline:
-                return ('its picture did not move' if before is not None
-                        else f'the capture card has shown nothing for {age:.0f} s')
-            time.sleep(.25)
-
-    def _still_playing(self, playing):
-        """None when the Roku still plays (a check passed within PLAYING_FRESH s, or does now),
-        else why not, logged."""
-        if playing['checked_at'] is not None and time.monotonic() - playing['checked_at'] < PLAYING_FRESH:
-            return None
-        why = self._not_playing(playing)
-        if why is None:
-            with self.state_lock:
-                playing['checked_at'] = time.monotonic()
-        else:
-            logging.getLogger(__name__).warning('The Roku no longer plays %s (%s); putting it back on '
-                                                'from the Roku means navigating', json.dumps(playing['target']), why)
-        return why
+            prepared = self.roku.prepare(plain, navigate=False, resume=False, stop=self._stop_reason)
+        except MasterStreamError:
+            return None  # It changed meanwhile: prepare it normally.
+        return self._handoff(plain, prepared)
 
     def roku_playing(self, target):
         """Feed recovery: whether the Roku still plays target as it was verified, briefly
         checked. Its feed then goes back on in seconds (_resume_roku), sooner than the antenna
         and in the better picture. Never navigates."""
-        playing = self._playing(target)
-        return playing is not None and self._still_playing(playing) is None
+        return self.roku_enabled and self.roku.playing({k: v for k, v in target.items() if k != 'antenna'})
 
     def _resume_roku(self, target):
-        """The Roku still plays target, though its verification lapsed (after 15 minutes) or
-        the capture restarted. A feed that failed is nearly always a blip in the capture card,
-        not the Roku: after the brief check, renew the verification without navigating and
-        reuse it. None when the Roku navigated since or fails the check: it navigates."""
-        playing = self._playing(target)
-        if playing is None or self._still_playing(playing) is not None:
+        """The Roku still plays target, though its verification lapsed or the capture
+        restarted. A feed that failed is nearly always a blip in the capture card, not the
+        Roku: TV Thing checks it briefly and renews the verification without navigating.
+        None when the Roku navigated since or fails the check: it navigates."""
+        plain = {k: v for k, v in target.items() if k != 'antenna'}
+        try:
+            prepared = self.roku.prepare(plain, navigate=False, resume=True, stop=self._stop_reason)
+        except MasterStreamError:
             return None
-        feedback = self.controller.feedback
-        capture, status = feedback.last_capture or {}, feedback.status()
-        stream = getattr(feedback, '_stream', None)
-        if (not capture.get('fresh') or capture.get('stream_id') != status.get('stream_id')
-                or stream is None or stream.process.poll() is not None):
-            return None
-        publisher = self.publisher_reader()
-        self._check_cancel()
-        with self.state_lock:
-            if self.playing is not playing:
-                return None
-            claim = self.claim
-            if not (claim and claim['target'] == playing['target'] and claim['contribution_id'] == publisher
-                    and self.capture_id == capture['stream_id']):
-                # The capture restarted: a new selection of the same feed. Otherwise the one
-                # an input on air may still hold.
-                claim = {**copy.deepcopy(playing['claim']), 'selection_id': uuid.uuid4().hex,
-                         'contribution_id': publisher}
-            self.capture_id, self.claim = capture['stream_id'], claim
-            self._write_claim_locked()
-            self.last_prepared.remember(playing['target'], claim)
-        gap = (status.get('capture') or {}).get('last_gap_over_second') if isinstance(status.get('capture'), dict) else None
         logging.getLogger(__name__).warning(
-            'The Roku still plays %s; its feed goes back on without navigating%s', json.dumps(playing['target']),
-            f" (the capture card last stalled {gap['seconds']} s, at {datetime.fromtimestamp(gap['at']):%-H:%M:%S})"
-            if gap else '')
-        return self._reuse_roku(target)
+            'The Roku still plays %s; its feed goes back on without navigating', json.dumps(plain))
+        return self._handoff(plain, prepared)
 
     # The antenna: a network YouTube TV is not ready with in time ---------------------------
     def _antenna(self, target, game):
@@ -960,7 +756,6 @@ class SourceCoordinator:
                 raise ControlBusyError('Roku navigation is already running')
         try:
             self.queue.admitted(item.id)
-            self._invalidate()
             self._after_station_id(cancellable=False)  # Signing off: the ID ends before the test card.
             state = self._worker('fallback', cancellable=False, queue_item=item)
             if state.get('on_air'):
@@ -979,6 +774,7 @@ class SourceCoordinator:
         # The station ID on air holds its end card until this source is ready, instead of
         # ending on the test card while a Roku or tuner changes channel.
         holding = action in ('_queue', '_preroll', 'prepare-take', 'take-known') and self._ident_can_hold()
+        self.force = force
         if holding:
             self._hold_ident(True)
         with self.lock:
@@ -1010,10 +806,9 @@ class SourceCoordinator:
                 else:
                     if action == 'take':
                         prepared = (self.master.request().get('prepared') or {})
-                        if prepared.get('source_id') in ROKU_SOURCE_IDS:
-                            with self.state_lock:
-                                if not self._known_matches(prepared):
-                                    raise MasterStreamError('Roku preparation expired or changed; prepare again')
+                        if prepared.get('source_id') in ROKU_SOURCE_IDS \
+                                and not self._still_selected(prepared, self.roku.snapshot()):
+                            raise MasterStreamError('Roku preparation expired or changed; prepare again')
                     result = self._worker('prepare' if action in ('_queue', 'prepare-take') else action, body)
                 preparing = False
                 # The worker's prepare returns only once audio and video are
@@ -1022,10 +817,10 @@ class SourceCoordinator:
                     self._check_cancel()
                     if queue_item and self.queue and action == '_queue':
                         self.queue.check_before_take(queue_item.id)
-                    if body.get('source_id') in ROKU_SOURCE_IDS:
-                        with self.state_lock:
-                            if not self._known_matches(body):
-                                raise MasterStreamError('Roku preparation expired or changed before take')
+                    if body.get('source_id') in ROKU_SOURCE_IDS \
+                            and not self._still_selected(result.get('prepared') or result.get('on_air') or body,
+                                                         self.roku.snapshot()):
+                        raise MasterStreamError('Roku preparation expired or changed before take')
                     prepared = result.get('prepared') or {}
                     already_live = (self._same_target(result.get('on_air') or {}, body)
                                     and result.get('publisher_ready') and self.operation.get('reused'))
@@ -1054,10 +849,7 @@ class SourceCoordinator:
                     try:
                         self.master.request('cancel', {})
                     except Exception:
-                        pass  # Roku authority expires; no replay or automatic take.
-                if action in ('prepare', 'prepare-take', '_queue', '_preroll') \
-                        and body.get('source_id') in ROKU_SOURCE_IDS:
-                    self._invalidate()
+                        pass  # The worker releases what it held; no replay or automatic take.
             finally:
                 if holding and not (action == '_preroll' and (not error or handoff) and self._due_soon(queue_item)):
                     self._hold_ident(False)  # Its take follows at once and releases the hold.
@@ -1078,22 +870,16 @@ class SourceCoordinator:
                     try:
                         cancel_handled = True
                         if fallback:
-                            self._invalidate()
                             self._worker('fallback', cancellable=False)
                         elif cancel_cleanup:
-                            if body.get('source_id') in ROKU_SOURCE_IDS:
-                                self._invalidate()
                             self._worker('cancel', cancellable=False)
                             error = error or 'Master preparation cancelled'
                     except Exception as exc:
                         error = str(exc)
 
     def close(self):
+        # A navigation in progress sees stopping and is stopped on TV Thing.
         self.cancel.set()
         self.stopping.set()
-        if self.navigating:
-            self.controller.cancel_operation()
-        self._invalidate()
-        self.heartbeat.join(timeout=3)
         if self.thread:
-            self.thread.join(timeout=20)
+            self.thread.join(timeout=25)

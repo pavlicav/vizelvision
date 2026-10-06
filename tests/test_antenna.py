@@ -173,7 +173,7 @@ class AntennaCoordinatorTests(unittest.TestCase):
         stopped = threading.Event()
         self.addCleanup(stopped.set)
         def play(*_):
-            with self.coordinator.navigation_guard():
+            with contextlib.nullcontext():
                 self.assertTrue(stopped.wait(5))
                 raise base.CueCancelledError('Cue stopped by the operator')
         self.controller.play.side_effect = play
@@ -204,7 +204,7 @@ class AntennaCoordinatorTests(unittest.TestCase):
         self.controller.play.assert_called_once()
         self.assertEqual(result['on_air']['source_id'], 'youtube-tv')
         # The worker and the verified selection never see the operator's choice.
-        self.assertNotIn('antenna', self.coordinator.claim['target'])
+        self.assertNotIn('antenna', self.roku.selection)
         self.assertNotIn('antenna', self.master.calls[1][1])
 
     def test_antenna_choice_must_be_a_boolean_and_only_rides_youtube_tv_and_mlb(self):
@@ -281,7 +281,7 @@ class AntennaCoordinatorTests(unittest.TestCase):
         self.master.state.update(state='live', on_air=ident)
         self.result['verification'] = {}
         def play(*_):
-            with self.coordinator.navigation_guard():
+            with contextlib.nullcontext():
                 return self.result
         self.controller.play.side_effect = play
         def tail(action, body):
@@ -290,7 +290,7 @@ class AntennaCoordinatorTests(unittest.TestCase):
         self.master.hook = tail
         result = self.coordinator.execute_queue(self.item())
         self.assertEqual(result['on_air']['channel_id'], 'wrc_hd_4_1')
-        self.assertIn('YouTube TV failed (Roku playback was not verified)', result['antenna']['reason'])
+        self.assertIn('YouTube TV failed (The Roku could not find it', result['antenna']['reason'])
 
     def test_operator_cancel_is_never_turned_into_the_antenna(self):
         self.slow_navigation()
@@ -305,7 +305,7 @@ class AntennaCoordinatorTests(unittest.TestCase):
             time.sleep(.02)
         self.coordinator.request('cancel')
         thread.join(5)
-        self.assertIn('stopped by the operator', str(done['error']))
+        self.assertIn('stopped (cancelled)', str(done['error']))
         self.assertNotIn('prepare', self.actions())
 
     def antenna_on_air(self):
@@ -313,7 +313,7 @@ class AntennaCoordinatorTests(unittest.TestCase):
         self.master.state.update(state='live', on_air={'id': 'antenna', 'source_id': 'tv-thing-digital',
                                                         'channel_id': 'wrc_hd_4_1'})
         def play(*_):
-            with self.coordinator.navigation_guard():
+            with contextlib.nullcontext():
                 self.assertEqual(self.master.state['on_air']['id'], 'antenna')
                 return self.result
         self.controller.play.side_effect = play

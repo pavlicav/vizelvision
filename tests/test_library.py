@@ -203,7 +203,7 @@ class LibraryQueueTests(unittest.TestCase):
                                  feedback=SimpleNamespace(contribution_url=None), tv_thing=TvThingConfig(enabled=False),
                                  library=library_config)
         self.master = FakeMaster()
-        self.coordinator = SourceCoordinator(config, Mock(), Mock(), master=self.master, publisher_reader=lambda: 'p')
+        self.coordinator = SourceCoordinator(config, None, Mock(), master=self.master)
         self.coordinator.library = MediaLibrary(library_config, prober=lambda path: PLAYABLE, start_worker=False)
         self.addCleanup(self.coordinator.close)
         self.queue = SourceQueue(Path(self.tmp.name) / 'queue.json', self.coordinator.execute_queue, Mock(),

@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from .direct_capture import DirectCaptureFeedback
-from .calibration import calibration_status
 
 import hmac
 import json
@@ -13,7 +11,6 @@ from dataclasses import asdict
 from datetime import datetime, timedelta, timezone
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from itertools import chain
 from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, unquote, urlsplit
@@ -21,7 +18,8 @@ import urllib.request
 
 from .baseball import BaseballCatalog
 from .config import AppConfig
-from .controller import RokuStreamController
+from .tv_control import TvControl
+from .tv_roku import RokuHold, TvRoku
 from .errors import (
     BaseballScheduleError,
     ChannelNotFoundError,
@@ -68,12 +66,49 @@ _STATIC_PATH = Path(__file__).with_name("static")
 # The web UI: one HTML file per page and its scripts and styles, all in static/ui/. New files
 # there are served without a restart (the pattern below), so the UI can grow while it runs.
 _UI_PATH = _STATIC_PATH / "ui"
-PAGES = ("/air", "/sources", "/schedule", "/crawl", "/presentation", "/ads", "/engineering", "/sonic", "/calibration")
+PAGES = ("/air", "/sources", "/schedule", "/crawl", "/presentation", "/ads", "/engineering", "/sonic")
 # Addresses from before the control-room UI, and where they went. A fragment survives the
 # redirect, so production#crawl reaches presentation, which forwards it to crawl. Ad mute and
 # My ads became tabs of Ads (with the ad database) on 2026-10-04.
 MOVED = {"/": "air", "/cue-sheet": "air", "/production": "presentation", "/continuity": "presentation#continuity",
-         "/admute": "ads#admute", "/my-ads": "ads#my-ads"}
+         "/admute": "ads#admute", "/my-ads": "ads#my-ads",
+         # The Roku's capture and calibration moved to TV Thing on 2026-10-06.
+         "/calibration": "engineering#roku"}
+# Routes of the Roku controller VizelVision ran until 2026-10-06. TV Thing's Roku lane
+# does all of this now (its roku.html page and /api/v1/roku API); these answer 410.
+ROKU_MOVED_GET = ("/v1/preview", "/v1/roku/signal", "/v1/roku/calibration", "/v1/roku/capture",
+                  "/v1/roku/sources", "/v1/state")
+ROKU_MOVED_POST = ("/v1/play", "/v1/thursday-night-football/play", "/v1/sunday-ticket/find",
+                   "/v1/sunday-ticket/calibrate", "/v1/sunday-ticket/play", "/v1/baseball/play",
+                   "/v1/calibrate", "/v1/calibrate-profile", "/v1/calibrate-network",
+                   "/v1/calibrate-current-network", "/v1/verify", "/v1/roku/source")
+
+
+def roku_operation(roku):
+    """The Roku's navigation, as the old /v1/operation summary: TV Thing's operation."""
+    if roku is None:
+        return {"active": False, "phase": "idle", "message": "The Roku is TV Thing's; it is not configured here"}
+    try:
+        lane, lock = roku.lane()
+    except MasterStreamError as exc:
+        return {"active": False, "phase": "unavailable", "message": str(exc)}
+    operation = (lane.get("roku") or {}).get("operation") or {}
+    selection = lane.get("selection") or {}
+    target = operation.get("target") or {}
+    return {"active": bool(operation.get("active")), "phase": operation.get("phase") or operation.get("state") or "idle",
+            "message": operation.get("message") or ("Roku idle" if not operation else operation.get("state")),
+            "channel": target.get("channel_id") or selection.get("channel_id"), "provider": target.get("source_id"),
+            "error": operation.get("error"), "state": operation.get("state"),
+            "selection": selection or None, "lock": lock}
+
+
+def roku_last_game(roku):
+    """The baseball game the Roku last verified, for an after_game release with no game named."""
+    known = roku.snapshot() if roku is not None else None
+    target = (known or {}).get("target") or {}
+    if target.get("source_id") != "mlb" or not str(target.get("channel_id", "")).isdecimal():
+        return None
+    return {"game_pk": int(target["channel_id"]), "game_date": target.get("date")}
 _UI_FILE = re.compile(r"/static/ui/[a-z0-9-]+\.(js|css)")
 # The sonic identity's reference renders (ident/sonic.py).
 _SONIC_PATH = Path(__file__).resolve().parent.parent / "ident" / "build" / "sonic"
@@ -99,7 +134,7 @@ def _error_status(error: RokuStreamError) -> HTTPStatus:
 
 def handler_factory(
     config: AppConfig,
-    controller: RokuStreamController,
+    roku: TvRoku | None,
     scheduler: Scheduler,
     baseball: BaseballCatalog | None = None,
     playout: PlayoutQueue | None = None,
@@ -409,6 +444,12 @@ def handler_factory(
     class ApiHandler(BaseHTTPRequestHandler):
         server_version = "VizelVisionRokuStream/0.1"
 
+        def _roku_moved(self) -> None:
+            self._json(HTTPStatus.GONE, {"error": {
+                "code": "moved_to_tv_thing",
+                "message": "The source Roku is TV Thing's Roku lane now: drive, calibrate and watch it "
+                           "at /tv/roku.html and the Roku tab of /tv/, or through TV Thing's /api/v1/roku API"}})
+
         def _json(self, status: HTTPStatus | int, payload: object) -> None:
             body = json.dumps(payload, indent=2, sort_keys=True).encode("utf-8") + b"\n"
             self.send_response(int(status))
@@ -445,50 +486,6 @@ def handler_factory(
             self.send_header("X-Content-Type-Options", "nosniff")
             self.end_headers()
             self.wfile.write(body)
-
-        def _preview(self) -> None:
-            feedback = controller.feedback
-            if feedback is None:
-                raise ConfigError("Roku preview is not configured")
-            frames = feedback.preview_frames()
-            # Pull the first image before committing streaming headers so a
-            # missing ffmpeg process or unavailable HLS source returns JSON.
-            try:
-                first_frame = next(frames)
-            except StopIteration as exc:
-                frames.close()
-                raise NavigationError("Roku preview returned no frames") from exc
-            except Exception:
-                frames.close()
-                raise
-            boundary = b"vizelvision-frame"
-            self.send_response(HTTPStatus.OK)
-            self.send_header(
-                "Content-Type",
-                f"multipart/x-mixed-replace; boundary={boundary.decode('ascii')}",
-            )
-            self.send_header("Cache-Control", "no-store, no-cache, must-revalidate")
-            self.send_header("Pragma", "no-cache")
-            self.send_header("Connection", "close")
-            self.send_header("X-Content-Type-Options", "nosniff")
-            self.end_headers()
-            try:
-                for frame in chain((first_frame,), frames):
-                    self.wfile.write(
-                        b"--"
-                        + boundary
-                        + b"\r\nContent-Type: image/jpeg\r\nContent-Length: "
-                        + str(len(frame)).encode("ascii")
-                        + b"\r\n\r\n"
-                        + frame
-                        + b"\r\n"
-                    )
-                    self.wfile.flush()
-            except (BrokenPipeError, ConnectionResetError):
-                # Normal when the browser pauses or reloads the monitor.
-                pass
-            finally:
-                frames.close()
 
         def _authorized(self) -> bool:
             expected = config.server.api_key
@@ -818,11 +815,9 @@ def handler_factory(
                     query = parse_qs(parsed.query)
                     self._json(HTTPStatus.OK, sources.programs(parts[3], query.get("date", [None])[0]))
                 elif path == "/health":
-                    status = controller.status()
-                    self._json(
-                        HTTPStatus.OK if status.get("ready") else HTTPStatus.SERVICE_UNAVAILABLE,
-                        {"service": "roku-stream", **status},
-                    )
+                    # The web app's health. The Roku's is TV Thing's (/v1/roku/status).
+                    self._json(HTTPStatus.OK, {"service": "roku-stream", "ready": True,
+                                               "roku": roku_operation(roku)})
                 elif path == "/v1/channels":
                     self._json(
                         HTTPStatus.OK,
@@ -835,48 +830,16 @@ def handler_factory(
                                     "anchor_safe": channel.anchor_safe,
                                     "network_page": channel.network_page
                                     or channel.name,
-                                    "visually_calibrated": bool(
-                                        controller.feedback
-                                        and controller.feedback.template_path(
-                                            channel.name, channel.template
-                                        ).is_file()
-                                    ),
-                                    "network_page_calibrated": bool(
-                                        controller.feedback
-                                        and controller.feedback.network_template_path(
-                                            channel.network_page or channel.name
-                                        ).is_file()
-                                    ),
                                 }
-                                for channel in config.channels
+                                # TV Thing's Roku lane lists them (and calibrates them).
+                                for channel in config.youtube_tv_channels()
                             ]
                         },
                     )
-                elif path == "/v1/preview":
-                    self._preview()
-                elif path == "/v1/roku/signal":
-                    signal = (controller.feedback.input_signal()
-                              if isinstance(controller.feedback, DirectCaptureFeedback)
-                              else {"state": "unknown", "label": "Input resolution unavailable"})
-                    self._json(HTTPStatus.OK, signal)
-                elif path == '/v1/roku/calibration':
-                    if not isinstance(controller.feedback, DirectCaptureFeedback):
-                        raise ConfigError('Direct Roku capture is not configured')
-                    self._json(HTTPStatus.OK, calibration_status(controller.feedback))
-                elif path == '/v1/roku/capture':
-                    if not isinstance(controller.feedback, DirectCaptureFeedback):
-                        raise ConfigError('Direct Roku capture is not configured')
-                    self._json(HTTPStatus.OK, controller.feedback.status())
-                elif path == "/v1/state":
-                    self._json(HTTPStatus.OK, controller.current_state())
+                elif path in ROKU_MOVED_GET or path.startswith("/v1/operations/"):
+                    self._roku_moved()
                 elif path == "/v1/operation":
-                    self._json(HTTPStatus.OK, controller.operation_status())
-                elif path.startswith("/v1/operations/"):
-                    operation = controller.get_operation(path.rsplit("/", 1)[-1])
-                    if operation is None:
-                        self._json(HTTPStatus.NOT_FOUND, {"error": {"code": "operation_not_found", "message": "Operation not found"}})
-                    else:
-                        self._json(HTTPStatus.OK, operation)
+                    self._json(HTTPStatus.OK, roku_operation(roku))
                 elif path == '/v1/sports/games':
                     if sports is None:
                         raise ConfigError('Sports schedules are not configured')
@@ -928,19 +891,18 @@ def handler_factory(
                             "next_scheduled": programming.next_program(exclude=queued_keys) if programming else None,
                             "scheduled_shows": programming.upcoming_shows(exclude=queued_refs) if programming else [],
                             "schedule_enabled": bool(programming and programming.enabled),
-                            "on_air": controller.on_air_source(),
+                            "on_air": roku.snapshot() if roku is not None else None,
                             **({'master_on_air': master.request().get('on_air')} if isinstance(playout, SourceQueue) else {}),
                             **(playout.status() if isinstance(playout, SourceQueue) else {}),
                         },
                     )
                 elif path == "/v1/roku/status":
-                    status = controller.status()
-                    self._json(
-                        HTTPStatus.OK if status.get("ready") else HTTPStatus.SERVICE_UNAVAILABLE,
-                        status,
-                    )
-                elif path == "/v1/roku/sources":
-                    self._json(HTTPStatus.OK, controller.feedback_sources())
+                    # The source Roku, as TV Thing's Roku lane reports it.
+                    if roku is None:
+                        raise ConfigError("The Roku is TV Thing's Roku lane; enable tv_thing")
+                    lane, lock = roku.lane()
+                    self._json(HTTPStatus.OK, {"lane": lane, "lock": lock,
+                                               "last_prepared": roku.snapshot()})
                 elif path == "/v1/jobs":
                     self._json(
                         HTTPStatus.OK,
@@ -1139,72 +1101,8 @@ def handler_factory(
                     if coordinator is None or not isinstance(playout, SourceQueue):
                         raise ConfigError("The master queue is not configured")
                     self._json(HTTPStatus.OK, coordinator.set_hold(data.get("until")))
-                elif path == "/v1/play":
-                    channel = self._channel_from(data)
-                    if "wait" in data and not isinstance(data["wait"], bool):
-                        raise ConfigError("wait must be true or false")
-                    if data.get("dry_run") is True:
-                        self._json(HTTPStatus.OK, controller.plan(channel))
-                    elif "run_at" in data:
-                        _, resolved = config.resolve_channel(channel)
-                        job = scheduler.add(resolved.name, parse_time(data["run_at"]))
-                        self._json(HTTPStatus.ACCEPTED, asdict(job))
-                    elif data.get("wait") is False:
-                        operation = controller.submit_play(channel)
-                        self._json(HTTPStatus.ACCEPTED, {
-                            "operation_id": operation["id"],
-                            "status_url": f"v1/operations/{operation['id']}",
-                            "operation": operation,
-                        })
-                    else:
-                        self._json(HTTPStatus.OK, controller.play(channel))
-                elif path == '/v1/thursday-night-football/play':
-                    if sports is None:
-                        raise ConfigError('Sports schedules are not configured')
-                    game_id = data.get('game_id')
-                    if type(game_id) is not int or game_id <= 0:
-                        raise ConfigError('game_id must be a positive integer ESPN NFL game id')
-                    game = sports.game('nfl', game_id, data.get('date'))
-                    result = controller.play_prime_game(game)
-                    self._json(HTTPStatus.OK, {k: v for k, v in result.items() if k != 'events'})
-                elif path in ('/v1/sunday-ticket/find', '/v1/sunday-ticket/calibrate', '/v1/sunday-ticket/play'):
-                    if sports is None:
-                        raise ConfigError('Sports schedules are not configured')
-                    game_id = data.get('game_id')
-                    if isinstance(game_id, bool) or not isinstance(game_id, int):
-                        raise ConfigError('game_id must be an integer ESPN NFL game id')
-                    game = sports.game('nfl', game_id, data.get('date'))
-                    if path.endswith('/calibrate'):
-                        self._json(HTTPStatus.OK, controller.calibrate_sunday_ticket(game))
-                    else:
-                        result = controller.play_sunday_ticket(game, select=path.endswith('/play'))
-                        self._json(HTTPStatus.OK, {k: v for k, v in result.items() if k != 'events'})
-                elif path == "/v1/baseball/play":
-                    if baseball is None:
-                        raise ConfigError("Baseball schedule is not configured")
-                    if "wait" in data and not isinstance(data["wait"], bool):
-                        raise ConfigError("wait must be true or false")
-                    game_pk = data.get("game_pk")
-                    if isinstance(game_pk, bool) or not isinstance(game_pk, int):
-                        raise ConfigError("game_pk must be an integer")
-                    requested_date = data.get("date")
-                    if requested_date is not None and not isinstance(
-                        requested_date, str
-                    ):
-                        raise ConfigError("date must use YYYY-MM-DD format")
-                    game = baseball.game(game_pk, requested_date)
-                    source = game.get("preferred_source")
-                    if data.get("wait") is False:
-                        operation = controller.submit_baseball_game(game)
-                        self._json(HTTPStatus.ACCEPTED, {"operation_id": operation["id"],
-                                   "status_url": f"v1/operations/{operation['id']}", "operation": operation})
-                        return
-                    self._json(
-                        HTTPStatus.OK,
-                        controller.play_baseball_game(
-                            game, source if isinstance(source, dict) else None
-                        ),
-                    )
+                elif path in ROKU_MOVED_POST or (path.startswith("/v1/operations/") and path.endswith("/cancel")):
+                    self._roku_moved()
                 elif path in ('/v1/queue/pause', '/v1/queue/resume'):
                     if not isinstance(playout, SourceQueue):
                         raise ConfigError('Master queue is not configured')
@@ -1237,7 +1135,7 @@ def handler_factory(
                         if data.get('release_type') == 'after_game':
                             gate_data = data.get('after_game')
                             if gate_data is None and 'target' not in data:
-                                gate_data = controller.on_air_source()
+                                gate_data = roku_last_game(roku)
                             if not isinstance(gate_data, dict):
                                 raise ConfigError('An exact after_game is required')
                             pk, date = gate_data.get('game_pk'), gate_data.get('game_date') or gate_data.get('official_date')
@@ -1283,7 +1181,7 @@ def handler_factory(
                             raise ConfigError("Baseball schedule is not configured")
                         gate = data.get("after_game")
                         if gate is None:
-                            gate = controller.on_air_source()
+                            gate = roku_last_game(roku)
                         if not isinstance(gate, dict):
                             raise ConfigError(
                                 "after_game requires a currently confirmed baseball game"
@@ -1329,33 +1227,12 @@ def handler_factory(
                     _, resolved = config.resolve_channel(channel)
                     job = scheduler.add(resolved.name, parse_time(run_at))
                     self._json(HTTPStatus.CREATED, asdict(job))
-                elif path == "/v1/calibrate":
-                    channel = self._channel_from(data)
-                    self._json(HTTPStatus.OK, controller.calibrate(channel))
-                elif path == "/v1/calibrate-profile":
-                    self._json(HTTPStatus.OK, controller.calibrate_profile())
-                elif path == "/v1/calibrate-network":
-                    channel = self._channel_from(data)
-                    self._json(HTTPStatus.OK, controller.calibrate_network(channel))
-                elif path == "/v1/calibrate-current-network":
-                    channel = self._channel_from(data)
-                    self._json(HTTPStatus.OK, controller.calibrate_current_network(channel))
-                elif path == "/v1/verify":
-                    channel = self._channel_from(data)
-                    self._json(HTTPStatus.OK, controller.verify_current_row(channel))
-                elif path == "/v1/roku/source":
-                    key = data.get("key")
-                    if not isinstance(key, str) or not key.strip():
-                        raise ConfigError("key must be a non-empty Roku source key")
-                    self._json(
-                        HTTPStatus.OK,
-                        controller.select_feedback_source(key.strip()),
-                    )
                 elif path == "/v1/operation/cancel":
-                    self._json(HTTPStatus.OK, controller.cancel_operation())
-                elif path.startswith("/v1/operations/") and path.endswith("/cancel"):
-                    operation_id = path.split("/")[-2]
-                    self._json(HTTPStatus.OK, controller.cancel_operation(expected_id=operation_id))
+                    # Stop the Roku's navigation: master control's own operation when it runs it.
+                    if coordinator is not None and coordinator.enabled:
+                        self._json(HTTPStatus.OK, coordinator.request("cancel", {}))
+                    else:
+                        self._json(HTTPStatus.OK, roku_operation(roku))
                 else:
                     self._json(
                         HTTPStatus.NOT_FOUND,
@@ -1416,10 +1293,21 @@ def handler_factory(
     return ApiHandler
 
 
-def serve(config: AppConfig, controller: RokuStreamController) -> None:
+def build_roku(config: AppConfig, in_use=lambda: False) -> TvRoku | None:
+    """The source Roku: TV Thing's Roku lane, when TV Thing is configured."""
+    if not config.tv_thing.enabled:
+        return None
+    control = TvControl(config.tv_thing)
+    token_path = config.master.socket_path.with_name("roku-lock.json")
+    return TvRoku(control, RokuHold(control, token_path, in_use=in_use))
+
+
+def serve(config: AppConfig) -> None:
     baseball = BaseballCatalog(config)
-    coordinator = SourceCoordinator(config, controller, baseball)
-    controller.navigation_guard = coordinator.navigation_guard
+    roku = build_roku(config)
+    coordinator = SourceCoordinator(config, roku, baseball)
+    if roku is not None:
+        roku.hold.in_use = coordinator.roku_in_use
     sports = SportsCatalog(config, baseball)
     coordinator.sports = sports
     library = MediaLibrary(config.library, config.state_file.with_name('library-cache.json'))
@@ -1452,8 +1340,16 @@ def serve(config: AppConfig, controller: RokuStreamController) -> None:
         coordinator.programs = QueuePrograms(sources)
     else:
         programming = None
-        scheduler = Scheduler(config.state_file, controller.play)
-        playout = PlayoutQueue(config.state_file.with_name('queue.json'), controller.play, baseball.game_status)
+        # Without master control, a legacy job or queue entry only puts the channel on the Roku.
+        def play(channel):
+            if roku is None:
+                raise ConfigError("The Roku is TV Thing's Roku lane; enable tv_thing")
+            try:
+                return roku.prepare({"source_id": "youtube-tv", "channel_id": config.resolve_channel(channel)[1].name})
+            finally:
+                roku.hold.release()
+        scheduler = Scheduler(config.state_file, play)
+        playout = PlayoutQueue(config.state_file.with_name('queue.json'), play, baseball.game_status)
     production_monitor = ProductionMonitor(config)
     projector = continuity = crawl_desk = promo_desk = None
     if programming is not None:
@@ -1506,10 +1402,11 @@ def serve(config: AppConfig, controller: RokuStreamController) -> None:
                                mix=continuity_mix, start_worker=False)
     server = ThreadingHTTPServer(
         (config.server.host, config.server.port),
-        handler_factory(config, controller, scheduler, baseball, playout, sources, coordinator, programming, sports,
+        handler_factory(config, roku, scheduler, baseball, playout, sources, coordinator, programming, sports,
                         production_monitor, projector, continuity, crawl_desk, promo_desk),
     )
-    controller.recover_operations()
+    if roku is not None:
+        roku.hold.start()
     production_monitor.start()
     if config.master.enabled:
         # My ads' break card, drawn before master first needs it (it keeps the last one it had).
@@ -1527,8 +1424,6 @@ def serve(config: AppConfig, controller: RokuStreamController) -> None:
         crawl_desk.start()
     if promo_desk:
         promo_desk.start()
-    if isinstance(controller.feedback, DirectCaptureFeedback):
-        controller.feedback.start_contribution()
     print(
         f"Roku Stream listening on http://{config.server.host}:{config.server.port}",
         flush=True,
@@ -1555,5 +1450,5 @@ def serve(config: AppConfig, controller: RokuStreamController) -> None:
         server.server_close()
         playout.close()
         scheduler.close()
-        if isinstance(controller.feedback, DirectCaptureFeedback):
-            controller.feedback.close()
+        if roku is not None:
+            roku.hold.stop()  # Keeps the lock: the worker may still be playing the Roku.

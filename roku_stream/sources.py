@@ -59,8 +59,9 @@ class SourceCatalog:
     def list(self) -> dict:
         sources = []
         for source_id, (name, resource, guide) in SOURCE_INFO.items():
-            configured = (self.config.tv_thing.enabled if source_id.startswith("tv-thing") else
-                          bool(self.library and self.library.config.enabled) if source_id == "library" else True)
+            # The Roku's sources are TV Thing's Roku lane since 2026-10-06.
+            configured = (bool(self.library and self.library.config.enabled) if source_id == "library"
+                          else self.config.tv_thing.enabled)
             sources.append({"id": source_id, "name": name, "resource_id": resource,
                             "configured": configured, "availability": "unknown" if configured else "disabled",
                             "guide_kind": guide, "selection": None,
@@ -85,6 +86,23 @@ class SourceCatalog:
                     except SourceUnavailableError as exc:
                         warnings.append(str(exc))
             discovery, status = responses.get("sources"), responses.get("status")
+            offered = {s.get("id"): s for s in (discovery or {}).get("data", {}).get("sources", [])
+                       if isinstance(s, dict) and s.get("lane") == "roku"}
+            roku_lane = (((status or {}).get("data") or {}).get("lanes") or {}).get("roku") \
+                if status and not status["stale"] else None
+            for item in sources:
+                if item["resource_id"] != "roku:primary":
+                    continue
+                if discovery and not discovery["stale"] and item["id"] not in offered:
+                    item.update(configured=False, availability="disabled")
+                    item["capabilities"]["browse"] = False
+                    continue
+                match = offered.get(item["id"], {})
+                item["availability"] = ("unknown" if not discovery or discovery["stale"] else
+                                        "available" if match.get("available") is True else "unavailable")
+                if isinstance(roku_lane, dict):
+                    selection = roku_lane.get("selection") or {}
+                    item["selection"] = selection if selection.get("source_id") == item["id"] else None
             for item in sources[:2]:
                 lane = "digital" if item["id"] == "tv-thing-digital" else "analog"
                 upstream_id = "digital" if lane == "digital" else "cable"
@@ -103,15 +121,16 @@ class SourceCatalog:
             warnings.extend(r["error"] for r in responses.values() if r["error"])
         return {"sources": sources, "warnings": warnings,
                 "master": {"state": "not_configured", "can_take": False,
-                           "message": "Master switching is not connected. Browse sources; use the existing Cue Sheet for Roku control."}}
+                           "message": "Master switching is not connected. Browse sources; drive the Roku in TV Thing."}}
 
     def programs(self, source_id: str, requested_date: str | None = None) -> dict:
         if source_id not in SOURCE_INFO:
             raise ChannelNotFoundError("Unknown source", details={"sources": list(SOURCE_INFO)})
         if source_id == "youtube-tv":
+            # TV Thing's Roku lane lists YouTube TV's channels.
             return {"source_id": source_id, "guide": {"available": False, "reason": "No program guide configured"},
                     "channels": [{"id": c.name, "number": None, "name": c.name, "now": None,
-                                  "upcoming": []} for c in self.config.channels], "stale": False}
+                                  "upcoming": []} for c in self.config.youtube_tv_channels()], "stale": False}
         if source_id == "mlb":
             return self._baseball(requested_date)
         if source_id == "sunday-ticket":

@@ -1,7 +1,12 @@
 """Opt-in LIVE NBC prepare/take gate. Navigates the real Roku and leaves NBC on master.
 
+The Roku is TV Thing's Roku lane since 2026-10-06: master control asks TV Thing to put
+NBC on it under the roku lock, then plays the lane's HLS. ``--fallback`` returns master
+to its test card afterwards; ``--report PATH`` writes the report elsewhere.
+
 Run only with operator authorization: /usr/bin/python3 tests/live_roku_master.py
 """
+import argparse
 import json
 from pathlib import Path
 import subprocess
@@ -16,7 +21,12 @@ from roku_stream.publication import PublicationMonitor, cancellation_handlers
 
 
 def main():
-    config = load_config('config.master.json')
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--config', default='config.master.json')
+    parser.add_argument('--fallback', action='store_true', help='return master to fallback at the end')
+    parser.add_argument('--report', default='docs/live-roku-master-validation.json')
+    args = parser.parse_args()
+    config = load_config(args.config)
     base = f'http://127.0.0.1:{config.server.port}/'
     api = config.master.status_url.rsplit('paths/get/', 1)[0]
     headers = {'X-API-Key': config.server.api_key} if config.server.api_key else {}
@@ -71,8 +81,9 @@ def main():
             assert state['on_air'] is None and state['prepared']['source_id'] == 'youtube-tv'
             assert state['prepared']['channel_id'] == 'NBC' and state['can_take']
             cue = request('v1/operation')
-            assert cue.get('phase') == 'complete' and cue.get('channel') == 'NBC'
-            report['verification_operation_id'] = cue['id']
+            assert not cue.get('active') and (cue.get('selection') or {}).get('channel_id') == 'NBC', cue
+            assert (cue.get('lock') or {}).get('owner') == 'VizelVision master', cue
+            report['verification'] = {'state': cue.get('state'), 'message': cue.get('message')}
             operation = request('v1/master/take', {'prepared_id': state['prepared']['id']})
             pending = True
             state = wait_operation(operation, 30)
@@ -93,16 +104,24 @@ def main():
                            and t['max_arrival_gap_seconds'] < 1 for t in monitor.tracks.values())
                 report['tracks'] = {k: {f: v for f, v in t.items() if f not in ('samples', 'last_at', 'last_pts')}
                                     for k, t in monitor.tracks.items()}
-            owners = subprocess.run(['fuser', config.feedback.device], capture_output=True, text=True, timeout=3)
-            assert owners.returncode == 0 and len(owners.stdout.split()) == 1
+            # One reader of the HD PVR: TV Thing's Roku capture.
+            device = (request('v1/roku/status')['lane'].get('tuner') or {}).get('device')
+            owners = subprocess.run(['fuser', device], capture_output=True, text=True, timeout=3)
+            assert owners.returncode == 0 and len(owners.stdout.split()) == 1, owners.stdout
             report.update(ok=True, same_master_publisher_and_reader=True, single_capture_owner=True,
                           hls_streams=monitor.hls_probe, left_on_air=state['on_air'])
+            if args.fallback:
+                operation = request('v1/master/fallback', {})
+                pending = True
+                wait_operation(operation, 30)
+                pending = False
+                report['left_on_air'] = None
         finally:
             if pending:
                 request('v1/master/cancel', {})
             if monitor.pipeline:
                 monitor.pipeline.set_state(monitor.gst.State.NULL)
-    Path('docs/live-roku-master-validation.json').write_text(json.dumps(report, indent=2) + '\n')
+    Path(args.report).write_text(json.dumps(report, indent=2) + '\n')
     print(json.dumps(report, indent=2))
 
 
