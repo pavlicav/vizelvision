@@ -49,6 +49,8 @@ from .caption_settings import CaptionSettings, MODELS as CAPTION_MODELS, LANGUAG
 from .admute_settings import AdMuteSettings
 from . import my_ads as my_ads_module
 from .my_ads import MyAds
+from .promos import PromoDesk, Promos
+from . import promos as promos_module
 from .crawl import AREA_NAMES, CONTEXTS, MODES, SEGMENTS, CrawlSettings, FeedSettings
 from .crawl_desk import CrawlDesk
 from .crawl_ledger import CrawlLedger
@@ -56,6 +58,7 @@ from . import crawl_feeds
 from .production_monitor import ProductionMonitor
 from . import playback
 from .continuity import Continuity, Voice
+from .ident import ident_file
 from .programming import Programming
 from .sports import SportsCatalog
 from .library import MediaLibrary
@@ -108,6 +111,7 @@ def handler_factory(
     projector: playback.Projector | None = None,
     continuity: Continuity | None = None,
     crawl_desk: CrawlDesk | None = None,
+    promo_desk: PromoDesk | None = None,
 ) -> type[BaseHTTPRequestHandler]:
     master = coordinator or MasterClient(config.master)
     master_preview = MasterPreview(config.master)
@@ -121,6 +125,8 @@ def handler_factory(
     admute_dir = Path(config.master.socket_path).parent
     worker_client = MasterClient(config.master)
     my_ads = MyAds(config.master.socket_path)
+    # Station promos (promos.py): the desk keeps their live values; without one (tests), a quiet one.
+    promo_desk = promo_desk or PromoDesk(Promos(config.master.socket_path), master=master, start_worker=False)
 
     def captions_view():
         error, status = None, None
@@ -318,6 +324,10 @@ def handler_factory(
             probe['card'] = {**probe['card'], 'text': text}
             my_ads.card(probe)
         my_ads.update(data)
+
+    def promos_view():
+        """Station promos for Presentation's Promos tab, with ad mute's mode (they play only when it is On)."""
+        return {**promo_desk.status(), 'admute_mode': admute_settings.read()['mode']}
 
     def my_ads_file(name):
         """A file of my-ads/ for the page: an ad's picture, the card, or the ad itself."""
@@ -607,6 +617,53 @@ def handler_factory(
                     self.send_header('X-Content-Type-Options', 'nosniff')
                     self.end_headers()
                     self.wfile.write(body)
+                elif path == '/v1/promos':
+                    self._json(HTTPStatus.OK, promos_view())
+                elif path.startswith('/v1/promos/still/') or path.startswith('/v1/promos/overlay/'):
+                    # A promo's still, or one of its live texts, as it would read now.
+                    found = re.fullmatch(r'/v1/promos/(?:still/([a-z0-9-]{1,40})|overlay/([a-z0-9-]{1,40})/(\d{1,2}))\.png', path)
+                    if not found:
+                        raise ConfigError('Unknown promo picture')
+                    body = (promo_desk.still_png(found[1]) if found[1]
+                            else promo_desk.overlay_png(found[2], int(found[3])))
+                    self.send_response(HTTPStatus.OK)
+                    self.send_header('Content-Type', 'image/png')
+                    self.send_header('Content-Length', str(len(body)))
+                    self.send_header('Cache-Control', 'no-store')
+                    self.send_header('X-Content-Type-Options', 'nosniff')
+                    self.end_headers()
+                    self.wfile.write(body)
+                elif path.startswith('/v1/promos/file/'):
+                    name = path[len('/v1/promos/file/'):]
+                    found = promo_desk.library.path(name)
+                    if found is None and promos_module._VARIANT.match(name) and (promo_desk.store.folder / name).is_file():
+                        found = promo_desk.store.folder / name
+                    if found is None:
+                        self._json(HTTPStatus.NOT_FOUND, {"error": {"code": "not_found", "message": "No such file"}})
+                        return
+                    kind = {'.png': 'image/png', '.mp4': 'video/mp4', '.wav': 'audio/wav'}[found.suffix]
+                    self.send_response(HTTPStatus.OK)
+                    self.send_header('Content-Type', kind)
+                    self.send_header('Content-Length', str(found.stat().st_size))
+                    self.send_header('Cache-Control', 'no-cache')
+                    self.send_header('X-Content-Type-Options', 'nosniff')
+                    self.end_headers()
+                    with open(found, 'rb') as stream:
+                        shutil.copyfileobj(stream, self.wfile, 1 << 20)
+                elif path.startswith('/v1/idents/'):
+                    # The station ID and the Sports ID, and their end cards (Ads › Idents).
+                    found = ident_file(path[len('/v1/idents/'):])
+                    if found is None:
+                        self._json(HTTPStatus.NOT_FOUND, {"error": {"code": "not_found", "message": "No such file"}})
+                        return
+                    self.send_response(HTTPStatus.OK)
+                    self.send_header('Content-Type', 'video/mp4' if found.suffix == '.mp4' else 'image/png')
+                    self.send_header('Content-Length', str(found.stat().st_size))
+                    self.send_header('Cache-Control', 'no-cache')
+                    self.send_header('X-Content-Type-Options', 'nosniff')
+                    self.end_headers()
+                    with open(found, 'rb') as stream:
+                        shutil.copyfileobj(stream, self.wfile, 1 << 20)
                 elif path == '/v1/my-ads':
                     self._json(HTTPStatus.OK, my_ads_view())
                 elif path.startswith('/v1/my-ads/file/'):
@@ -993,6 +1050,14 @@ def handler_factory(
                 elif path == '/v1/admute/recordings/cancel':
                     admute_cancel_recording(data)
                     self._json(HTTPStatus.OK, admute_recordings())
+                elif path == '/v1/promos':
+                    promo_desk.store.update(data)
+                    promo_desk.poke()
+                    self._json(HTTPStatus.OK, promos_view())
+                elif path.startswith('/v1/promos/promo/'):
+                    promo_desk.store.set_promo(path.rsplit('/', 1)[1], data)
+                    promo_desk.poke()
+                    self._json(HTTPStatus.OK, promos_view())
                 elif path == '/v1/my-ads':
                     my_ads_settings(data)
                     self._json(HTTPStatus.OK, my_ads_view())
@@ -1055,6 +1120,11 @@ def handler_factory(
                         self._json(HTTPStatus.OK, programming.save_grid(data))
                     elif path == '/v1/programming/shows':
                         self._json(HTTPStatus.CREATED, programming.add_show(data))
+                    elif path.startswith('/v1/programming/shows/'):
+                        # {priority}: a show that outranks what holds master cuts in at its start.
+                        result = programming.set_priority(path.rsplit('/', 1)[1], data.get('priority'))
+                        self._json(HTTPStatus.OK if result else HTTPStatus.NOT_FOUND,
+                                   result or {"error": {"code": "not_found", "message": "Unknown show"}})
                     elif path == '/v1/programming/take-current':
                         self._json(HTTPStatus.ACCEPTED, {'items': [asdict(i) for i in programming.take_current()]})
                     elif path == '/v1/programming/follow-games':
@@ -1366,7 +1436,8 @@ def serve(config: AppConfig, controller: RokuStreamController) -> None:
                               ident=coordinator.station_id, on_air=coordinator.on_air, game_on=coordinator.game_on,
                               input_failure=coordinator.input_failure, ready=coordinator.roku_ready,
                               stop_preroll=coordinator.stop_preroll, alternates=coordinator.alternates,
-                              upgrade=coordinator.upgrade_queue if coordinator.roku_enabled else None)
+                              upgrade=coordinator.upgrade_queue if coordinator.roku_enabled else None,
+                              roku_playing=coordinator.roku_playing if coordinator.roku_enabled else None)
         coordinator.queue = playout
         scheduler = QueueSchedules(playout)
         programming = Programming(config.state_file.with_name('programming.json'), playout,
@@ -1374,6 +1445,8 @@ def serve(config: AppConfig, controller: RokuStreamController) -> None:
                                   game=sports.game, locate=sports.locate, start_worker=False)
         # When a manual take's end arrives, the schedule (or OFF AIR) takes master back.
         playout.on_hold_end = programming.take_back
+        # A show's priority decides whether it cuts in on what holds master.
+        playout.rank = programming.rank
         # ...and is prepared on the Roku while the take finishes (a warm-up).
         playout.schedule_now = programming.on_now
         coordinator.programs = QueuePrograms(sources)
@@ -1382,7 +1455,7 @@ def serve(config: AppConfig, controller: RokuStreamController) -> None:
         scheduler = Scheduler(config.state_file, controller.play)
         playout = PlayoutQueue(config.state_file.with_name('queue.json'), controller.play, baseball.game_status)
     production_monitor = ProductionMonitor(config)
-    projector = continuity = crawl_desk = None
+    projector = continuity = crawl_desk = promo_desk = None
     if programming is not None:
         projector = playback.Projector(queue=playout, programming=programming, master=coordinator, sports=sports,
                                        library=library)
@@ -1408,10 +1481,33 @@ def serve(config: AppConfig, controller: RokuStreamController) -> None:
         crawl_desk = CrawlDesk(crawl_settings, MasterClient(config.master), feeds=feeds,
                                production=ProductionSettings(config.master), projector=projector,
                                feed_options=feed_settings.read, ledger=ledger)
+
+        # Station promos' live values (promos.py): the temperature (a weather feed of its own,
+        # fetched only while a promo shows it) and the programme on air, voiced for 'only-on'.
+        def on_air_programme():
+            if projector is None:
+                return None
+            now = datetime.now(timezone.utc)
+            segments = projector.describe(now, now + timedelta(hours=1))['segments']
+            return next((s for s in segments if s.get('kind') != 'ident'), None)
+
+        def programme_name(segment):
+            shown = promos_module.display_name(segment, projector.game_info if projector else None)
+            return shown, (projector.spoken(segment, 'en') if projector and shown else shown)
+
+        voice_folder = config.state_file.parent / 'continuity' / 'voice'
+        from .continuity import mix as continuity_mix
+        promo_desk = PromoDesk(Promos(config.master.socket_path), programme=on_air_programme, name=programme_name,
+                               weather=crawl_feeds.WeatherFeed(config.crawl.weather_station, config.crawl.forecast_point,
+                                                               config.crawl.weather_place,
+                                                               lambda: feed_settings.read()['weather']),
+                               voice=continuity.voice if continuity else Voice(voice_folder, config.continuity.keys_file),
+                               master=coordinator.master if coordinator else MasterClient(config.master),
+                               mix=continuity_mix, start_worker=False)
     server = ThreadingHTTPServer(
         (config.server.host, config.server.port),
         handler_factory(config, controller, scheduler, baseball, playout, sources, coordinator, programming, sports,
-                        production_monitor, projector, continuity, crawl_desk),
+                        production_monitor, projector, continuity, crawl_desk, promo_desk),
     )
     controller.recover_operations()
     production_monitor.start()
@@ -1429,6 +1525,8 @@ def serve(config: AppConfig, controller: RokuStreamController) -> None:
         continuity.start()
     if crawl_desk:
         crawl_desk.start()
+    if promo_desk:
+        promo_desk.start()
     if isinstance(controller.feedback, DirectCaptureFeedback):
         controller.feedback.start_contribution()
     print(
@@ -1449,6 +1547,8 @@ def serve(config: AppConfig, controller: RokuStreamController) -> None:
             continuity.close()
         if crawl_desk:
             crawl_desk.stop()
+        if promo_desk:
+            promo_desk.close()
         coordinator.close()
         library.close()
         server.shutdown()

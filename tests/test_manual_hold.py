@@ -88,6 +88,58 @@ class HoldQueueTests(unittest.TestCase):
         self.queue._game_over('mlb', 123, '2026-09-29')
         self.assertNotIn('mlb:123', self.queue._finals)
 
+    def show(self, title, run_in, rank):
+        """A scheduled show; self.ranks[title] is its priority rank (normal 1, high 2)."""
+        self.ranks[title] = rank
+        return self.queue.add_scheduled({'key': title, 'run_at': soon(run_in), 'target': ESPN, 'title': title})
+
+    def ranked(self):
+        self.ranks = {}
+        self.queue.rank = lambda key: self.ranks.get(key, 1)
+
+    def test_a_show_that_outranks_a_held_game_cuts_in_at_its_start(self):
+        self.ranked()
+        self.queue.hold_for(TV, {'game': GAME})
+        lions = self.show('Lions at Panthers', .4, 2)
+        self.wait(lambda: (self.queue.status()['hold'] or {}).get('cut'))
+        hold = self.queue.status()['hold']
+        self.assertEqual((hold['until'], hold['cut']['title'], hold['cut']['until']), (lions.run_at, 'Lions at Panthers', None))
+        self.assertEqual(self.aired, [])
+        self.wait(lambda: self.aired == [ESPN])
+        self.assertGreaterEqual(utc_now(), parse_time(lions.run_at))
+        self.assertEqual(self.ended[0]['game']['game_pk'], 123)
+        self.assertFalse(self.game['finished'])
+
+    def test_a_show_of_equal_priority_waits_for_the_held_game(self):
+        self.ranked()
+        self.queue.hold_for(TV, {'game': GAME})
+        self.show('Lions at Panthers', .05, 1)
+        time.sleep(.2)
+        self.assertEqual((self.aired, self.ended), ([], []))
+        self.assertNotIn('cut', self.queue.status()['hold'])
+        self.game.update(finished=True, status='Final')
+        self.wait(lambda: self.aired == [ESPN])
+
+    def test_the_cut_follows_the_show_and_is_undone_when_it_drops_its_priority(self):
+        self.ranked()
+        own = soon(3600)
+        self.queue.hold_for(TV, {'until': own})
+        later, sooner = self.show('Late show', 1800, 2), self.show('Early show', 900, 2)
+        self.wait(lambda: (self.queue.status()['hold'] or {}).get('until') == sooner.run_at)
+        self.ranks['Early show'] = 1
+        self.wait(lambda: (self.queue.status()['hold'] or {}).get('until') == later.run_at)
+        self.ranks['Late show'] = 1
+        self.wait(lambda: (self.queue.status()['hold'] or {}).get('until') == own)
+        self.assertNotIn('cut', self.queue.status()['hold'])
+
+    def test_play_now_is_not_cut_by_a_show_already_due(self):
+        self.ranked()
+        self.show('Already started', -5, 2)
+        self.queue.hold_for(TV, {'until': soon(3600)})
+        time.sleep(.1)
+        self.assertNotIn('cut', self.queue.status()['hold'])
+        self.assertEqual(self.ended, [])
+
     def test_resume_ends_the_take_now(self):
         self.queue.hold_for(TV, {'until': soon(3600)})
         self.queue.resume()

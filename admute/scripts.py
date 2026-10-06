@@ -96,7 +96,7 @@ class Words:
 
     def __init__(self, path):
         self.path = path
-        self.chunks = speech.words_for(path) or []
+        self.chunks = speech.words_for(path, legacy=True) or []
         self.model = None
 
     def between(self, a, b):

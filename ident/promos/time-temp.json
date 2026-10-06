@@ -1,0 +1,161 @@
+{
+  "id": "time-temp",
+  "version": 1,
+  "name": "Time & Temperature",
+  "kind": "promo",
+  "order": 1,
+  "description": "The 1970s station-break slide: the Washington skyline at dusk, and the time and temperature as they are when it airs, over easy-listening vibes. Voiced by The Daytime Announcer.",
+  "duration": 10.0,
+  "file": "time-temp.mp4",
+  "still": "time-temp.png",
+  "still_at": 6.0,
+  "overlays": [
+    {
+      "field": "time",
+      "box": [
+        256,
+        398,
+        370,
+        140
+      ],
+      "from": 1.5,
+      "to": 9.55,
+      "style": {
+        "font": "URW Bookman",
+        "bold": true,
+        "size": 150,
+        "min_size": 60,
+        "color": [
+          0.3,
+          0.16,
+          0.07
+        ],
+        "shadow": [
+          5,
+          5,
+          0.96,
+          0.69,
+          0.17,
+          1.0
+        ]
+      },
+      "enter": {
+        "kind": "flip",
+        "seconds": 0.35
+      },
+      "exit": {
+        "kind": "fade",
+        "seconds": 0.3500000000000014
+      }
+    },
+    {
+      "field": "ampm",
+      "box": [
+        530,
+        356,
+        92,
+        38
+      ],
+      "from": 1.65,
+      "to": 9.55,
+      "style": {
+        "font": "URW Bookman",
+        "bold": true,
+        "size": 30,
+        "min_size": 16,
+        "color": [
+          0.86,
+          0.38,
+          0.1
+        ],
+        "align": "right",
+        "tracking": 0.1
+      },
+      "enter": {
+        "kind": "fade",
+        "seconds": 0.3
+      },
+      "exit": {
+        "kind": "fade",
+        "seconds": 0.3500000000000014
+      }
+    },
+    {
+      "field": "temperature",
+      "box": [
+        654,
+        398,
+        370,
+        140
+      ],
+      "from": 2.0,
+      "to": 9.55,
+      "style": {
+        "font": "URW Bookman",
+        "bold": true,
+        "size": 150,
+        "min_size": 60,
+        "color": [
+          0.3,
+          0.16,
+          0.07
+        ],
+        "shadow": [
+          5,
+          5,
+          0.96,
+          0.69,
+          0.17,
+          1.0
+        ]
+      },
+      "enter": {
+        "kind": "flip",
+        "seconds": 0.35
+      },
+      "exit": {
+        "kind": "fade",
+        "seconds": 0.3500000000000014
+      }
+    },
+    {
+      "field": "place",
+      "box": [
+        654,
+        540,
+        370,
+        38
+      ],
+      "from": 2.3,
+      "to": 9.55,
+      "style": {
+        "font": "URW Bookman",
+        "bold": true,
+        "italic": true,
+        "size": 26,
+        "min_size": 14,
+        "color": [
+          0.86,
+          0.38,
+          0.1
+        ],
+        "upper": true,
+        "tracking": 0.08
+      },
+      "enter": {
+        "kind": "fade",
+        "seconds": 0.4
+      },
+      "exit": {
+        "kind": "fade",
+        "seconds": 0.3500000000000014
+      }
+    }
+  ],
+  "voice": null,
+  "loudness": {
+    "input": "-14.81",
+    "target": -20.0
+  },
+  "built_at": "2026-10-04T23:07:22-0400"
+}

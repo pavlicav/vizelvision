@@ -73,6 +73,19 @@ class ProjectionTests(unittest.TestCase):
                          [('Phillies at Braves', timedelta(), []), ('News', 30 * M, ['Joins in progress'])])
 
 
+    def test_a_show_of_higher_priority_cuts_a_held_game_at_its_start(self):
+        lions = {'league': 'nfl', 'game_pk': 401, 'game_date': '2026-09-30', 'title': 'Lions at Panthers'}
+        entries = [Entry(at(30 * M), 'News', 'block', NBC, 0, at(2 * H), True),
+                   Entry(at(H), 'Lions at Panthers', 'game', NBC, 1, None, False, lions, rank=2)]
+        rows = self.run_projection(self.game_now(3 * H), entries, finals={401: at(4 * H)})
+        self.assertEqual(rows, [('Phillies at Braves', timedelta(), H, ['Cut when Lions at Panthers starts']),
+                                ('Lions at Panthers', H, 4 * H, []), ('OFF AIR', 4 * H, 6 * H, [])])
+        # Of equal priority it waits for the final and joins in progress.
+        entries[1].rank = 1
+        rows = self.run_projection(self.game_now(3 * H), entries, finals={401: at(4 * H)})
+        self.assertEqual([(r[0], r[1]) for r in rows], [('Phillies at Braves', timedelta()), ('Lions at Panthers', 3 * H),
+                                                        ('OFF AIR', 4 * H)])
+
 class DescribeTests(unittest.TestCase):
     def test_up_next_and_the_schedule_become_one_projection(self):
         tmp = tempfile.TemporaryDirectory()

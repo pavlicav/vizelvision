@@ -4,7 +4,7 @@
   const {h, api, fmt, toast, label} = VV;
   const $ = id => document.getElementById(id);
   const kinds = ['master', 'tv-thing', 'roku'];
-  let data = null, context = null, oscillator = null, continuity = null;
+  let data = null, context = null, oscillator = null, continuity = null, promos = null;
 
   /* The off-air card ------------------------------------------------------------------------------------------ */
   function values() {
@@ -156,6 +156,7 @@
     const tab = tabs.find(t => t.dataset.tab === name) || tabs[0];
     for (const t of tabs) { const on = t === tab; t.setAttribute('aria-selected', String(on)); t.tabIndex = on ? 0 : -1; $('panel-' + t.dataset.tab).hidden = !on; }
     if (tab.dataset.tab === 'continuity') { continuity ||= ContinuityPanel.mount($('continuity-panel')); continuity.refresh().catch(e => toast(e.message, {error: true})); }
+    if (tab.dataset.tab === 'promos') promos ||= PromosPanel.mount($('promos-panel'));
     if (focus) tab.focus();
     if (location.hash !== '#' + tab.dataset.tab) history.replaceState(null, '', '#' + tab.dataset.tab);
   }
@@ -168,7 +169,7 @@
   VV.watch('v1/master', 5000, (m, w) => { if (!w.error) renderIdent(m); });
   VV.watch('v1/continuity', 30000, (c, w) => { if (!w.error) ready = c.ready || {}; });
   document.addEventListener('vv:auth', load);
-  VV.commands.add(['offair', 'captions', 'continuity', 'ident', 'sonic'].map(t => ({id: 'presentation:' + t, title: 'Presentation: ' + {offair: 'off-air card', captions: 'live captions', continuity: 'continuity', ident: 'station ID', sonic: 'sonic identity'}[t], group: 'Presentation', run: () => show(t)})),
+  VV.commands.add(['offair', 'captions', 'continuity', 'ident', 'promos', 'sonic'].map(t => ({id: 'presentation:' + t, title: 'Presentation: ' + {offair: 'off-air card', captions: 'live captions', continuity: 'continuity', ident: 'station ID', promos: 'promos in ad breaks', sonic: 'sonic identity'}[t], group: 'Presentation', run: () => show(t)})),
     {id: 'presentation:tone', title: 'Play or stop the test tone', group: 'Presentation', run: () => $('audition').click()});
   load();
 })();

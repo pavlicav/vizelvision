@@ -36,6 +36,7 @@ from .radio_info import RadioInfo
 from .admute_link import AdMuteLink
 from .admute_settings import AdMuteSettings, DEFAULTS as ADMUTE_DEFAULTS, lane_enabled
 from .my_ads import MyAds
+from .promos import Promos
 from . import crawl
 
 
@@ -72,6 +73,9 @@ class MasterWorker:
         # My ads over muted breaks (my_ads.py, ad_break.py): settings the web app writes.
         self.my_ads = MyAds(config.master.socket_path, lenient=True)
         self.my_ads_error = None
+        # Station promos in the same breaks (promos.py): settings and live values from the web app.
+        self.promos = Promos(config.master.socket_path, lenient=True)
+        self.promos_error = None
         self.eas = crawl.EasAlerts(self.config.eas_url, self.config.eas_areas) if self.config.eas_url else None
         self.nws = crawl.NwsAlerts(self.config.nws_zones) if self.config.nws_zones else None
         # What the output's crawl was last told to run.
@@ -439,6 +443,11 @@ class MasterWorker:
                 except (OSError, ValueError, ConfigError) as exc:
                     my_ads, self.my_ads_error = None, f'Cannot load my ads: {exc}'  # breaks stay as they are
                 self.output.configure_my_ads(my_ads, self.my_ads)
+                try:
+                    promos, self.promos_error = self.promos.snapshot(), None
+                except (OSError, ValueError, ConfigError) as exc:
+                    promos, self.promos_error = None, f'Cannot load station promos: {exc}'
+                self.output.configure_promos(promos, self.my_ads)
         elif self.crawl_wake:
             self._crawl()  # A bulletin just arrived: start it now, not at the next second.
         tracks = self.output.status().values()
@@ -562,7 +571,7 @@ class MasterWorker:
                               'tapped': sorted(k for k, e in self.inputs.items() if e.get('tap'))})
         if getattr(self.output, 'shared_playout', False) is True:
             self._publish(my_ads={**(self.output.my_ads_status() or {'active': False, 'state': 'idle'}),
-                                  'error': self.my_ads_error})
+                                  'error': self.my_ads_error, 'promos_error': self.promos_error})
 
     def _admute_output(self):
         if getattr(self.output, 'shared_playout', False) is True:

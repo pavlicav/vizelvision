@@ -73,18 +73,20 @@ def extract(path: str, *, limit=None, thumbs=False, use_cache=True) -> dict:
 
 
 def run(sig: dict, *, model=None, cfg=None, gate=None, tick: float = 1.0, words=None, latency=None,
-        prints=None, db=None, learn: bool = True) -> dict:
+        prints=None, db=None, learn: bool = True, overlays=None) -> dict:
     """The live loop over a recording: at each tick the detector sees media up to
     the tick (and the words and fingerprints known by then), and the policy acts on
     the stretch ``lookahead`` behind it. Confirmed breaks teach the ad libraries as
-    live (``db``: the known-ads database to start from)."""
+    live (``db``: the known-ads database to start from; ``overlays``: an overlays.Library,
+    by default the catalogue's)."""
     from .detector import ArraySource, Detector
     from .policy import Policy, PolicyConfig
-    from .speech import LATENCY
+    from .speech import GUARD, LATENCY
     cfg = cfg or PolicyConfig()
-    det = Detector(model, prints=db)
+    det = Detector(model, prints=db, overlays=overlays)
     pol = Policy(cfg, gate=gate)
-    src = ArraySource(sig, words, LATENCY if latency is None else latency, prints=prints)
+    # (a window's words come LATENCY after it ends, which is GUARD after the stretch it gives)
+    src = ArraySource(sig, words, LATENCY + GUARD if latency is None else latency, prints=prints)
     learnt = set()
     end = src.available()
     aired, t = 0.0, tick
@@ -232,6 +234,8 @@ def main(argv=None):
     sc.add_argument("--no-gate", action="store_true")
     sc.add_argument("--no-text", action="store_true", help="leave out the transcripts")
     sc.add_argument("--no-prints", action="store_true", help="leave out the audio fingerprints")
+    sc.add_argument("--legacy-words", action="store_true",
+                    help="the 4 s chunk transcripts from before 10/4 (words known 1.5 s after a chunk)")
     sc.add_argument("--lookahead", type=float, default=3.0)
     sc.add_argument("--sensitivity", type=float)
     sc.add_argument("-q", action="store_true")
@@ -245,11 +249,13 @@ def main(argv=None):
         for path in tapes:
             sig = extract(path)
             truth = truths.get(os.path.basename(path))
-            from .speech import words_for
-            words = None if args.no_text else words_for(path)
+            from .speech import LATENCY, SCHEME, words_for
+            legacy = getattr(args, "legacy_words", False)
+            words = None if args.no_text else words_for(path, scheme=None if legacy else SCHEME)
             from .fingerprint import prints_for
             prints = None if args.no_prints else prints_for(path, compute=False)
-            res = run(sig, cfg=cfg, gate=None if args.no_gate else gate_for(truth), words=words, prints=prints)
+            res = run(sig, cfg=cfg, gate=None if args.no_gate else gate_for(truth), words=words, prints=prints,
+                      latency=LATENCY if legacy else None)
             if truth:
                 report(os.path.basename(path), score(res, truth), res, verbose=not getattr(args, "q", False))
             else:

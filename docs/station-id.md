@@ -149,6 +149,17 @@ timings the marquee follows), `ident/sports_jingle.py`, `ident/sports_animation.
 floodlights, the line and the banner). Remove the file to stop it; the plain ID then plays
 before games again.
 
+## Promos and idents in ad breaks
+
+The station's 5- and 10-second bumpers (a legal ID, the time and temperature, and others) play
+in ad breaks, at least one every 15 minutes as breaks allow, not between programmes. See
+[promos.md](promos.md).
+
+**Ads › Idents** (`/ads#idents`) shows them all together: the station's ID card, the station
+ID and the Sports ID with their end cards (click one to play it), the promos, what is on air
+or cued for the next break, and what aired. The IDs' files are served at
+`GET /v1/idents/{station-id,sports-id}.{mp4,png}`; settings stay on Presentation.
+
 ## Turning it off, or changing it
 
 The worker plays `ident/vizelvision-id.mp4`. Rename or remove that file to stop the ID;
@@ -169,7 +180,9 @@ Rebuild with:
 - `ident/jingle.py`: the music (numpy/scipy, run with miniconda's Python), mixed with the
   voice and mastered to −20 LUFS, the loudness of the TV recordings.
 - `ident/animation.py`: the picture (pycairo). `--still SECONDS out.png` draws one
-  frame.
+  frame. The build draws the end card (27.9 s) beside the video as
+  `ident/vizelvision-id.png` (`vizelvision-sports.png` for the Sports ID), the picture
+  Ads › Idents shows.
 - `ident/timeline.py`: the shared hit points, so picture and music stay together.
 
 The build runs at the lowest CPU priority and takes about two minutes. The new file

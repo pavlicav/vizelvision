@@ -9,6 +9,7 @@ window.UpNext = (() => {
 
   function holdText(hold) {
     if (hold.ending) return 'ending now';
+    if (hold.cut) return 'until ' + (hold.cut.title || 'a higher-priority show') + ' cuts in at ' + fmt.clock(hold.until) + (hold.detail ? ' (' + hold.detail + ')' : '');
     if (hold.game) return 'until ' + (hold.game.title || 'the game') + ' ends' + (hold.detail ? ' (' + hold.detail + ')' : '');
     return 'until ' + (hold.program ? hold.program.title + ' ends · ' : '') + fmt.clock(hold.until);
   }
@@ -151,7 +152,7 @@ window.UpNext = (() => {
         const due = (item.run_at ? fmt.when(item.run_at) : item.release_type === 'after_current' ? 'After what is ahead of it' : 'After ' + (item.after_game_title || 'game')) + until;
         const missed = item.program?.end && item.program.end < Date.now() / 1000 && !item.tune_anyway;
         const late = item.program?.start < Date.now() / 1000 && !missed;
-        const why = item.error?.message || (PENDING.includes(item.status) || ['gave_way', 'superseded'].includes(item.gate_status) ? item.gate_detail : null);
+        const why = item.error?.message || (PENDING.includes(item.status) || ['gave_way', 'superseded', 'cut'].includes(item.gate_status) ? item.gate_detail : null);
         const status = h('span', {class: 'chip ' + ({queued: 'touch', running: 'pgm', blocked: 'warn', failed: 'pgm', succeeded: 'pvw'}[item.status] || '')}, item.status);
         const actions = [];
         const action = (text, verb, body = {}, cls = '') => {

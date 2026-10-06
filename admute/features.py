@@ -7,7 +7,8 @@ The maths follows the offline stripper (~/scratch/ad_detection/rec_features.py):
   step    10/s: mean abs difference to the previous step (cuts), and every 5th
           step a 320x180 edge map (the station / score bug)
   audio   10/s: RMS level in dB
-  second  1/s: MobileNet embedding (content identity) and a 64-bin colour histogram
+  second  1/s: MobileNet embedding (content identity), a 64-bin colour histogram, and
+          the edges of the 224x224 picture (overlays drawn on it: YouTube TV's ad label)
 
 Everything lives on grids anchored at input time 0: step k is at k/10 s, second s
 at s. ``trim`` drops what live detection no longer needs; replay keeps it all.
@@ -34,6 +35,18 @@ def edges(g: np.ndarray) -> np.ndarray:
     gx = np.abs(np.diff(g, axis=1, prepend=g[:, :1]))
     gy = np.abs(np.diff(g, axis=0, prepend=g[:1, :]))
     return (gx + gy) > EDGE_THRESH
+
+
+def pic_edges(rgb: np.ndarray) -> np.ndarray:
+    """Edges of the 224x224 colour picture (bool [224, 224]): admute.overlays' "pic" space.
+    The page's pictures are made from the same picture, so overlays drawn from them match."""
+    a = rgb.astype(np.float32)
+    return edges((0.299 * a[..., 0] + 0.587 * a[..., 1] + 0.114 * a[..., 2]).astype(np.int16))
+
+
+def unpack_pic(packed: np.ndarray) -> np.ndarray:
+    side = tap.RGB_SIDE
+    return np.unpackbits(packed)[: side * side].reshape(side, side).astype(bool)
 
 
 def colour_hist(rgb: np.ndarray) -> np.ndarray:
@@ -66,6 +79,7 @@ class Signals:
         self.audio_since = 0
         self.emb: list[np.ndarray] = []
         self.hist: list[np.ndarray] = []
+        self.pics: list[np.ndarray] = []   # packed pic_edges per second (live only: not in snapshots)
         self.seconds_since = 0
         self._prev = None
         self._next_step = 0
@@ -103,10 +117,12 @@ class Signals:
                 continue
             vec = self.embed(f) if self.embed else np.zeros(1, np.float32)
             hist = colour_hist(f)
+            pic = np.packbits(pic_edges(f))
             with self.lock:
                 while self._next_second <= s:      # a missing second repeats the next one
                     self.emb.append(vec)
                     self.hist.append(hist)
+                    self.pics.append(pic)
                     self._next_second += 1
 
     def push_audio(self, t0: float, samples: np.ndarray):
@@ -161,7 +177,7 @@ class Signals:
         with self.lock:
             n = max(0, int(before) - self.seconds_since)
             if n:
-                del self.emb[:n], self.hist[:n]
+                del self.emb[:n], self.hist[:n], self.pics[:n]
                 self.seconds_since += n
 
     def snapshot(self) -> dict:

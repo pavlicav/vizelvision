@@ -179,7 +179,10 @@
     const byId = Object.fromEntries(view.ads.map(a => [a.id, a]));
     $('my-error').textContent = st.error || (st.card?.error && s.enabled ? st.card.error : '') || '';
     let text = 'Off', detail = 'Muted breaks look as ad mute leaves them: the programme\'s picture, muted.', cls = '';
-    if (s.enabled && st.state === 'ad' && st.ad) {
+    if (st.state === 'promo' && st.promo) {
+      text = st.promo.name; cls = 'on';
+      detail = 'A station promo opens this break (Presentation → Promos); your ads follow.';
+    } else if (s.enabled && st.state === 'ad' && st.ad) {
       text = st.ad.name || 'Untitled ad'; cls = 'on';
       detail = 'Your ad is on air in place of the break, the programme in the corner.';
     } else if (s.enabled && st.state === 'card') {
@@ -193,14 +196,15 @@
     big.textContent = text; big.className = 'status-big ' + cls;
     $('my-status-detail').textContent = detail;
     lamp.className = 'lamp' + (cls ? ' pgm' : st.active ? ' pvw' : '');
-    chip.textContent = cls === 'on' ? 'my ad' : cls === 'card' ? 'card' : st.active ? 'armed' : 'idle';
+    chip.textContent = st.state === 'promo' ? 'promo' : cls === 'on' ? 'my ad' : cls === 'card' ? 'card' : st.active ? 'armed' : 'idle';
     chip.className = 'chip' + (cls === 'on' ? ' solid pgm' : cls === 'card' ? ' warn' : st.active ? ' pvw' : '');
     $('now-panel').classList.toggle('live', !!cls);
-    const progress = cls === 'on' && st.ad.duration;
+    const playing = st.state === 'promo' ? st.promo : st.ad;
+    const progress = cls === 'on' && playing && playing.duration;
     $('progress').hidden = !progress;
     if (progress) {
-      $('progress-bar').style.width = Math.min(100, 100 * (st.ad.position || 0) / st.ad.duration) + '%';
-      $('progress-text').textContent = fmt.dur(st.ad.position || 0) + ' / ' + fmt.dur(st.ad.duration);
+      $('progress-bar').style.width = Math.min(100, 100 * (playing.position || 0) / playing.duration) + '%';
+      $('progress-text').textContent = fmt.dur(playing.position || 0) + ' / ' + fmt.dur(playing.duration);
     }
     const cued = st.cued && byId[st.cued];
     $('next').textContent = !s.enabled ? '' : cued ? 'Plays next: ' + (cued.name || 'untitled') + ' (' + fmt.dur(cued.duration) + ')'
@@ -212,6 +216,9 @@
     const names = Object.fromEntries(view.ads.map(a => [a.id, a.name || 'Untitled']));
     const rows = view.recent.slice(0, 40).map(p => p.kind === 'card'
       ? h('tr', null, h('td', {class: 'when'}, fmt.when(p.at)), h('td', null, h('span', {class: 'chip warn'}, 'Break card')), h('td', {class: 'num'}, fmt.dur(p.seconds)), h('td'))
+      : p.kind === 'promo'
+      ? h('tr', null, h('td', {class: 'when'}, fmt.when(p.at)), h('td', null, h('span', {class: 'chip pvw'}, 'Station promo'), ' ', p.name || p.id),
+        h('td', {class: 'num aired'}, fmt.dur(p.seconds) + ' of ' + fmt.dur(p.length)), h('td', {class: 'small muted'}, p.complete ? 'complete' : 'cut short'))
       : h('tr', null, h('td', {class: 'when'}, fmt.when(p.at)), h('td', null, names[p.id] ?? h('i', {class: 'muted'}, (p.name || 'an ad') + ' (deleted)')),
         h('td', {class: 'num aired'}, fmt.dur(p.seconds) + ' of ' + fmt.dur(p.length)),
         h('td', {class: 'small muted'}, p.error ? h('span', {class: 'chip pgm', title: p.error}, 'failed') : p.complete ? 'complete'

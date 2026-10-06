@@ -370,6 +370,9 @@ class WeatherFeed(Feed):
         self.station, self.point, self.place = station, point, place
         self.options = options or (lambda: {'zip': ''})
         self.resolved = None  # (where, forecast URL, [(station id, name)])
+        # The latest reading as numbers, for the time-and-temperature promo (promos.py):
+        # {f, c, place, station, observed_at}.
+        self.observation = None
 
     def _json(self, url):
         return json.loads(self._get(url, {'Accept': 'application/geo+json'}))
@@ -401,6 +404,12 @@ class WeatherFeed(Feed):
             if celsius is None:
                 continue
             text = f'{name}: {observed.get("textDescription") or "Conditions"}, {round(celsius * 9 / 5 + 32)}°F'
+            try:
+                observed_at = datetime.fromisoformat(str(observed.get('timestamp'))).timestamp()
+            except ValueError:
+                observed_at = self.clock()
+            self.observation = {'f': round(celsius * 9 / 5 + 32), 'c': round(celsius, 1), 'place': name,
+                                'station': ident, 'observed_at': observed_at}
             wind = (observed.get('windSpeed') or {}).get('value')
             direction = (observed.get('windDirection') or {}).get('value')
             if wind:

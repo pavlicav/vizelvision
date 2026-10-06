@@ -15,7 +15,13 @@ const muted = {...base, id: 'nws:urn:oid:2.49.0.1', source: 'nws', source_name: 
 run(async browser => {
   const t = await open(browser, '/crawl', {
     edit: F => { F.alerts.items.unshift(severe, muted); F.alerts.counts.looping = 1; F.alerts.counts.muted = 1; },
-    api: {'POST /v1/crawl/*': (body, F) => F.crawl, 'POST /v1/crawl': (body, F) => F.crawl}});
+    api: {'POST /v1/crawl/*': (body, F) => F.crawl, 'POST /v1/crawl': (body, F) => {
+      for (const [segment, options] of Object.entries(body.segments || {})) {
+        assert.ok(Object.keys(options).every(key => ['enabled', 'every', 'changed_only'].includes(key)), 'only valid segment fields are sent');
+        Object.assign(F.crawl.settings.segments[segment], options);
+      }
+      return F.crawl;
+    }}});
   const page = t.page;
   await page.waitForSelector(`#reg-body tr.item[data-id="${BUS}"]`);
   const row = id => page.locator(`#reg-body tr.item[data-id="${id}"]`);
@@ -77,18 +83,34 @@ run(async browser => {
   await page.waitForTimeout(200);
   assert.deepEqual(t.posts.at(-1).body, {rules: {per_hour: 4, gap_minutes: 5, program: 'always', game: 'quiet', off_air: 'always', ident: 'quiet'}});
   await page.locator('[data-tab=segments]').click();
+  const alertDC = page.locator('.seg-card[data-segment=dc_alerts]').getByRole('checkbox', {name: 'AlertDC', exact: true});
+  await alertDC.uncheck();
+  await page.waitForFunction(() => !document.querySelector('[data-segment=dc_alerts][data-field=enabled]').disabled);
+  assert.deepEqual(t.posts.at(-1).body, {segments: {dc_alerts: {enabled: false}}});
+  assert.equal(await page.locator('[data-id=segments-dirty]').innerText(), '', 'switch saves without Save segments');
+  await page.reload();
+  await alertDC.waitFor();
+  assert.equal(await alertDC.isChecked(), false, 'AlertDC stays off after reloading');
   const weather = page.locator('.seg-card[data-segment=weather]');
   await weather.getByLabel('New items pop up at once (once each)').check();
   await page.locator('[data-id=save-segments]').click();
   await page.waitForTimeout(300);
   const [segments, feeds] = t.posts.slice(-2);
   assert.equal(segments.path, '/v1/crawl');
+  assert.deepEqual(segments.body.segments.dc_alerts, {every: t.F.crawl.settings.segments.dc_alerts.every, changed_only: t.F.crawl.settings.segments.dc_alerts.changed_only});
+  assert.equal(t.F.crawl.settings.segments.dc_alerts.enabled, false, 'saving other options keeps AlertDC off');
   assert.equal(feeds.path, '/v1/crawl/feeds');
   assert.equal(feeds.body.segments.weather.new_now, true);
   assert.deepEqual(feeds.body.segments.weather.contexts, ['off_air']);
   await weather.getByRole('button', {name: 'Run Weather now'}).click();
   await page.waitForTimeout(200);
   assert.deepEqual(t.posts.at(-1).body, {segment: 'weather'});
+  await alertDC.check();
+  await page.waitForFunction(() => !document.querySelector('[data-segment=dc_alerts][data-field=enabled]').disabled);
+  assert.deepEqual(t.posts.at(-1).body, {segments: {dc_alerts: {enabled: true}}});
+  await page.reload();
+  await alertDC.waitFor();
+  assert.equal(await alertDC.isChecked(), true, 'AlertDC can be turned back on permanently');
 
   // Sources, teams and messages.
   await page.locator('[data-tab=feeds]').click();

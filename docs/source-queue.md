@@ -86,6 +86,17 @@ The default is the game when one is matched, then the listed program, then the h
 
 Preparing or cancelling another source keeps the end. Return to fallback, the operator's **Pause queue**, and manual Roku navigation away from an on-air Roku feed clear it, and the queue then stays paused as before. A take without an end (API clients that omit `until`) also pauses the queue indefinitely. The end is not saved across a web restart: startup always pauses for review.
 
+## Priority: a show that outranks what is on air cuts in (October 4)
+
+Each scheduled show or game has a **priority**: Low, Normal (the default) or High. It is set on the Schedule page's form, or changed on the upcoming list (`POST /v1/programming/shows/<id>` with `{"priority": "high"}`). Grid blocks, OFF AIR, and takes queued by hand are Normal. A show's priority is read live, so changing it also affects a game already on air.
+
+- **A show that outranks what holds master cuts in at its start.** For a take held by hand (until a game's final, a program's end or a time), the hold's end moves to the show's start. The station ID, the warm-up and the hand-back then run as they do for an end time, and Up next says *until <show> cuts in at <time>*. The hold keeps its own end under `hold.cut.until` and goes back to it if the show is removed or loses its priority. Only shows starting after the take do this: **Play now** is not cut by a show that is already due.
+- **A scheduled game on air** is cut the same way. Once the show is due (its early preparation, or the station ID's 30 s), the entries ahead of it are skipped as `cut`. These are the game's return to the schedule, which was waiting for the final, and anything overdue behind it, provided each has a lower priority.
+- **Equal or lower priority changes nothing:** what is on air keeps master, and the show joins in progress afterwards, as before.
+- **A program show starting inside one that outranks it** waits for that one to end. A game held back this way joins in progress, and returns to the schedule from that point.
+
+The first use was 2026-10-04: Braves at Dodgers (FS1, held by hand until its final) was to play until Lions at Panthers started at 8:20 PM. That night the hold's end was set to 8:20 with `POST /v1/master/hold`, before this was deployed.
+
 ## Feed recovery (October 1)
 
 A live program whose feed fails on air goes back on by itself. Before this, on October 1
@@ -192,6 +203,50 @@ already failed its input. It then stayed on the antenna, which is the worse pict
   on the antenna`. Up next says *Preparing … on the Roku; it replaces the antenna once
   ready*. Tests: `tests/test_back_to_youtube_tv.py`, `tests/test_input_stalls.py`,
   `tests/test_feed_recovery.py`, `tests/test_antenna.py`.
+
+### The Roku still playing: back on without navigating (October 4, afternoon)
+
+A Roku feed that fails is nearly always a blip in the capture card, not the Roku. At 13:35
+the Sunday Ticket game failed ("video over a second behind its audio"). Its verification
+was over 15 minutes old, so it went back on by navigating Sunday Ticket again, which took
+2 minutes. At 13:39 it failed again. The reattach without navigating failed 6 s in on a
+12 ms audio step back. That threw the selection away, so the game was navigated again,
+and the new feed failed the same way (43 ms) at 13:41. The game was off the air for
+5 minutes while the Roku played it all along.
+
+- **A small step back while preparing is dropped** (`DecodedInput._repeats`). A fresh
+  session on the Roku capture repeats a few ms of audio several times in its first
+  seconds. Each step back used to re-anchor the input, and once the re-anchors ran out
+  (5 a minute) the preparation failed. A live input being prepared now drops a frame
+  under a second behind what it already delivered, as overlap, as it does on air. A
+  rewind over a second still re-anchors, and files are unchanged.
+- **What the Roku plays is remembered until it navigates** (`SourceCoordinator.playing`).
+  This is the target and the ECP app it was verified in. Every navigation clears it,
+  including an operator's (`navigation_guard`). A restart clears it too.
+- **A brief check, then a reattach** (`_not_playing`, `_resume_roku`). When a queue entry
+  (`_queue`, `_preroll`, `_upgrade`) needs what the Roku still plays, it checks three things:
+  - the Roku is in the same app;
+  - ECP's player says `play`;
+  - the capture card shows a moving picture within `PLAYING_SECONDS` (4 s).
+
+  This covers the cases where the 15-minute reuse has lapsed or the capture restarted. If
+  the check passes, the verification is renewed and the feed goes back on without
+  navigating. The selection is kept, so an input on air still holds it. A restarted
+  capture gets a new selection of the same feed. A failed check, or any navigation since,
+  navigates as before. A manual *take known* still needs a recent preparation.
+  "Moving" means over 0.5% of the sampled bytes changed by over 24 levels between two
+  fresh frames. During play that day 46–64% changed; a near-still ad end card changed
+  2–3%.
+- **Feed recovery asks first** (`SourceQueue.roku_playing`). The Roku goes back on before
+  the antenna when it passes the check, because it is as fast and the picture is
+  better. A check that passed holds for 20 s, so the reattach does not repeat it. It
+  counts against the Roku's recovery budget as before. Once that budget is used up, the
+  antenna goes on.
+
+Logs: `The Roku still plays …; its feed goes back on without navigating (the capture card
+last stalled 1.8 s, at 13:39:14)`, or `The Roku no longer plays … (its player is pause);
+putting it back on from the Roku means navigating`. Tests: `tests/test_source_coordinator.py`
+(`StillPlayingTests`), `tests/test_feed_recovery.py`, `tests/test_input_stalls.py`.
 
 ## YouTube TV or the antenna (October 3)
 

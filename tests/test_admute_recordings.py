@@ -62,6 +62,7 @@ class PlanTests(unittest.TestCase):
         self.assertEqual(body["channel_id"], "wttg_dt_5_1")
         self.assertEqual(body["end"] - body["start"], R.LEAD + R.LENGTH)
         self.assertIn("(ad training)", body["title"])
+        self.assertIs(body["from_live"], True, "copies the live stream, no second encode")
         self.assertEqual(self.rec.state["recordings"]["mlb-1"]["status"], "scheduled")
         self.assertIn("cable only", self.rec.state["skipped"]["mlb-2"]["why"])
         self.rec.plan()

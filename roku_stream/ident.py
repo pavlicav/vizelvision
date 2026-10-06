@@ -13,6 +13,7 @@ Remove or rename the file to stop the ID; a rebuilt file is picked up on its own
 """
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from .library import FileLease
@@ -33,11 +34,24 @@ IDENT_PATH = Path(__file__).resolve().parent.parent / 'ident' / 'vizelvision-id.
 # cues a copy named sports-<hash>.mp4 from its announcements folder (continuity.py).
 SPORTS_IDENT_PATH = IDENT_PATH.with_name('vizelvision-sports.mp4')
 SPORTS_PREFIX = 'sports-'
+# The two IDs as the web app serves them (Ads › Idents), each a video and its end card's
+# still, which ident/build.py draws beside the video (vizelvision-id.png).
+IDENT_FILES = {'station-id': IDENT_PATH, 'sports-id': SPORTS_IDENT_PATH}
 
 
 def is_sports_ident(name):
     """Whether a cued ID file, by the name the worker reports, is the Sports ID."""
     return isinstance(name, str) and name.startswith(SPORTS_PREFIX) and name.endswith('.mp4')
+
+
+def ident_file(name):
+    """An ID's video or still by its published name (station-id.mp4, sports-id.png); None
+    when the name is unknown or the file has not been built."""
+    found = re.fullmatch(r'(station-id|sports-id)\.(mp4|png)', name) if isinstance(name, str) else None
+    if not found:
+        return None
+    path = IDENT_FILES[found[1]].with_suffix('.' + found[2])
+    return path if path.is_file() else None
 
 
 def file_identity(path):

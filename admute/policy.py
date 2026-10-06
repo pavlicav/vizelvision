@@ -12,6 +12,16 @@ that gets through.
   * Unmute as soon as P(ad) < t_unmute, at the cap, or when the sports feed says
     play resumed. After the cap or an "it's the show" override, stay audible until
     a stretch of show has passed.
+  * "It's an ad" holds for at least min_hold whatever the detector says, then until
+    a seam into show (one seen during the lock counts if it is still the show) or the cap.
+  * Never while a score bug the detector trusts is up (admute/overlays.py): the break
+    begins once the game's graphics have gone. Only the operator mutes over one.
+  * At once while an ad player's label is up (YouTube TV's "Sponsored"): no seam, P(ad)
+    or settled look ahead needed, and the mute holds while the label stays up, even if the
+    sports feed says play is live (still not in the grace after a take, or after "it's
+    the show").
+  * ``bug_return`` (off: on 10/5 it held mutes through the stadium b-roll a game comes
+    back on): the detector ends a mute only where the score bug is back.
   * Stable within a break (hysteresis from the lookahead, so nothing is delayed): a
     mute starts only if the seconds already seen beyond it stay ad-like, and ends on a
     dip only if everything seen beyond it agrees it is the programme. Early in an
@@ -60,6 +70,11 @@ class PolicyConfig:
     # detector second-guessing a sports-looking ad.
     break_hold: float = 130.0          # MLB tape: the game came back 124-167 s after the feed's end of inning
     break_z: float = -2.5
+    min_hold: float = 10.0            # an operator's "it's an ad" stays quiet at least this long
+    agree: float = 3.0                # a mute ends when the next this-many seconds seen ahead agree it's the programme
+                                      # (all of the look-ahead, 8 s, until 10/5: returns came back late)
+    overlay_veto: bool = True         # no mute starts while a trusted score bug is up
+    bug_return: bool = False          # the detector ends a mute only where the score bug is back (too late: off)
 
     @classmethod
     def from_sensitivity(cls, sensitivity: float, **kw) -> "PolicyConfig":
@@ -98,6 +113,8 @@ class Policy:
     need_seam: bool = False           # just unmuted: re-mute only at a seam (cfg.rearm)
     show_since: float | None = None
     held: str | None = None           # 'mute' while an operator's mute holds
+    held_at: float | None = None      # when the operator said "it's an ad"
+    held_seam: bool = False           # a seam into show seen since, with nothing ad-like after it
     break_since: float | None = None  # when the feed's current between-innings window began
     unmuted_at: float | None = None
 
@@ -129,6 +146,7 @@ class Policy:
         for i, seg in enumerate(segments):
             t, p = seg.start, seg.p_ad
             rest = [r.p_ad for r in segments[i + 1:] + ahead]
+            near = [r.p_ad for r in segments[i + 1:] + ahead if r.start < t + c.agree]
             gate = self.gate(t) if self.gate else None
             if gate != "break":
                 self.break_since = None
@@ -142,22 +160,31 @@ class Policy:
                     self.need_seam = False
             else:
                 self.show_since = None
+            labelled = getattr(seg, "ad_overlay", None)
             if self.current:
                 span = self.current
                 span.peak = max(span.peak, p)
-                if p >= c.t_confirm:
+                if p >= c.t_confirm or labelled:
                     span.confirmed = True
                 if self.held == "mute":
-                    if (seg.seam and p < c.t_unmute) or t - span.start >= max(c.max_mute, c.max_mute_gated):
+                    if p >= c.t_unmute:
+                        self.held_seam = False
+                    elif seg.seam:
+                        self.held_seam = True
+                    locked = t - self.held_at < c.min_hold
+                    if not locked and (self.held_seam or t - span.start >= max(c.max_mute, c.max_mute_gated)):
                         self.held = None
                         self._close(t, "show" if p < c.t_unmute else "capped")
                     continue
-                if gate == "live":
+                back = not (c.bug_return and getattr(seg, "bug_after", None) is False)
+                if labelled and t - span.start < (c.max_mute_gated if gate else c.max_mute):
+                    pass                                  # an ad player's label: an ad, for sure
+                elif gate == "live":
                     self._close(t, "gated")
-                elif (gate and seg.seam in ("black", "silence") and t - span.start >= c.typical_break
+                elif (gate and back and seg.seam in ("black", "silence") and t - span.start >= c.typical_break
                       and (seg.post_z is None or seg.post_z < c.z_hold)):     # (not a cut: ads cut every few seconds)
                     self._close(t, "show")
-                elif (p < c.t_unmute and all(r < c.t_unmute for r in rest)
+                elif (back and p < c.t_unmute and all(r < c.t_unmute for r in near)
                       and (gate != "break" or t - self.break_since >= c.break_hold
                            or (seg.seam and seg.post_z is not None and seg.post_z <= c.break_z))):
                     self._close(t, "show")
@@ -168,16 +195,18 @@ class Policy:
                 continue
             known = getattr(seg, "known", False)
             clear_cut = seg.seam == "cut" and seg.post_z is not None and seg.post_z >= c.cut_z
-            where = (c.open_at == "any" or known or seg.seam == "black" or (c.open_at == "seam" and clear_cut))
-            rearmed = seg.seam == "black" or (seg.seam == "cut" and "cut" in c.rearm and clear_cut
-                                              and t - (self.unmuted_at or -1e9) >= c.rearm_gap)
-            if (p >= c.t_provisional and not self.suppressed and gate != "live"
+            where = (c.open_at == "any" or known or labelled or seg.seam == "black"
+                     or (c.open_at == "seam" and clear_cut))
+            rearmed = seg.seam == "black" or labelled or (seg.seam == "cut" and "cut" in c.rearm and clear_cut
+                                                          and t - (self.unmuted_at or -1e9) >= c.rearm_gap)
+            over = c.overlay_veto and getattr(seg, "overlay", None) and not labelled
+            if ((p >= c.t_provisional or labelled) and not self.suppressed and (gate != "live" or labelled) and not over
                     and t >= self.start + c.grace and edge - t >= c.min_evidence and where
                     and (rearmed or not self.need_seam)
-                    and all(r >= 0.5 for r in rest)):     # not a flash: what follows stays ad-like
+                    and (labelled or all(r >= 0.5 for r in rest))):     # not a flash: what follows stays ad-like
                 self.need_seam = False
                 self._open(t, seam=seg.seam, p=p)
-                if p >= c.t_confirm:
+                if p >= c.t_confirm or labelled:
                     self.current.confirmed = True
 
     # operator overrides --------------------------------------------------------
@@ -190,13 +219,13 @@ class Policy:
             self.suppressed, self.show_since = True, None
 
     def override_mute(self, t: float):
-        """'It's an ad': quiet now, held until a seam into show or the cap."""
+        """'It's an ad': quiet now, for at least min_hold, then until a seam into show or the cap."""
         if self.current:
             self.current.confirmed = True
         else:
             self._open(t, reason="override")
             self.current.confirmed = True
-        self.held = "mute"
+        self.held, self.held_at, self.held_seam = "mute", t, False
         self.suppressed = False
 
     def finish(self, t: float):

@@ -11,7 +11,8 @@ build the VizelVision Sports ID instead (vizelvision-sports.mp4), which plays be
 
 Everything runs at the lowest CPU priority: the live master shares this machine.
 The finished file replaces the old one in a single rename, so a master that is
-playing the ID keeps reading the old copy undisturbed.
+playing the ID keeps reading the old copy undisturbed. Its end card is drawn beside
+it as a still (vizelvision-id.png), the picture the web app shows for it.
 """
 import argparse
 import json
@@ -36,6 +37,9 @@ BUILD = HERE / 'build'
 MUSIC = BUILD / 'music.wav'  # The jingle without its voice, for continuity announcements.
 LOUDNESS = -20.0   # LUFS: the TV-Thing recordings measure about -20.
 TRUE_PEAK = -2.0
+# The end card master holds while the next source gets ready (roku_stream/ident.py
+# IDENT_HOLD_AT), drawn beside the video as its still for the web app (Ads › Idents).
+STILL_AT = 27.9
 
 
 def numpy_python(explicit):
@@ -135,6 +139,7 @@ def main(argv=None):
     partial, loudness = encode(audio, args.workers, picture, output)
     duration = verify(partial)
     partial.replace(output)
+    picture.still(STILL_AT, output.with_suffix('.png'))
     print(f"Done: {output} ({duration:.2f} s, {output.stat().st_size / 1e6:.1f} MB, "
           f"audio {loudness['input_i']} LUFS -> {LOUDNESS:g})")
 

@@ -147,10 +147,25 @@ run(async browser => {
   // The last hour is drawn behind the machinery switch.
   await page.keyboard.press('m');
   assert.equal(await page.locator('#timeline').isVisible(), true);
-  assert.match(await page.locator('#model').textContent(), /Whisper base\.en · 41% of a core/);
+  assert.match(await page.locator('#model').textContent(), /Whisper base\.en · busy 41%/);
   assert.match(await page.locator('#model').textContent(), /31 known ads \(13 heard once\) · 3 show sounds/);
   const painted = await page.evaluate(() => { const c = document.getElementById('timeline'); const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; let n = 0; for (let i = 3; i < d.length; i += 4) n += d[i] > 0; return n; });
   assert.ok(painted > 1000, 'the timeline is painted');
+  assert.equal(await page.locator('#speech-model-row').isVisible(), false, 'the captured web app has no model setting');
+  assert.deepEqual(t.errors, []);
+  await t.ctx.close();
+
+  // The Whisper model, from a web app that has the setting; how late the words come.
+  t = await open(browser, '/ads#admute', {edit: F => { F.admute.settings.speech_model = 'base.en'; F.admute.detector.speech.lag = 5.2; },
+    api: {'POST /v1/admute': (body, F) => view(F, body)}});
+  await t.page.waitForSelector('#spans tr');
+  assert.equal(await t.page.locator('#speech-model').inputValue(), 'base.en');
+  await t.page.locator('#speech-model').selectOption('small.en');
+  await t.page.locator('#save').click();
+  await t.page.waitForTimeout(150);
+  assert.equal(t.posts.at(-1).body.speech_model, 'small.en');
+  await t.page.keyboard.press('m');
+  assert.match(await t.page.locator('#model').textContent(), /words up to 5\.2 s late/);
   assert.deepEqual(t.errors, []);
   await t.ctx.close();
 

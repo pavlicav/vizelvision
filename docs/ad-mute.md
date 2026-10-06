@@ -12,7 +12,7 @@ there). The two quick fixes are also on
 
 ```text
  source ─▶ DecodedInput ─┬─▶ analysis copies ───▶ vizelvision-admute (the detector)
-                         │   picture · sound          1. watch   black frames, bug, picture
+                         │   picture · sound          1. watch   black frames, overlays, picture
                          │                            2. listen  Whisper words, sound fingerprints
                          │                            3. weigh   one logistic model, per second
                          │                            4. decide  seams + Viterbi -> P(ad)
@@ -43,9 +43,11 @@ there). The two quick fixes are also on
   - grey 320x180 at the source rate
   - colour 224x224 once a second
   - 16 kHz mono sound
-- **Lookahead:** the detector judges the moment about to air 3 s behind its newest
-  frame, or 5 s with captions on. So it has seen and heard what follows a seam before
-  that sound reaches anyone.
+- **Lookahead:** the detector judges the moment about to air `lookahead` seconds (3 s by
+  default, at most 8 s; this station runs 8 s) behind its newest frame, or at least 5 s
+  with captions on. So it has seen and heard what follows a seam before that sound
+  reaches anyone. Words come 2–7 s after they are said, so only a long lookahead lets
+  them count at a break's first seconds.
 - **Fail-safe:** if that were ever wrong, master's lease would lapse and the sound
   come back.
 - **Keeping up:** the lookahead only helps while every signal reaches the newest
@@ -58,10 +60,33 @@ there). The two quick fixes are also on
 
 ### 2. It listens
 
-- **Words** (`admute/speech.py`, `admute/text.py`). The detector runs its own Whisper
-  (base.en, one CPU thread, 4 s chunks) on each analysed source, whether or not
-  captions are on. Per second, from the words around it but never across a black frame,
-  it weighs:
+- **Words** (`admute/speech.py`, `admute/text.py`). The detector runs its own Whisper on
+  each analysed source (since 10/4):
+  - **Windows:** 8 s of sound every 4 s, so each word is heard twice. A window gives
+    the words from where the one before stopped to 1 s before its own end; a word cut
+    off at an edge comes from the window that heard it whole. (Before: 4 s chunks with
+    no context, which chopped the words at their edges.)
+  - **A lane per source:** each source's windows wait in their own queue (at most 2;
+    older ones are dropped and those seconds are judged without words). Two sources are
+    transcribed at once, one thread each, by one model. (Before: one thread for all,
+    with the oldest of 3 chunks dropped.)
+  - **Speech over music counts:** a segment goes only if Whisper itself would call it
+    silence (no speech *and* unsure), or it is garbage (avg log-prob ≤ −1.5), a loop, or
+    a stock hallucination ("Thank you."). The VAD threshold is 0.35. Live captions'
+    filters, which this used to copy, drop speech over music: most ads.
+  - **Names as a prompt:** the programme's title, and for an MLB game its teams and
+    then its lineups, pitchers and rosters (from the feed the sports gate already
+    reads), so Whisper spells them the same way and the programme vocabulary knows them.
+  - **Model:** `speech_model` (Ads page), base.en by default. A model that is not
+    cached falls back to base.en. small.en hears more but costs about four times as
+    much; on this box (4 cores, 8 threads, and the sidecar capped at 1.5 cores by its
+    unit) it cannot keep up live. distil-large-v3 is out of reach without a GPU it can
+    use (the Quadro K4200 is too old for CTranslate2's CUDA).
+  - **Shared with captions:** the words go to master with each decision; with captions
+    on and at least 8 s of programme delay, captions use them instead of a second
+    Whisper ([live captions](live-captions.md)).
+
+  Per second, from the words around it but never across a black frame, it weighs:
   - a word lexicon learnt from labelled recordings
   - ad wording heard before
   - words repeated from earlier in the broadcast
@@ -85,12 +110,66 @@ come, and the decision waits for them, but never more than 10 s behind.
 `admute/detector.py` combines everything, per second, in one logistic model
 (`admute/model.json`, fitted by `admute.train`):
 - **picture:**
-  - the station or score bug, learnt from the last 15 minutes
+  - the station or score bug, learnt from the last 15 minutes (anything spanning 3/4 of
+    the width or more is left out: a ticker runs through the breaks)
+  - the overlays it knows (below): a score bug or logo up means the programme, YouTube
+    TV's ad label means an ad
   - cutting since the last black frame
   - whether it looks like the programme of the last 3–45 minutes
   - whether it looks like seconds already called ads
-- **words and sound,** as above. The weight of known show sound is set by hand, and
-  negative.
+- **words and sound,** as above. The weights of known show sound and of the overlays
+  are set by hand (`admute.train` keeps them).
+
+#### Overlays (`admute/overlays.py`)
+
+The graphics a broadcast keeps on screen, each where it sits. Unlike the generic bug,
+they are specific, need no 15 minutes to learn, and are remembered per channel.
+
+| Overlay | Where | Evidence per second while up | Policy |
+|---|---|---|---|
+| a **score bug** | NBC's and TBS's MLB top left, FOX's bottom right, NBC's SNF bottom centre | `ov_score` −4 (the programme) | no mute starts under one |
+| a **network or station logo** | FOX's bug, NBC's SNF bug, top right | `ov_logo` −1.5 | — |
+| **YouTube TV's ad label** | the "Sponsored" pill top left, over the ads it inserts | `ov_ad` +6 (an ad) | a mute starts at once (no seam), and holds while it is up |
+
+Absence says nothing: replays and crowd shots drop the score bug. So a break is called
+once the programme's graphics have gone. An ad label up with a trusted score bug is not
+counted (the score bug wins).
+
+- **Templates:** in a box, the pixels that are edges while the graphic is up and the
+  pixels by them that are flat. It is up when the first are edges and the second are not,
+  within 2 px of where it was learnt. Score bugs and logos are matched on the 320x180
+  edge maps (2/s); the ad label on the 224x224 picture (1/s), the same picture the page's
+  pictures are made from, so a template drawn from them sees the same thing live (every
+  JPEG edge on text is an edge live too).
+- **The ad label** fires at its normal level (0.35) only next to a clear second (0.5):
+  on 10/5, TBS's own top-left graphics reached 0.43; the label passed 0.5 within a second
+  of each of the six YouTube TV pods' starts (19:17, 19:35, 20:03, 20:31, 21:24, 21:47),
+  and was never up in ~3 h of the game.
+- **The catalogue** (`admute/overlays.json`): NBC's and FOX's MLB score bugs, FOX's bug
+  (learnt from the labelled tapes: up 76–92% of the programme, 0–0.3% of the ads),
+  NBC's SNF score bug and bug (from the unlabelled 10/4 tape, so *pending* until seen
+  against breaks live), and the YouTube TV label (drawn from the 10/5 pods). NBC's MLB
+  peacock is left out: it is translucent, so its edges follow the picture behind it, and
+  NBC puts it on its own promos inside breaks (43 s in the 10/1 game's first break).
+- **Learnt live** (`admute-overlays.json`), per channel, from the detector's settled
+  seconds of the last 15 min: a graphic near the frame's border that is up in at least a
+  quarter of the programme, in at most 3% of its breaks, and stays up across at least 60%
+  of the programme's hard cuts it was up before. On the tapes, score bugs and logos kept
+  up across 88–95% of cuts, Jeopardy's set pieces (same place in every shot from one
+  camera) 0–17%. Only programme graphics are learnt live: a wrongly learnt ad label would
+  mute the programme.
+- **Off switch:** `"overlays": false` in `admute/model.json`, then restart the detector:
+  nothing is matched or learnt, so no overlay evidence, no score-bug veto and no ad label.
+- **Not overfitting:**
+  - Bands (3/4 of the width or more: tickers and crawls, which keep running through a
+    sports talk show's breaks) and lines along the frame are never overlays.
+  - A graphic up in more than 10% of the breaks is rejected for that channel: a ticker's
+    pieces, a bug left on through breaks. WJLA kept abc7 up over Jeopardy's national
+    spots on 10/5 (and showed no bug at all on 9/28 and 10/2).
+  - Any programme overlay seen up during clear ads (a known ad's sound, or "It's an
+    ad") stops counting for the session; an ad label seen up during clear programme
+    (known show sound, or "It's the show") likewise. After two such sessions it is
+    rejected for good.
 
 ### 4. It decides where breaks are
 
@@ -107,7 +186,9 @@ come, and the decision waits for them, but never more than 10 s behind.
   peak) is a seam too. Black stays cheaper, so where a station marks its breaks with
   black, black still wins.
 - **A short backward pass** gives P(ad) for the moment about to air.
-- **No warm-up:** muting may start from the end of the grace after a take. The
+- **No warm-up:** muting may start from the end of the grace after a take. A detector
+  restart is no take: an input that was on air when it stopped (in admute-state.json,
+  under 2 minutes old) gets no grace. The
   programme memory (recurrence, colour) needs ~5 minutes of the programme before it
   says anything; until then the other evidence decides alone. Until 10/3 nothing was
   muted before the memory existed (except a clearly known ad); the user dropped that
@@ -123,12 +204,17 @@ come, and the decision waits for them, but never more than 10 s behind.
     rule keeps camera cuts in the programme from opening a mute.
   - In games it may start wherever the detector is sure, because NBC flashes black
     inside breaks, not always at their edges.
+  - **Never under a score bug** the detector trusts (see Overlays): the break begins once
+    the game's graphics have gone. Only the operator mutes over one.
+  - **At once on YouTube TV's ad label:** no seam, P(ad) or settled look ahead needed; it
+    is confirmed at once and holds while the label is up. Still not in the grace after a
+    take, while MLB's feed says play is live, or after "It's the show".
 - **Confirm or retract:** the mute must **confirm** (≥ T_confirm) within 10 s, or it
   is retracted.
 - **Steady, not flickering:** the lookahead decides both ways, so nothing waits longer.
   - A mute starts only if the seconds already seen beyond that point stay ad-like.
-  - It ends when P(ad) < T_unmute **and** everything seen beyond agrees it's the
-    programme.
+  - It ends when P(ad) < T_unmute **and** the next 3 s seen beyond agree it's the
+    programme. (All of the look-ahead, 8 s, until 10/5: returns came back late.)
   - A one-second flash therefore neither starts nor ends a mute.
 - **Inning breaks:** for the first 130 s after MLB's feed says the inning ended, a mute
   ends only at a seam into clearly the programme (the seconds after it read −2.5 or
@@ -145,6 +231,24 @@ come, and the decision waits for them, but never more than 10 s behind.
 - **Caps:** a mute ends after 300 s, or 240 s with a sports feed.
 - **MLB gate:** with a game held on air, MLB's live feed vetoes mutes while play is
   live, and ends a mute still running.
+  - It reads the feed as it comes. (YouTube TV runs 12–20 s behind the feed, so "live"
+    can end a mute a few seconds before a break's last ad does; reading the feed that far
+    behind, tried on 10/5, held a TBS mute 15 s into the game instead. Returns win.)
+  - Play is live only while pitches are coming (at most 90 s apart). A longer gap inside
+    a half-inning (a pitching change the feed hasn't reported yet, a review, an injury)
+    gives no opinion, and the detector decides.
+  - A half-inning is in progress only once it has a pitch. MLB's linescore turns to the
+    next half ("Bottom 8, 0 outs") as soon as the last one ends; taking the finished half
+    for it said "live" through the break's ads (TBS, 10/5 22:56).
+  - YouTube TV's ad label beats it: those ads only run in breaks.
+  - **It fails towards the detector alone:** a feed that won't answer is believed for 60 s,
+    then says nothing; a feed whose newest pitch is over 6 minutes old (no break is that
+    long: it is stuck, or another game's) says nothing. Saying nothing blocks, ends and
+    holds no mute. Polling runs on its own thread (4 s timeout), so it never stalls
+    detection.
+- **A score bug's return** speeds the sound back (its evidence), but its absence never holds
+  a mute: games come back on stadium b-roll without it. (Requiring it, `bug_return`, was
+  tried on 10/5 and held mutes through the b-roll; it is off.)
 - **In master** (fail audible):
   - The gain follows the detector's schedule only until its lease, about 2 s ahead,
     then fades back up.
@@ -164,6 +268,7 @@ come, and the decision waits for them, but never more than 10 s behind.
   confirms, not every half second. New words never restart the badge's fade-in.
   For example:
   - `95% · KNOWN AD` / `Braves at Dodgers · heard 3x`
+  - `100% · AD LABEL` / `YouTube TV ad label (Sponsored) on screen`
   - `90% · PICTURE` / `no station or score bug + fast cutting · black frame`
   - `YOU · it's an ad` / `detector: 0% ad`
 
@@ -175,7 +280,8 @@ come, and the decision waits for them, but never more than 10 s behind.
 
 - **It's the show** (u): the sound comes back now, and there is no new mute until the
   programme has run a while. If a known ad was playing, that clip is forgotten.
-- **It's an ad** (a): mutes now, until the programme comes back at a seam (or the cap).
+- **It's an ad** (a): mutes now, for at least 10 s whatever the detector says
+  (`min_hold`), then until the programme comes back at a seam (or the cap).
 - Both act on the picture shown beside them, which is what is on master now. Your own
   player runs a few seconds behind it.
 - Fixes and review marks go to `admute-labels.jsonl` as training data (with *Keep my
@@ -252,7 +358,7 @@ and where they came from). They are filled in three ways:
 | A known ad airs again and part of it has no script yet | the broadcast, once that airing is over (`PrintEvidence.scribe`). Clips learnt before 10/3, and stored whole breaks, fill in a spot at a time |
 | A recording holds it (`python -m admute.scripts backfill`, and every training recording) | the recording's cached words, or Whisper on just that stretch. The clip is found window by window (8 s), so an ad inside a stored break is found on its own |
 
-A stretch Whisper did not hear (speech off, or a chunk dropped while it was behind) gives
+A stretch Whisper did not hear (speech off, or a window dropped while it was behind) gives
 no script rather than an empty one; an empty script means it heard the stretch and there
 were no words (music only). A part already scripted is replaced only by a clearly fuller
 one.
@@ -339,7 +445,8 @@ Settings (**Save settings**; the mode and sound reach master within a second):
 | | Use MLB's live feed: never mute while play is live | on |
 | | Never mute these programmes (title substrings) | — |
 | How it decides | Sensitivity (cautious ↔ eager) | balanced |
-| | Listen to what is said (Whisper), about a third of a core per source | on |
+| | Listen to what is said (Whisper), about half a core per source | on |
+| | Whisper model (only cached models load; others fall back to base.en) | base.en |
 | | Longest mute | 300 s |
 | | Lookahead (applies to sources prepared after saving) | 3 s |
 | What it learns | Recognise ads heard before (audio fingerprints) | on |
@@ -369,10 +476,11 @@ Beside the master socket (`state/master-candidate/`):
 | `admute-recordings.json` | training recordings: planned, recording, learnt, and those left out |
 | `admute-recordings-skip.json` | games you cancelled on the page |
 | `admute-frames/<input>/<second>.jpg` | the page's pictures: 256x144, one a second, kept 3 h |
+| `admute-overlays.json` | overlays learnt live (per channel), and what happened to the catalogue's (rejected, strikes) |
 | `admute.sock` | master ↔ detector |
 
-In the repository: `admute/model.json` (the model), `admute/known_ads_extra.npz` (the
-seed), `admute/truth/` (hand labels) and `admute/truth/auto/` (labels from training
+In the repository: `admute/model.json` (the model), `admute/overlays.json` (the overlay
+catalogue), `admute/known_ads_extra.npz` (the seed), `admute/truth/` (hand labels) and `admute/truth/auto/` (labels from training
 recordings).
 
 ## Tools
@@ -382,7 +490,7 @@ cd ~/vizelVision
 PY=/home/vivian/miniconda3/bin/python3
 # recordings, once each (cached in state/admute/cache)
 $PY -m admute.replay extract TAPE --thumbs     # picture and sound features
-$PY -m admute.speech TAPE                      # Whisper words, in live-sized chunks
+$PY -m admute.speech TAPE [--title T]          # Whisper words, in live-sized windows (cache: words.MODEL.w8.*)
 $PY -m admute.fingerprint TAPE                 # sound fingerprints
 # known ads from recordings
 $PY -m admute.seed recording TAPE...           # its labelled ad blocks (truth file or the stripper's "(no ads).json")
@@ -394,6 +502,13 @@ $PY -m admute.scripts scan TAPE...             # in these recordings only
 # training recordings (also every 10 min by vizelvision-admute-recordings.timer)
 $PY -m admute.recordings status                # planned, recording, learnt, left out
 $PY -m admute.recordings sync                  # plan timers now, learn from finished recordings
+# overlays (admute/overlays.json)
+$PY -m admute.overlays learn TAPE --prefix nbc-mlb --channel NBC [--unlabelled] [--write]   # score bugs/logos of a cached tape
+$PY -m admute.overlays frames state/master-candidate/admute-frames/KEY --up FROM/TO --box x0,y0,x1,y1 \
+    --id ID --name NAME --kind ad [--strong 0.5] [--check FOLDER] [--write]   # one drawn from the page's pictures
+$PY -m admute.overlays check TAPE                # each one's up rates in a labelled tape
+$PY -m admute.overlays name ID "NAME" [--kind score|network|channel|logo|ad]
+$PY -m admute.overlays picture out.png           # draw the templates
 # measuring and training
 $PY -m admute.replay score [--lookahead 5] [--no-text] [--no-prints]   # every tape with a truth file
 $PY -m admute.train --loo-replay --lookahead 5   # honest numbers: each tape scored by a model fitted without it
@@ -405,7 +520,9 @@ $PY -m admute.lab sheet TAPE START END --step 10 # contact sheets, for labelling
 
 - **The detector:** changes to `admute/` need only `systemctl --user restart
   vizelvision-admute`. That never touches the air (the sound is left alone while it is
-  down), but the programme on air loses its programme memory for ~5 minutes.
+  down), but the programme on air loses its programme memory for ~5 minutes, a game its
+  measured lag, and the live overlays still being checked. Restart between breaks, not
+  during one.
 - **Web and master:** changes to the page's routes or settings need a web restart. **Only
   restart web or master with nothing on air**: check `GET /v1/master` (`on_air`,
   `prepared`) and `GET /v1/queue` (`hold`) first, and stop if anything is there. A web
@@ -485,6 +602,7 @@ ads are learnt without it too. The lookahead is 5 s, as live with captions on.
 /home/vivian/miniconda3/bin/python3 -m unittest tests.test_admute_text           # words, late evidence, pictures, sessions
 /home/vivian/miniconda3/bin/python3 -m unittest tests.test_admute_prints         # fingerprints, spots and pods, known ads, show veto, forgetting, game learning, reasons, scripts, cut seams
 /home/vivian/miniconda3/bin/python3 -m unittest tests.test_admute_recordings     # TV-Thing timers: planning, clashes, cancelling, labels
+/home/vivian/miniconda3/bin/python3 -m unittest tests.test_admute_overlays       # overlays: templates, tickers, cuts, live learning, trust, ad label, policy
 /home/vivian/miniconda3/bin/python3 tests/admute_sidecar_integration.py          # the detector over its socket, a real tape
 /usr/bin/python3 tests/admute_master_integration.py                              # tap, delay, mute, badge, bed on a real master
 /usr/bin/python3 tests/admute_live_input_spike.py roku 60                        # read-only: the live Roku feed through the tap
@@ -494,14 +612,28 @@ node tests/browser_ui_ads.cjs <playwright>                                      
 
 ## Known limits and next steps
 
+- **Overlays need their network's graphics once.** The catalogue has NBC's and FOX's
+  MLB and NBC's SNF; others (TBS, ESPN/ABC, CBS's top-of-screen bar) are learnt live,
+  which takes a programme stretch, a break and some cuts. A cached, labelled tape of each
+  would put them in the catalogue (`admute.overlays learn`). Graphics packages change:
+  a redesigned score bug is simply not found until it is learnt again.
+- **The ad label template is YouTube TV's of 10/5,** drawn from TBS. If YouTube TV
+  redraws its player, it stops matching (and nothing is muted for it): draw it again
+  with `admute.overlays frames`.
+
 - **Programme boundaries on one channel.** When two shows run back to back, the next
   show's opening can look like an ad until the memory catches up. The cap, a quick fix
   or a per-title exception covers it.
 - **New networks and sports.** The model has seen one game (NBC). The known-ads database
   is how sports gets better: every game now teaches it. Leagues other than MLB have no
   play-by-play learning or gate yet (ESPN's feeds could provide both).
-- **Whisper's cost.** About a third to two-thirds of a core per analysed source. When it
-  falls behind, chunks are dropped and those seconds are judged without words.
+- **Whisper's cost.** About half a core per analysed source with base.en. When a source
+  falls behind, its oldest windows are dropped and those seconds are judged without words.
+- **The text model predates the windows.** model.json's text weights were fitted on 4 s
+  chunk transcripts with captions' filters. Replay, training and scoring read only
+  transcripts made the new way (cache files `*.words.base.en.w8.*`); the old ones still
+  serve ad scripts. Re-transcribe the labelled tapes (`admute.speech`), then score and
+  refit, off air only.
 - **Words and corrections are not yet turned into training rows** automatically.
   Labels are recorded; retraining is by hand (`admute.train`).
 - **Whole breaks are stored as one clip** (several ads). A single ad airing later still

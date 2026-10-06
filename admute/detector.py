@@ -24,6 +24,10 @@ once. This is its causal form. Everything here uses only media that has arrived:
    * fp_*      -- audio fingerprints (admute/fingerprint.py): a known ad's sound, a
                   repeat of sound this broadcast already called an ad, known show sound.
                   Like words, they come a moment late and are revised until frozen.
+   * ov_*      -- overlays (admute/overlays.py), up where they sit: a score bug or a
+                  network/station logo argues for the programme, YouTube TV's ad label
+                  ("Sponsored") for an ad. 1 while up, nothing otherwise: a break is
+                  called once the programme's graphics have gone.
    These combine in a logistic model (``model.json``, from admute.train).
 
 3. Decision: a two-state Viterbi over "cut points" -- seams, and every whole second.
@@ -44,6 +48,7 @@ from scipy import ndimage
 
 from . import features as F
 from . import fingerprint as FP
+from . import overlays as OV
 from . import text as T
 
 BLACK_LUMA_MAX, BLACK_LUMA_MEAN = 45, 25
@@ -56,6 +61,8 @@ SEAM_PENDING = 2.5        # seconds before the edge where seams and evidence fre
 MASK_WINDOW = 900.0       # bug outline learnt from this much history
 MASK_EVERY = 10.0
 MIN_OVERLAY_PIECE = 50   # pixels of outline (320x180) for a piece to count as an overlay
+                         # (wide pieces count too: leaving them out on 10/5 cost TBS its game strip,
+                         # and returns from breaks came late)
 MEMORY = 2700.0           # programme memory: 45 min ...
 FAR = 180.0               # ... but not the last 3 min
 MIN_MEMORY = 120          # seconds of memory before recurrence says anything
@@ -66,7 +73,9 @@ TEXT_HOLD = 10.0          # evidence waits at most this long behind the edge for
 SCRIPT_MEMORY = 1800.0    # words kept this long, for the scripts of breaks learnt later
 TEXT_FEATURES = tuple("txt_" + n for n in T.NAMES)
 PRINT_FEATURES = ("fp_known", "fp_repeat", "fp_show")
+OVERLAY_FEATURES = OV.FEATURES
 KNOWN_CLEAR = 0.18        # a known ad this clear may start a mute without a seam (re-airings match ~0.18-0.31)
+BUG_AFTER = 6             # seconds after a moment in which the programme's score bug must be up for it to be the game
 
 DEFAULT_MODEL = {
     "features": ["bug", "cut_rate", "recurrence", "colour", "ad_match"],
@@ -108,6 +117,9 @@ class Segment:
     seam: str | None       # the kind of seam at its start, if any
     post_z: float | None = None  # at a seam: mean per-second ad logit of what follows it
     known: bool = False    # a known ad's sound, clearly (audio fingerprints)
+    overlay: str | None = None   # a trusted score bug up as it begins (its name)
+    ad_overlay: str | None = None   # a trusted ad label up as it begins (YouTube TV's "Sponsored")
+    bug_after: bool | None = None   # a score bug seen in this programme is up within BUG_AFTER s of it (None: none seen)
 
 
 class Grow:
@@ -170,6 +182,9 @@ class ArraySource:
     def seconds(self, a: int, b: int):
         return self.sig["emb"][a:b], self.sig["hist"][a:b]
 
+    def pics(self, a: int, b: int):
+        return self.sig["pic"][a:b] if "pic" in self.sig else []
+
     def available(self) -> float:
         s = self.sig
         return min(len(s["cut"]) / F.STEP_HZ, len(s["rms_db"]) / F.STEP_HZ, float(len(s["emb"])))
@@ -177,7 +192,7 @@ class ArraySource:
 
 class Detector:
     def __init__(self, model: dict | None = None, start: float = 0.0, library: T.AdLibrary | None = None,
-                 prints: FP.PrintDB | None = None):
+                 prints: FP.PrintDB | None = None, overlays: OV.Library | None = None, channel: str | None = None):
         self.m = model or load_model()
         self.start = start
         # consumed positions (absolute indices)
@@ -201,7 +216,12 @@ class Detector:
         self.bug_scores: list[float] = []       # per edge map, with the mask of its time
         # per-second evidence
         self.feats: dict[str, list[float]] = {k: [] for k in ("bug", "cut_rate", "recurrence", "colour", "ad_match")
-                                              + TEXT_FEATURES + PRINT_FEATURES}
+                                              + TEXT_FEATURES + PRINT_FEATURES + OVERLAY_FEATURES}
+        # model.json "overlays": false switches overlays off (no evidence, no score-bug veto,
+        # no ad label): nothing is matched or learnt.
+        self.overlays = OV.Tracker(overlays if self.m.get("overlays", True) else OV.Library(catalogue=None), channel)
+        if not self.m.get("overlays", True):
+            self.overlays.next_learn = math.inf
         text = self.m.get("text") or {}
         if library is None:
             library = T.AdLibrary(text.get("ads") or ())
@@ -271,20 +291,25 @@ class Detector:
             t_map = self.n_edges / F.EDGE_HZ
             if t_map - self.mask_at >= MASK_EVERY:
                 self._update_mask(t_map)
+            emap = F.unpack(packed)
             self.edge_hist.append(packed)
-            self.edge_count += F.unpack(packed)
+            self.edge_count += emap
             while (self.edge_hist_t0 + 1) / F.EDGE_HZ < t_map - MASK_WINDOW:
                 self.edge_count -= F.unpack(self.edge_hist.pop(0))
                 self.edge_hist_t0 += 1
             if self.mask is None:
                 self.bug_scores.append(math.nan)
             else:
-                flat = F.unpack(packed).ravel()
+                flat = emap.ravel()
                 self.bug_scores.append(max(float(flat[idx].mean()) for idx in self.mask))
+            self.overlays.see(emap, packed)
             self.n_edges += 1
 
         n = int(edge)
         emb, hist = src.seconds(self.n_sec, n)
+        pics = src.pics(self.n_sec, self.n_sec + len(emb)) if hasattr(src, "pics") else []
+        for k in range(len(emb)):
+            self.overlays.see_pic(F.unpack_pic(pics[k]) if k < len(pics) else None)
         self.emb_raw.extend(emb)
         self.hist.extend(hist)
         self.n_sec += len(emb)
@@ -323,7 +348,26 @@ class Detector:
                 keep.append(np.flatnonzero((pieces == i).ravel()))
         self.mask = keep or None
 
+    def _revise_overlays(self, s: int):
+        """Second s's overlay evidence again, now the pictures after it are in (whether an
+        overlay was up, not a flash, looks a picture ahead), unless it is frozen."""
+        if not 0 <= s < len(self.lp_ad) or s < math.ceil(self.frozen_to):
+            return
+        changed = False
+        for name, v in self.overlays.features(s).items():
+            changed |= self._set(name, s, v)
+        if changed:
+            self.lp_ad[s], self.lp_show[s] = self._score(s)
+            if s == len(self.lp_ad) - 1:
+                self.cum_ad[s + 1] = self.cum_ad[s] + self.lp_ad[s]
+                self.cum_show[s + 1] = self.cum_show[s] + self.lp_show[s]
+            else:
+                for k in range(s, len(self.lp_ad)):
+                    self.cum_ad[k + 1] = self.cum_ad[k] + self.lp_ad[k]
+                    self.cum_show[k + 1] = self.cum_show[k] + self.lp_show[k]
+
     def _second_features(self, s: int):
+        self._revise_overlays(s - 1)
         bug = self.bug_scores[2 * s:2 * s + 2]
         bug = [b for b in bug if not math.isnan(b)]
         self.feats["bug"].append(float(np.mean(bug)) if bug else math.nan)
@@ -364,6 +408,8 @@ class Detector:
         self.feats["ad_match"].append(am)
         for name in TEXT_FEATURES + PRINT_FEATURES:
             self.feats[name].append(math.nan)       # filled in as the words and prints arrive
+        for name, v in self.overlays.features(s).items():
+            self.feats[name].append(v)
         self.label.append(-1)
         lp_ad, lp_show = self._score(s)
         self.lp_ad.append(lp_ad)
@@ -509,6 +555,7 @@ class Detector:
         while len(self.lp_ad) < complete:
             self._second_features(len(self.lp_ad))
         self._late(src, edge)
+        self.overlays.learn(edge)
         freeze = min(edge - SEAM_PENDING, float(len(self.lp_ad)))
         waits = ([self.text_done] if self.text.known is not None else []) + \
                 ([self.fp_done] if self.prints.known is not None else [])
@@ -578,8 +625,16 @@ class Detector:
                     self.label[s] = int(p_ad(j) > 0.5)
                 elif 0 <= j < len(fwd):               # older than this tick's backward pass
                     self.label[s] = int(fwd[j][1] > fwd[j][0])
+                # A known ad's sound says "ad" without looking at the picture (a programme
+                # overlay up then is not the programme's), known show sound "the programme"
+                # (an ad label up then is no ad label): overlays.Tracker.settle.
+                known, show = self.feats["fp_known"][s], self.feats["fp_show"][s]
+                self.overlays.settle(s, self.label[s], clear_ad=known == known and known >= KNOWN_CLEAR,
+                                     clear_show=show == show and show >= KNOWN_CLEAR,
+                                     cut=max(self.cut[10 * s:10 * s + 10] or [0.0]) > CUT_SEAM)
             self.settled = max(self.settled, s_final + 1)
         out = []
+        bug_here = self.overlays.score_here()
         j = max(0, int(np.searchsorted(cuts, frm, "right")) - 1)
         while j < len(fwd) and cuts[j] < to:
             a, b = max(cuts[j], frm), min(cuts[j + 1], to)
@@ -590,9 +645,20 @@ class Detector:
                     zs = [self.lp_ad[k] - self.lp_show[k] for k in range(int(math.ceil(a)), min(len(self.lp_ad), int(self.edge_t)))]
                     post = float(np.mean(zs)) if zs else None
                 known = self.known_ad(a)
-                out.append(Segment(a, b, p_ad(j), kind, post_z=post, known=known))
+                inside = int(a) < len(self.lp_ad)
+                over = self.overlays.showing(int(a), "score") if inside else None
+                label = self.overlays.showing(int(a), "ad") if inside else None
+                back = (any(self.overlays.showing(k, "score") for k in range(int(a), min(int(a) + BUG_AFTER, len(self.lp_ad))))
+                        if bug_here else None)
+                out.append(Segment(a, b, p_ad(j), kind, post_z=post, known=known, overlay=over, ad_overlay=label,
+                                   bug_after=back))
             j += 1
         return out
+
+    def mark(self, side: str, a: float, b: float):
+        """The operator says [a, b) is an ad (side 'ad': a programme overlay up then is not
+        the programme's) or the programme ('show': an ad label up then is no ad label)."""
+        self.overlays.mark(side, a, b)
 
     def known_ad(self, t: float, span: int = 3) -> bool:
         """A known ad's sound, clearly, over the seconds from t: a mute may start there without a seam."""

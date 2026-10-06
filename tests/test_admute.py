@@ -25,9 +25,14 @@ class SettingsTests(unittest.TestCase):
 
     def test_strict_rejects_unknown_and_bad_values(self):
         for bad in ({'mode': 'loud'}, {'nope': 1}, {'lookahead': 0.2}, {'sources': {'tv_thing': 'yes'}},
-                    {'exceptions': [''] }, {'sound': 'tone'}, {'sensitivity': True}):
+                    {'exceptions': [''] }, {'sound': 'tone'}, {'sensitivity': True}, {'speech_model': 'large'},
+                    {'lookahead': 8.5}):
             with self.subTest(bad=bad), self.assertRaises(ConfigError):
                 validate(bad)
+
+    def test_whisper_model(self):
+        self.assertEqual(validate({})['speech_model'], 'base.en')
+        self.assertEqual(validate({'speech_model': 'small.en'})['speech_model'], 'small.en')
 
     def test_lenient_ignores_newer_keys(self):
         self.assertEqual(validate({'mode': 'on', 'future': 1}, lenient=True)['mode'], 'on')
@@ -107,6 +112,21 @@ class LinkTests(unittest.TestCase):
         self.assertEqual(st['why'], ['95% · KNOWN AD', 'Braves at Dodgers · heard 3x'])
         link._message({'input': 'k', 'events': [], 'lease': None, 'badge': None, 'why': 'not a list', 'state': 'listening'})
         self.assertIsNone(link.status('k')['why'])
+
+    def test_words_wait_for_live_captions_while_the_sidecar_transcribes(self):
+        link = link_with(self.MUTE, 30 * SECOND)
+        base = {'input': 'k', 'events': [], 'lease': None, 'badge': None, 'state': 'listening'}
+        self.assertIsNone(link.take_words('k'), 'an older sidecar sends no words: captions transcribe')
+        link._message({**base, 'speech': True, 'words': [[SECOND, 2 * SECOND, 'hello'], [3, 2, 'backwards'],
+                                                          ['x', 1, 'bad'], [4 * SECOND, 5 * SECOND, 'there']]})
+        self.assertEqual(link.take_words('k'), [(SECOND, 2 * SECOND, 'hello'), (4 * SECOND, 5 * SECOND, 'there')])
+        self.assertEqual(link.take_words('k'), [], 'each word once')
+        self.assertIsNone(link.take_words('other'))
+        link._message({**base, 'speech': False})
+        self.assertIsNone(link.take_words('k'), 'Whisper off or down in the sidecar')
+        link._message({**base, 'speech': True})
+        link.inputs['k'].updated -= 5
+        self.assertIsNone(link.take_words('k'), 'the sidecar went quiet')
 
     def test_the_badge_says_not_muted_when_the_sound_is_up(self):
         status = {'badge': [10 * SECOND, None, 'AD', .97], 'why': ['100% · PICTURE', 'no station or score bug']}
@@ -300,8 +320,29 @@ class PolicyTests(unittest.TestCase):
         run(p, [Seg(103, 104, .999, 'black')])
         self.assertIsNone(p.current)                       # suppressed until a show stretch
         p.override_mute(110)
-        run(p, [Seg(111, 112, .1), Seg(112, 113, .2, 'black')])
+        run(p, [Seg(111, 112, .1), Seg(112, 113, .2, 'black')] + secs(113, 120, .2))
+        self.assertTrue(p.muted)                           # locked: at least 10 s
+        run(p, [Seg(120, 121, .2)])
+        self.assertEqual((p.spans[-1].end, p.spans[-1].end_reason), (120, 'show'))   # the seam during the lock counts
+
+    def test_its_an_ad_locks_for_ten_seconds(self):
+        p = Policy(PolicyConfig())
+        p.override_mute(200)
+        run_seen(p, [Seg(200, 201, .05, 'black', post_z=-4)] + secs(201, 205, .05) + [Seg(205, 206, .05, 'cut')]
+                 + secs(206, 210, .05))
+        self.assertTrue(p.muted)                           # the detector is sure it's the show: still quiet
+        # A seam into show, then an ad-like stretch, then no seam: it holds on after the lock.
+        p = Policy(PolicyConfig())
+        p.override_mute(200)
+        run(p, [Seg(202, 203, .1, 'black')] + secs(203, 206, .99) + secs(206, 215, .1))
+        self.assertTrue(p.muted)
+        run(p, [Seg(215, 216, .1, 'black')])
         self.assertEqual(p.spans[-1].end_reason, 'show')
+        # "It's the show" still ends it at once.
+        p = Policy(PolicyConfig())
+        p.override_mute(200)
+        p.override_unmute(203)
+        self.assertEqual((p.spans[-1].end, p.spans[-1].end_reason), (203, 'override'))
 
 
 class WorkerAdMuteTests(unittest.TestCase):

@@ -44,6 +44,20 @@ cut until its buffered tail has aired. Captions from muted programme audio are
 suppressed, including while replacement radio is playing. The replacement bed is
 not separately captioned; off-air radio is captioned normally.
 
+## Words from the ad detector
+
+When ad detection analyses the input on air, its sidecar already runs Whisper on it
+(8 s windows every 4 s; see [ad mute](ad-mute.md)) and sends master each new word on
+the input's timeline. With at least 8 s of programme delay (`SHARED_WORDS_DELAY`; ad
+lookahead 7 s or more), captions use those words for that input instead of
+transcribing it a second time. The detector's words come up to about 7 s after they
+are said, so with the 6 s caption delay alone they would arrive late, and captions
+keep their own quicker 4 s chunks. Anything the detector does not analyse (recordings,
+station IDs, off-air radio), or an input whose detector words stop (sidecar down,
+Whisper off: no word message for 3 s), is transcribed by captions' own Whisper as
+before. Audio already collected for captions' own Whisper is still transcribed at the
+switch. `GET /v1/captions` reports `words_from`: `detector` or `whisper`.
+
 ## Runtime setup
 
 The master keeps its system Python for GStreamer. Whisper runs in a separate,

@@ -1,0 +1,192 @@
+{
+ "version": 1,
+ "overlays": [
+  {
+   "id": "yttv-sponsored",
+   "name": "YouTube TV ad label (Sponsored)",
+   "kind": "ad",
+   "box": [
+    6,
+    15,
+    46,
+    42
+   ],
+   "space": "pic",
+   "on": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOAe/yAAgAAAMAGAAAAYAQAAAAgAAAABDAIAAAHsAj/zgeQCP/OC5AI4EIDkAjAxgOQCP/EB5AIewAEkAQAAAYwBAAAByAGAAAAYAIAAADAA4AAAsAA///+AAABIAQAAAAAAAAAAAAAAAAAAAAA",
+   "off": "///////////////////////////8f4QAf/gAAAAf+AAAAB/w////D/H///uP8f//8AfjADHwB+IAAHAH4gAAYAfiABBwB+IAEPAH4gAR8AfjADvwB/GE//AH8f//8A/w///4D/h///wf+AAAAB/8AAAAP/8AAAD///7f+///////////////",
+   "thresh": 0.352,
+   "strong": 0.5,
+   "origin": "catalogue",
+   "status": "active",
+   "channels": [
+    "youtube-tv"
+   ],
+   "strikes": 0,
+   "note": "",
+   "stats": {
+    "learnt_from": "205 page pictures"
+   }
+  },
+  {
+   "id": "nbc-mlb-score",
+   "name": "NBC MLB score bug",
+   "kind": "score",
+   "box": [
+    5,
+    4,
+    108,
+    32
+   ],
+   "space": "edge",
+   "on": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACgYBYEAAYkDzh5BQKAgf9//8H7//jf//4EAgb///+H///////+AAAB//f9f9v/f/f/9AAIQ////t//f3////gAEIfb7vof///9/73sADh8A4DgBAAA3v///9Bz/AAB4BwAAYBwAAAA5/wAAcBwAAMB8AB8Ad/4H4eB4B+GB/ACmAO//z+/B/5/NBawBh0Fv+///5///6h+sAsaD1/v6/4/3//x//AqvAg8AdwQ/gP8o67gYGgQeAP4K/8H80evgAGQebAH4P8+D++GjgAAILPCh4H+fA8/BggAAEHnAwAD+HQA/t4/x56D/7oB///gA/n838/8B//8A/d/4Afjef8f+A+/YAfvuYAPwOHeHOAf/8AHm/+AH4CAEAAANAAAAAAAG+H/+f4D4AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+   "off": "////////j/m4AAP/4a/P9P3//O34IAANfqIAAAAAAAAAAAAAAAAGPAAAAAwAAAAAAADwCPAAAAAAAAAAAAAA9hvQAAAAAAAAAAAAAfwDGAAAAAAAAAAAAAH4AgAAAABAAAAAAAAAEAIAQCILwAAAAAAAAAYAAfj8D8H//AIAAABMAAHwPB8H8Dh8B/wAgAAAQCA8AMAg8Af4AAAAAAAAMAAAAcAH8ABgAAAAAAAAAAMAB+AAwAAAAACAAAAEAAeAAWEAIAACAEAACAAPCALDA/gDgABwABAAPwAAAAYwDgAA4AAwIP/8gAAYMDwAAeAAEOAcMAAAIHAAAAHgAACAEAAAAABAAAAAMAAAAAAAYAAAAAAAAEAIAABAAMAAAgAAAACAGAwAwAmAAAAAAAACAAAAAMYDgAAAAAAAAAAAAAAADgAAAP//AEg8AAAAABQHP0AAAAD//9/gAAAD///AAAAP////wAAAAA==",
+   "thresh": 0.441,
+   "origin": "catalogue",
+   "status": "active",
+   "channels": [
+    "NBC",
+    "WRC"
+   ],
+   "strikes": 0,
+   "note": "",
+   "stats": {
+    "show": 0.763,
+    "ad": 0.0,
+    "cuts": [
+     1138,
+     1071
+    ],
+    "learnt_from": "MLB PLAyoffs braves v phillies - 4.1 WRC-HD - 2026-10-01 2002.mp4"
+   }
+  },
+  {
+   "id": "fox-mlb-score",
+   "name": "FOX MLB score bug",
+   "kind": "score",
+   "box": [
+    239,
+    132,
+    310,
+    179
+   ],
+   "space": "edge",
+   "on": "AAAAAAAAAAAAAAAAAAAAAAAA///7UCgACvpBAYAAAAAAAACCB//wAAAAH/0ED/3gAAAAKfoIF/7AAAAAf/QQP/8AAAAAp+ggbfiAAAAADZB////4AAAAACC9//wAAAB5/0F7//gAAAD//oL3//AAAAG//QX//+AAAAP/+gvf/4AAAANf5B//////////+CAAAf///gIAAH////////9/oIN/BgAADOeoQQ/+DDzjmc/4gh/0G3nnM5/xBD3oP/H+Zz7iCG/Qf+P8zu3EEf/42889n/+4I+3xhwxzP39Qd/vDAAAGO1ag+v0GPAAMJ63B7fwMf/8YH7uD1vgY//wwL38HP/Ax/vhgfr4MD/hj//CA/dwf/8DDP0EB/Hg8L7HA7AYC/fB4W2M8B4QFv+Dwzcf8DfkM48Hh/o/4H/AfR4OAYvn8fv5//Qf/H4D/8D///g//+AB/gAf/+AAAeA/X8A8AAAAA/P///PwAAAAA/////+AAAAAAfeAB/4AAAAAAfwAA/AAAAAAAMAAAMAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+   "off": "////////kEIvgAACV+v+AADeAAAAAAAAAAAcAAAAAAAAAAA48AAAAAB/wABx4AAIAAL/gADjwAAAoBH/AAHHgAAAAAP+AAOAAAAAAAIAAAcAAAAAAAAAAA4AAAAHwAAAABwAAAAfgAAAADgAAAB/AAAAAHAAAAB+AAAAAOAAAAAAAAAAAcAAAAAAAAAAA4AAAAAAAAAADwAAAAAAAAAADgAAAAAAAAAAHGAA4AAAAAACOMABwAAAAAAEcYADgAQAAAAI4wADAAgAAAABxAACAAAAAAADgAAEAGEAAAAGAAAYYecQgAAMAABwgABhgAAYAAHhAABDgAAwAAPCAACHgABgAAOEAAEPAADAAAMIAAI+AAHAAAYQAAx8AAOAAAQAABD4AAcDAAgAIAFwAA4GABAB4ABgABwMAAABwADAADgAAAAAAAAAAHAAAAwAAgAAAOAAAPgAB4AAA+AAAYAAAYAAD//+AAAAAAH////+AAAAAAf////+AAAAAD//////AD/8AP//////Af/+B///////n///n///////////////gA==",
+   "thresh": 0.416,
+   "origin": "catalogue",
+   "status": "active",
+   "channels": [
+    "FOX",
+    "WTTG"
+   ],
+   "strikes": 0,
+   "note": "",
+   "stats": {
+    "show": 0.868,
+    "ad": 0.0,
+    "cuts": [
+     1732,
+     1644
+    ],
+    "learnt_from": "MLB postseason braves at dodgers 10-03 - 5.1 WTTG-DT - 2026-10-03 1555.mp4"
+   }
+  },
+  {
+   "id": "fox-mlb-bug",
+   "name": "FOX postseason bug",
+   "kind": "network",
+   "box": [
+    265,
+    6,
+    309,
+    31
+   ],
+   "space": "edge",
+   "on": "AAAAAAAAAAAAAAAQAAAAAAHft///+B////f/gf/6/1/oH/+v9f6B//rv3/gf/+//94Hv/v/v6BxttoD/gf/////wAAP/7gAAAD/e4AAAA//OAAAAL/6gAAAD28wAAAP//94AAD/9/eAAA3/X3gAAN/25YAAD/p8cAAAAAAAAAAAAAAAAAAAAAAAA",
+   "off": "/gAf///+6Hv////AAAAAADwAAAAAA8AAAAAAPAAAAAADwAAAAAA8AAAAAAPAAAAAADwAAAAAA8AAAAAAPAAAAAAH4AAAAAD//4AAD//38AAA//b6AAAP/wAAAAAf8AgAAAD/AAAAAA/wAAAAAP8BgAAAD/AwAAAB/wAAAAA/8AAACD//AAAA/v/w",
+   "thresh": 0.431,
+   "origin": "catalogue",
+   "status": "active",
+   "channels": [
+    "FOX",
+    "WTTG"
+   ],
+   "strikes": 0,
+   "note": "",
+   "stats": {
+    "show": 0.922,
+    "ad": 0.003,
+    "cuts": [
+     2204,
+     1931
+    ],
+    "learnt_from": "MLB postseason braves at dodgers 10-03 - 5.1 WTTG-DT - 2026-10-03 1555.mp4"
+   }
+  },
+  {
+   "id": "nbc-snf-score",
+   "name": "NBC SNF score bug",
+   "kind": "score",
+   "box": [
+    79,
+    152,
+    242,
+    180
+   ],
+   "space": "edge",
+   "on": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/8AAAAAAAAAAAAAAAAAAAAAAAAB//gAAAAAAAAAAAAAAAAAAAAAAAB/38AAAAAAAAAAAAAAAAAAAAAAAD/j/AAAAAAAAAAAAAAAAAAAAAAAB593wAAAAAAAAAAAAAP/////////5358AD///////gAAA9/////////w/8f////////f8AAA+58D//wg/g4O8Hg/wx9/8D+/gAA7gfB9/4Afw4AAB4fwZ/9+B3v4AA53lA+/4YP4Uf/8cP8M///ByH+AA41n8/f8MH8KP/+KH+Gf//Dxv/gA4fP+f/+GD+FH//FD/DP//ygH74A4eHeHvvDB9Cj//ih/Bj3/ymwAeAcsAeAAP5g/hQ7/hw/gx+ACmd4HAbcAXgAFYwPgYAAA4v/o3ADnA8BwO8H/4ADIf//sf38///+TADe4IAYOn+HP////OP/P7+f//////////+H//n+i//85/7z9/f/7////////+AAAAAAAAAAAA98/cAAAAAAAAAAAAAAAAAAAAAAAPgBeAAAAAAAAAAAAAAAAAAAAAAAD4A8AAAAAAAAAAAAAAAAAAAAAAAAf38AAAAAAAAAAAAAAAAAAAAAAAAP/8AAAAAAAAAAAAAAAAAAAAAAAAA/wAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+   "off": "/////+QDiAAAAAAAAABEH///////////+CD/AIAAAAAGAG/D////////////CLbgAAAAAAEQB+Df///////////BorgFAAAAADqPvp3//////////7AAEAABAAAAAfB2g9///////////rp/5CM4AAAAP3/zP////////gAAAAAAAAAAAAAGAAAAAAAA//h6AAAAAAAAAAAAAAAAAAAAAAAH/4CAAAAAAAAAACABAAAAAAAAAAAgH+AAAAAAAAAADgBwAAAAAAAAAAP/+AAAcAADMACBAAECADAAAA8AAD/+AAAGAADDABBAABBABgAAAYAAA/+CAAAAABhwBggAAgwAwAAAYEAAP+DAAAAAAw4AQQAAQYAYAAAAAAAD+CAQAwAAIcAIIAAIMAMIAAAAECA/AA8A8IAAOAEGAAMGAAEAAAAADwfABwAP/wCAAADAAGAAACAf4AAB8HgAAAAAAAAAABAAAAAAAAAAAAAADgAAAAAAAAAAAAAAAAAAAAAAAAAAwAAAAAAAAAAAAAAAAAAAAAAAAAA4AAMAoAAADACAAAAAAAAAAAAAAAcXv1w8AAAHg/gBgA/wcAAADwf//GZvz4+AAADxf4AQAAAAAAAAgP//jAAAAAAAAAAAAAAAAAAAAAAAAAABgAAAAAAAAAAAAAAAAAAAAAAAAAAwAAAAAAAAAAAAAAAAAAAAAAAAAA/////////////gH///////////////////////////////////////8A==",
+   "thresh": 0.405,
+   "origin": "catalogue",
+   "status": "pending",
+   "channels": [
+    "NBC",
+    "WRC"
+   ],
+   "strikes": 0,
+   "note": "",
+   "stats": {
+    "show": 0.428,
+    "ad": null,
+    "cuts": [
+     1075,
+     992
+    ],
+    "learnt_from": "Detroit Lions at Carolina Panthers 10-04 (ad training) - 4.1 WRC-HD - 2026-10-04 2015.mp4"
+   }
+  },
+  {
+   "id": "nbc-snf-bug",
+   "name": "NBC Sunday Night Football bug",
+   "kind": "network",
+   "box": [
+    275,
+    3,
+    317,
+    15
+   ],
+   "space": "edge",
+   "on": "AAAAAAAAAAAAAAAgP9z/4B6P/7/8Hrv7e/4Fi//+34Eiv/+0IP0//83wN2f380APnv/n4AAAAAAAAAAAAAAA",
+   "off": "//////ngAACMAD+BAAAACwAAAAABwAAAAADQAAAAADQAAAAADgAAAAAHgAAAAAPgAAAAD/gYQAYH////////",
+   "thresh": 0.417,
+   "origin": "catalogue",
+   "status": "pending",
+   "channels": [
+    "NBC",
+    "WRC"
+   ],
+   "strikes": 0,
+   "note": "",
+   "stats": {
+    "show": 0.617,
+    "ad": null,
+    "cuts": [
+     1323,
+     1202
+    ],
+    "learnt_from": "Detroit Lions at Carolina Panthers 10-04 (ad training) - 4.1 WRC-HD - 2026-10-04 2015.mp4"
+   }
+  }
+ ],
+ "note": "Overlays (admute/overlays.py). Edge templates learnt with `python -m admute.overlays learn` from the labelled tapes (NBC/FOX MLB) or unlabelled (NBC SNF: pending until seen against breaks live); yttv-sponsored drawn with `... frames` from the page's pictures of TBS on YouTube TV, 2026-10-05."
+}

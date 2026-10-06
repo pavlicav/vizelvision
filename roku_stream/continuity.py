@@ -316,11 +316,11 @@ def duck(spans, down=0.3, up=0.45):
     return f'pow(10,-{DUCK_DB}*(0.5-0.5*cos(PI*{amount}))/20)'
 
 
-def mix(voiced, out, *, music=MUSIC_PATH, video=None):
+def mix(voiced, out, *, music=MUSIC_PATH, video=None, length=30.0):
     """Lines [(wav, start seconds)] over the ID's music: each line levelled as the ID's
     are, the music ducked under them, the whole levelled to -20 LUFS in two passes like the
     ID. With video, the ID's picture is copied and an .mp4 written; without it, a .wav (a
-    preview)."""
+    preview). length: the music's (the ID's 30 s; a station promo's own, promos.py)."""
     inputs = ['-i', str(music)]
     chains, labels = [], []
     for index, (path, start) in enumerate(voiced, 1):
@@ -331,12 +331,12 @@ def mix(voiced, out, *, music=MUSIC_PATH, video=None):
         labels.append(f'[v{index}]')
     spans = [(start, start + seconds(path)) for path, start in voiced]
     graph = ';'.join(chains + [
-        f"{''.join(labels)}amix=inputs={len(labels)}:normalize=0:dropout_transition=0,apad=whole_dur=30[voice]",
+        f"{''.join(labels)}amix=inputs={len(labels)}:normalize=0:dropout_transition=0,apad=whole_dur={length:g}[voice]",
         # music.wav is the ID's music at the ID's level, so it goes in as it is. Small
         # frames keep the duck's gain changes smooth.
         '[0:a]aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo,asetnsamples=n=256,'
         f"volume='{duck(spans)}':eval=frame[ducked]",
-        '[ducked][voice]amix=inputs=2:normalize=0,atrim=0:30[mix]'])
+        f'[ducked][voice]amix=inputs=2:normalize=0,atrim=0:{length:g}[mix]'])
     with tempfile.TemporaryDirectory(prefix='vv-continuity-') as work:
         dry = Path(work) / 'mix.wav'
         _ffmpeg('-y', *inputs, '-filter_complex', graph, '-map', '[mix]', '-c:a', 'pcm_f32le', str(dry))

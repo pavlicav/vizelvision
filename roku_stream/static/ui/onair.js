@@ -183,7 +183,7 @@ window.OnAir = (() => {
     const waiting = (queue?.items || []).filter(i => i.status === 'queued' || i.status === 'blocked');
     const fill = waiting.filter(i => i.release_type === 'after_current');
     part('.onair-explain').textContent = 'Add to queue: plays after '
-      + (fill.length ? fill.length + ' waiting ' + (fill.length === 1 ? 'entry' : 'entries') + ' in Up next' : on ? label(on) + (hold ? ' (' + (hold.game ? 'until its final' : 'until ' + fmt.clock(hold.until)) + ')' : '') : 'nothing: master is free, so it plays now')
+      + (fill.length ? fill.length + ' waiting ' + (fill.length === 1 ? 'entry' : 'entries') + ' in Up next' : on ? label(on) + (hold ? ' (' + (hold.game && !hold.cut ? 'until its final' : 'until ' + fmt.clock(hold.until)) + ')' : '') : 'nothing: master is free, so it plays now')
       + '. Live shows in the schedule still start on time.';
     const play = part('[data-act=now]');
     play.disabled = !playable(item);

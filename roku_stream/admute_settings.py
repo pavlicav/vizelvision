@@ -18,6 +18,9 @@ from .errors import ConfigError
 MODES = ('off', 'shadow', 'on')
 SOUNDS = ('silence', 'radio')
 BADGES = ('off', 'shadow', 'always')
+# Whisper models the sidecar can use, cheapest first (admute/speech.py). Only cached
+# models load: one that does not falls back to base.en.
+SPEECH_MODELS = ('tiny.en', 'base.en', 'small.en', 'distil-large-v3')
 DEFAULTS = {
     # off: nothing is analysed (and no delay). shadow: the detector runs and the AD badge
     # shows what it would mute; the sound is never touched. on: breaks go quiet.
@@ -39,6 +42,9 @@ DEFAULTS = {
     'learn': True,
     # Whisper transcribes analysed inputs; what is said is evidence too (admute/text.py).
     'speech': True,
+    # Which Whisper. small.en hears more but costs about four times the CPU of base.en,
+    # and the sidecar may use 1.5 cores in all (its unit's CPUQuota).
+    'speech_model': 'base.en',
     # Audio fingerprints: recognise ads heard before (admute/fingerprint.py).
     'known_ads': True,
     # Breaks it confirms teach the known ads (a clip counts once heard in two breaks).
@@ -68,7 +74,7 @@ def validate(value, *, lenient=False):
     elif not set(value) <= set(DEFAULTS):
         raise ConfigError('Ad-mute settings take ' + ', '.join(DEFAULTS))
     result = {**copy.deepcopy(DEFAULTS), **copy.deepcopy(value)}
-    for key, choices in (('mode', MODES), ('sound', SOUNDS), ('badge', BADGES)):
+    for key, choices in (('mode', MODES), ('sound', SOUNDS), ('badge', BADGES), ('speech_model', SPEECH_MODELS)):
         if result[key] not in choices:
             raise ConfigError(f'{key} must be one of ' + ', '.join(choices))
     sources = result['sources']

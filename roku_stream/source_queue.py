@@ -9,6 +9,10 @@ cuts in at its start even when recordings were queued ahead of it.
 A game holds master until it is final. Then an in-progress game follows, else
 waiting recordings, else the regular schedule: a schedule entry that is OFF AIR, or
 already under way when it releases, gives way to those.
+
+A scheduled show that outranks what holds master (programming.PRIORITIES) cuts in at
+its start instead: a held take ends then, and a game's return waiting for its final is
+skipped. A take held by hand, and an entry with no scheduled show, are normal.
 """
 from dataclasses import asdict, dataclass, replace
 from contextlib import contextmanager
@@ -121,6 +125,8 @@ UPGRADE_ATTEMPTS = 3
 UPGRADE_LIMIT = RECOVERY_LIMIT - 1
 # What follows a held take is the schedule's block, which joins Up next only when the take ends.
 SCHEDULE = object()
+# The priority rank of a held take, and of an entry without a scheduled show (programming.NORMAL).
+NORMAL = 1
 
 
 class SourceQueue(PlayoutQueue):
@@ -130,7 +136,7 @@ class SourceQueue(PlayoutQueue):
                  on_hold_end=None, hold_poll_seconds=15, ident=None, ident_seconds=IDENT_SECONDS,
                  on_air=None, game_on=None, hold_lost_seconds=HOLD_LOST_SECONDS, input_failure=None,
                  final_buffer_seconds=FINAL_BUFFER_SECONDS, ready=None, stop_preroll=None, schedule_now=None,
-                 alternates=None, upgrade=None):
+                 alternates=None, upgrade=None, roku_playing=None, rank=None):
         """preroll(item) prepares a Roku or library entry without taking it: 'prepared', or
         'skipped' when the Roku is on air; a library cue returns {'outcome', 'input_id'}.
         A failed Roku preparation is retried before blocking.
@@ -150,12 +156,15 @@ class SourceQueue(PlayoutQueue):
         back on at the head of Up next (feed recovery). alternates(target, game) names the other
         sources carrying it ({'antenna', 'roku'} targets, either None): recovery takes the antenna
         first (it tunes in seconds), and the other source once one has failed too often.
+        roku_playing(target) briefly checks that the Roku still plays a failed Roku program
+        without navigating; its feed then goes back on from the Roku first, as fast.
         Warm-ups (_warm_step) prepare through preroll too. ready(target) says whether the Roku
         holds a fresh preparation of target, so none is needed; stop_preroll(item_id) stops a
         warm-up still running when something else is due; schedule_now() is the schedule's
         transition a held take would hand back to now ({'target', 'title', 'key'}) or None.
         upgrade(item) cuts to item's Roku target once preroll has prepared it beside the
-        antenna on air, without navigating (_upgrade_step): back to YouTube TV."""
+        antenna on air, without navigating (_upgrade_step): back to YouTube TV.
+        rank(schedule_key) is a schedule entry's priority rank (Programming.rank), read live."""
         self.preroll = preroll
         self.upgrade = upgrade
         self.ready, self.stop_preroll, self.schedule_now = ready, stop_preroll, schedule_now
@@ -176,6 +185,7 @@ class SourceQueue(PlayoutQueue):
         self.media_gate = media_gate or (lambda item: {'finished': True})
         self.on_pause = on_pause
         self.on_hold_end = on_hold_end
+        self.rank = rank
         self.ident, self.ident_seconds = ident, ident_seconds
         self.preroll_seconds, self.retry_seconds = preroll_seconds, retry_seconds
         self.prepare_attempts = prepare_attempts
@@ -184,6 +194,7 @@ class SourceQueue(PlayoutQueue):
         self.game_on = game_on
         self.input_failure = input_failure
         self.alternates = alternates
+        self.roku_playing = roku_playing
         # The live entry the queue last put on air without a hold: {'item_id', 'input_id'}.
         self._airing = None
         # (source_id, channel_id) -> monotonic times its feed was put back on.
@@ -310,6 +321,68 @@ class SourceQueue(PlayoutQueue):
             return True
         kind, ref = self._schedule_kind(item)
         return kind in ('block', 'show', 'off_air') or (kind == 'backup' and ':' in ref)
+
+    def _rank(self, item):
+        """An entry's priority rank: its scheduled show's, else normal."""
+        if self.rank is None or item.origin != 'programming':
+            return NORMAL
+        try:
+            return self.rank(item.schedule_key)
+        except Exception:  # The schedule cannot answer: nothing is cut on its account.
+            return NORMAL
+
+    def _cutter_locked(self, timed, after, above):
+        """The first waiting timed entry starting after `after` that outranks `above`, or None."""
+        return min((i for i in timed if i.status == 'queued' and i.release_type == 'at_time' and i.run_at
+                    and parse_time(i.run_at) > after and self._rank(i) > above),
+                   key=lambda i: parse_time(i.run_at), default=None)
+
+    def _cut_hold_locked(self, hold):
+        """A scheduled show that outranks a held take ends it at its start, through the take's
+        own end time (its station ID, warm-up and hand-back); undone if that show goes or
+        drops its priority. Only shows starting after the take: Play now stays on air."""
+        cut = hold.get('cut')
+        own = cut['until'] if cut else hold.get('until')
+        cutter = self._cutter_locked(self._lanes_locked()[0], parse_time(hold['started_at']), NORMAL)
+        if cutter is not None and (own is None or parse_time(cutter.run_at) < parse_time(own)):
+            new = {'item_id': cutter.id, 'title': cutter.title, 'target': dict(cutter.target or {}), 'until': own}
+            if cut == new and hold.get('until') == cutter.run_at:
+                return
+            hold['cut'], hold['until'] = new, cutter.run_at
+        elif cut is not None:
+            hold['until'] = own
+            del hold['cut']
+        else:
+            return
+        self._save_locked()
+        self._condition.notify_all()
+
+    def _cut_locked(self, timed):
+        """A scheduled show cuts in at its start in front of what it outranks: while the lane is
+        held up (by a game's return waiting for its final, or a held take), the entries ahead
+        of it are skipped once it is due, if each has a lower priority and is waiting on a
+        game or overdue. True when it acted."""
+        if not timed or (self.hold is None and timed[0].release_type != 'after_game'):
+            return False  # The lane flows: each entry releases at its own time.
+        now = utc_now()
+        for index, item in enumerate(timed):
+            if (index == 0 or item.status != 'queued' or item.release_type != 'at_time' or not item.run_at
+                    or not self._due(item)):
+                continue
+            ahead, rank = timed[:index], self._rank(item)
+            if self.hold is not None and rank <= NORMAL:
+                continue
+            if not all(self._rank(i) < rank and (i.release_type == 'after_game'
+                                                  or (i.run_at and parse_time(i.run_at) <= now)) for i in ahead):
+                continue
+            for other in ahead:
+                other.status, other.gate_status, other.completed_at = 'skipped', 'cut', now.isoformat()
+                other.gate_detail = f'{item.title or "A show"} cut in at its start (higher priority)'
+                other.prerolled_at = other.prepared_input_id = None
+            self._save_locked()
+            self._condition.notify_all()
+            return True
+        return False
 
     def _master_free(self, on_air):
         """Whether recordings may start: the test card, a file or the station ID is on air
@@ -815,6 +888,8 @@ class SourceQueue(PlayoutQueue):
             if hold is None or self._closed:
                 return False
             now = utc_now()
+            if not hold.get('ending'):
+                self._cut_hold_locked(hold)
             failed = bool(failure) and (failure.get('target') or {}).get('id') == hold.get('input_id')
             ends = hold.get('ending') or any(hold.get(k) and now >= parse_time(hold[k]) for k in ('until', 'limit'))
             if not ends and self._hold_lost_locked(hold, on_air, failed):
@@ -835,10 +910,11 @@ class SourceQueue(PlayoutQueue):
                   and now >= parse_time(hold['until']) - timedelta(seconds=self.ident_seconds)):
                 hold['ident'] = True  # The take's last 30 s go to the station ID.
                 ended = game = None
+                cutter = (hold.get('cut') or {}).get('target')
             else:
                 return False
         if ended is None and game is None:
-            self._run_ident(None)
+            self._run_ident(cutter)
             return True
         if game:
             try:
@@ -887,7 +963,9 @@ class SourceQueue(PlayoutQueue):
             target = self._recovery_pick_locked(choices, failed)
             if target is None:
                 return
-        end = {k: copy.deepcopy(hold[k]) for k in ('until', 'program', 'game') if hold.get(k)} or None
+        # Its own end time: a show that outranks it cuts the take put back on as it did this one.
+        own = {**hold, 'until': hold['cut']['until']} if hold.get('cut') else hold
+        end = {k: copy.deepcopy(own[k]) for k in ('until', 'program', 'game') if own.get(k)} or None
         try:
             item = self.add_target(target, 'now', hold_end=end)
         except ConfigError as exc:
@@ -922,7 +1000,9 @@ class SourceQueue(PlayoutQueue):
     def _recovery_choices(self, program, game):
         """The targets a failed program may go back on from, in order: the antenna first when
         it carries the program (it tunes in seconds; YouTube TV takes 20 s to 2 min), then
-        YouTube TV alone. Without alternates, only the program's own target."""
+        YouTube TV alone. The Roku comes first when it still plays the program: its feed goes
+        back on without navigating, as fast, in the better picture. Without alternates, only
+        the program's own target."""
         alternates = {}
         if self.alternates is not None:
             try:
@@ -931,12 +1011,22 @@ class SourceQueue(PlayoutQueue):
                 logging.getLogger(__name__).warning('Could not look up another source: %s', exc)
         antenna, roku = alternates.get('antenna'), alternates.get('roku')
         if (program or {}).get('source_id') in ROKU_SOURCES:
-            choices = [antenna, roku or program]
+            choices = ([roku or program, antenna] if antenna and self._roku_still_playing(program)
+                       else [antenna, roku or program])
         elif antenna is not None:  # The program is an antenna station: YouTube TV is its other source.
             choices = [program, roku]
         else:
             choices = [program]
         return [dict(c) for c in choices if c]
+
+    def _roku_still_playing(self, program):
+        if self.roku_playing is None:
+            return False
+        try:
+            return self.roku_playing(program) is True
+        except Exception as exc:  # The antenna goes first, as without the check.
+            logging.getLogger(__name__).warning('Could not check what the Roku plays: %s', exc)
+            return False
 
     def _recovery_pick_locked(self, choices, failed):
         """The first choice whose source has budget left (counting it), or None, logged."""
@@ -1075,18 +1165,21 @@ class SourceQueue(PlayoutQueue):
             game = hold.get('game')
             if hold.get('ending'):
                 return None
-            if game:
+            if hold.get('until') and parse_time(hold['until']) - now <= timedelta(seconds=ENDING_SECONDS):
+                # A take held to a time, or a game a show that outranks it cuts at its start.
+                at = ready_by = parse_time(hold['until'])
+                ends = (hold.get('program') or {}).get('title') or (game or {}).get('title') or 'what is on air'
+            elif game:
                 if not self._closing(game.get('league'), game.get('game_pk')):
                     return None
                 at, ready_by, ends = now, None, game.get('title') or 'the game'
-            elif hold.get('until') and parse_time(hold['until']) - now <= timedelta(seconds=ENDING_SECONDS):
-                at = ready_by = parse_time(hold['until'])
-                ends = (hold.get('program') or {}).get('title') or 'what is on air'
             else:
                 return None
-            # As follows_hold and take_back: a game under way, recordings, the head when it is
-            # due or waits on this game, else the schedule.
-            entry = self._under_way_locked(timed, at) or filler
+            # As follows_hold and take_back: the show cutting in, a game under way, recordings,
+            # the head when it is due or waits on this game, else the schedule.
+            cutter = self._items.get((hold.get('cut') or {}).get('item_id'))
+            entry = ((cutter if cutter is not None and cutter.status == 'queued' else None)
+                     or self._under_way_locked(timed, at) or filler)
             if entry is None and head is not None:
                 if head.release_type == 'after_game':
                     same = game and (head.after_game_pk, head.after_game_date) == (game.get('game_pk'), game.get('game_date'))
@@ -1391,6 +1484,8 @@ class SourceQueue(PlayoutQueue):
                     return
                 self._expire_locked()
                 timed, fill = self._lanes_locked()
+                if (not self.paused or self.hold is not None) and self._cut_locked(timed):
+                    timed, fill = self._lanes_locked()
                 item = None if self.paused else self._next_locked(timed, fill, on_air)
                 if item is not None and item is not (fill[0] if fill else None):
                     self._waiting_fill_locked(fill, on_air)

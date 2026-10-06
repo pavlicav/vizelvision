@@ -13,7 +13,10 @@
   "txt_known_ad",
   "fp_known",
   "fp_repeat",
-  "fp_show"
+  "fp_show",
+  "ov_score",
+  "ov_logo",
+  "ov_ad"
  ],
  "mean": [
   0.6901,
@@ -29,6 +32,9 @@
   0.0261,
   0.0233,
   0.0265,
+  0.0,
+  0.0,
+  0.0,
   0.0
  ],
  "scale": [
@@ -45,7 +51,10 @@
   0.1376,
   0.0363,
   0.0607,
-  0.1
+  0.1,
+  1.0,
+  1.0,
+  1.0
  ],
  "coef": [
   -2.5251,
@@ -61,7 +70,10 @@
   1.0077,
   1.0004,
   0.3334,
-  -1.5
+  -1.5,
+  -4.0,
+  -1.5,
+  6.0
  ],
  "intercept": -2.1232,
  "trained_on": [
@@ -7944,6 +7956,9 @@
   "tag": "extra-20261003-103008"
  },
  "notes": {
-  "fp_show": "set by hand (show sound may only argue for sound); not learnt"
+  "fp_show": "set by hand (show sound may only argue for sound); not learnt",
+  "ov_score": "set by hand 2026-10-05 (not learnt; admute.train keeps it): 1 while a trusted score bug is up, else nothing. Never up in an ad on the NBC/FOX MLB tapes (0.00%); -4 nats a second, so a break is called once the bug has gone",
+  "ov_logo": "set by hand 2026-10-05: a network/station logo. Weaker than a score bug: NBC put its peacock on a 43 s promo inside the 10/1 game's first break",
+  "ov_ad": "set by hand 2026-10-05: YouTube TV's ad label ('Sponsored'). Up in all six of 10/5's TBS ad pods, never in ~3 h of the programme; +6 nats a second, and admute.policy mutes at once"
  }
 }

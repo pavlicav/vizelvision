@@ -1,0 +1,51 @@
+{
+  "time-temp": {
+    "host": "The Daytime Announcer",
+    "model": "aura-2-zeus-en",
+    "lines": [
+      {
+        "id": "promo-time-temp",
+        "at": 2.55,
+        "text": "Vizel Vision time... and temperature."
+      }
+    ]
+  },
+  "watching": {
+    "host": "DJ Low Tide",
+    "model": "aura-2-orpheus-en",
+    "lines": [
+      {
+        "id": "promo-watching-1",
+        "at": 2.0,
+        "text": "You're watching"
+      },
+      {
+        "id": "promo-watching-2",
+        "at": 5.0,
+        "text": "Vizel Vision!"
+      }
+    ]
+  },
+  "only-on": {
+    "host": "Ophelia",
+    "model": "aura-2-ophelia-en",
+    "lines": [
+      {
+        "id": "promo-only-on",
+        "at": 6.9,
+        "text": "Only on Vizel Vision!"
+      }
+    ]
+  },
+  "legal": {
+    "host": "Jupiter",
+    "model": "aura-2-jupiter-en",
+    "lines": [
+      {
+        "id": "promo-legal",
+        "at": 0.3,
+        "text": "This is Vizel Vision nineteen, Cable seventy."
+      }
+    ]
+  }
+}

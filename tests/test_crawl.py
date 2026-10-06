@@ -92,6 +92,16 @@ class SettingsTests(Eastern):
         with self.assertRaises(ConfigError):
             self.settings.dismiss('eas', 'nine')
 
+    def test_alertdc_switch_persists_and_can_be_enabled_again(self):
+        self.settings.update({'segments': {'dc_alerts': {'enabled': False}}})
+        restarted = crawl.CrawlSettings(MasterConfig(socket_path=self.settings.path.with_name('master.sock')))
+        self.assertFalse(restarted.read()['segments']['dc_alerts']['enabled'])
+        restarted.update({'segments': {'dc_alerts': {'every': 60}, 'weather': {'changed_only': True}}})
+        self.assertFalse(self.settings.read()['segments']['dc_alerts']['enabled'])
+        restarted.update({'segments': {'dc_alerts': {'enabled': True}}})
+        self.assertTrue(self.settings.read()['segments']['dc_alerts']['enabled'])
+        self.assertEqual(self.settings.read()['segments']['dc_alerts']['every'], 60)
+
     def test_messages_run_on_their_days_times_and_dates(self):
         message = crawl.CrawlSettings.validate({'messages': [
             {'text': ' Late  show ', 'tag': 'tonight', 'days': [3], 'start': '22:00', 'end': '02:00'}]})['messages'][0]

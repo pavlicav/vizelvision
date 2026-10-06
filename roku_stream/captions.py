@@ -18,6 +18,10 @@ RATE = 16000
 CHUNK_BYTES = RATE * 4 * 4  # Four seconds, mono float32.
 MAX_AGE = 12.0
 LOOKAHEAD_SECONDS = 6.0  # Shared programme delay, not added to ad lookahead.
+# With at least this much programme delay, an input the ad detector transcribes is
+# captioned from its words (they come up to about 7 s after they are said) instead
+# of a second Whisper. Shorter delays keep captions' own, quicker 4 s chunks.
+SHARED_WORDS_DELAY = 8.0
 
 
 class WhisperProcess:
@@ -147,6 +151,7 @@ class LiveCaptions:
         self.dropped = 0
         self.latency = None
         self.last_pts = None
+        self.words_from = None  # 'whisper' (our own) or 'detector' (the ad detector's words)
 
     def _reset(self):
         self.generation += 1
@@ -190,10 +195,23 @@ class LiveCaptions:
         self.buffer.clear()
         self.buffer_pts = None
 
-    def feed(self, pcm, pts=None, route=None):
+    def feed(self, pcm, pts=None, route=None, words=None):
+        """Programme audio at pts (seconds). ``words``: the ad detector transcribes this
+        audio already, and these are its new words [(start, end, text)] on the same clock
+        (None: transcribe it here)."""
         with self.condition:
             if not self.settings['enabled'] or self.stopped or pts is None:
                 return
+            if words is not None:
+                if route != self.route or self.buffer:
+                    self._queue_audio()  # what was collected here before is still transcribed
+                    self.route = route
+                self.last_pts = pts + len(pcm) / (RATE * 4)
+                self.last_audio = self.clock()
+                self.words_from = 'detector'
+                self._add_words(words)
+                return
+            self.words_from = 'whisper'
             if self.last_pts is not None and (pts < self.last_pts - .01 or pts - self.last_pts > .15):
                 self._queue_audio()
             if route != self.route:
@@ -214,6 +232,18 @@ class LiveCaptions:
                 self.condition.notify_all()
             self.last_pts = pts + len(pcm) / (RATE * 4)
 
+    def _add_words(self, words):
+        segments = [{'words': [{'start': a, 'end': b, 'text': ' ' + t} for a, b, t in words]}]
+        self._add_cues(timed_cues(segments, 0.0, math.inf))
+
+    def _add_cues(self, cues):
+        for cue in cues:
+            if self.played_pts is not None and cue[0] < self.played_pts:
+                self.late_cues += 1
+            if self.played_pts is None or cue[1] > self.played_pts:
+                self.cues.append(cue)
+        self.cues = deque(sorted(self.cues), maxlen=160)
+
     def text_at(self, pts, *, audible=True):
         """Called for each delayed video frame using its ORIGINAL audio timestamp."""
         with self.condition:
@@ -233,7 +263,8 @@ class LiveCaptions:
             return {'enabled': self.settings['enabled'], 'state': state, 'text': text,
                     'error': self.error, 'dropped_chunks': self.dropped,
                     'latency_seconds': self.latency, 'model': self.settings['model'],
-                    'late_cues': self.late_cues, 'queued_cues': len(self.cues), 'timing': 'audio_timestamps'}
+                    'late_cues': self.late_cues, 'queued_cues': len(self.cues), 'timing': 'audio_timestamps',
+                    'words_from': self.words_from if self.settings['enabled'] else None}
 
     def _run(self):
         worker, model_key = None, None
@@ -281,12 +312,7 @@ class LiveCaptions:
                             self.error, self.state = None, 'listening'
                             self.latency = round(len(pcm) / (RATE * 4) + age, 2)
                             if age <= MAX_AGE:
-                                for cue in cues:
-                                    if self.played_pts is not None and cue[0] < self.played_pts:
-                                        self.late_cues += 1
-                                    if self.played_pts is None or cue[1] > self.played_pts:
-                                        self.cues.append(cue)
-                                self.cues = deque(sorted(self.cues), maxlen=160)
+                                self._add_cues(cues)
                             else:
                                 self.dropped += 1
                 except Exception as exc:

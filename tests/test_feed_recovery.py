@@ -168,6 +168,39 @@ class FeedRecoveryTests(unittest.TestCase):
         self.assertEqual(self.master.aired[-1], {**NFLN, 'antenna': False})
         self.assertIn('from YouTube TV', self.queue.list()[0].gate_detail)
 
+    def test_a_roku_still_playing_goes_back_on_before_the_antenna_until_its_budget_is_spent(self):
+        # A failed Roku feed is nearly always a blip in the capture card: its feed goes back on
+        # without navigating, as fast as the antenna and in the better picture.
+        self.with_alternates()
+        asked = []
+        self.queue.roku_playing = lambda target: asked.append(dict(target)) or True
+        self.scheduled(target=NFLN, title=COLTS['title'], kind='game', game=COLTS)
+        for attempt in range(1, RECOVERY_LIMIT + 2):
+            self.master.fail('Input video is over a second behind its audio; prepare the source again')
+            self.wait(lambda: len(self.master.aired) == attempt + 1)
+        self.assertEqual(self.master.aired, [NFLN] + [{**NFLN, 'antenna': False}] * RECOVERY_LIMIT + [FOX5])
+        self.assertEqual(asked[0], NFLN, 'asked about the program')
+
+    def test_a_roku_that_no_longer_plays_leaves_the_antenna_first(self):
+        self.with_alternates()
+        self.queue.roku_playing = lambda target: False
+        self.scheduled(target=NFLN, title=COLTS['title'], kind='game', game=COLTS)
+        self.master.fail('Input audio/video stopped arriving')
+        self.wait(lambda: len(self.master.aired) == 2)
+        self.assertEqual(self.master.aired[-1], FOX5)
+
+    def test_a_failing_check_leaves_the_antenna_first(self):
+        self.with_alternates()
+        def broken(target):
+            raise OSError('No route to host')
+        self.queue.roku_playing = broken
+        self.scheduled(target=NFLN, title=COLTS['title'], kind='game', game=COLTS)
+        with self.assertLogs('roku_stream.source_queue', 'WARNING') as logs:
+            self.master.fail('Input audio/video stopped arriving')
+            self.wait(lambda: len(self.master.aired) == 2)
+        self.assertEqual(self.master.aired[-1], FOX5)
+        self.assertTrue(any('Could not check what the Roku plays' in line for line in logs.output), logs.output)
+
     def test_every_source_used_up_leaves_the_program_to_the_operator(self):
         self.with_alternates()
         self.scheduled(target=NFLN, title=COLTS['title'], kind='game', game=COLTS)

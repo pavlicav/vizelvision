@@ -18,6 +18,11 @@ Shows may overlap, but not start at the same time. A later show takes over from
 its start. A game's window ends where the next show starts: the queue keeps the
 game on air until it is final, then joins the next show or game in progress.
 
+Each show has a priority (low, normal, high). A show that outranks what holds master
+cuts in at its start: a game on air before its final, or a take held to an end time
+(normal). Of equal priority, what is on air keeps master, as above. A program show
+starting inside one that outranks it waits for that one to end.
+
 Scheduled games follow MLB and ESPN until they start (follow_games): a moved game
 takes its window with it, a series winner replaces "ATL/PHI" in the title, and a
 cancelled game, or one its feed stops listing (an if-necessary game), is removed.
@@ -50,6 +55,10 @@ HISTORY = timedelta(days=7)
 GAME_CHECK = timedelta(minutes=10)  # How often scheduled games are checked against their feeds.
 GONE_AFTER = timedelta(minutes=20)  # Missing from its feed this long, a game was dropped (not a blip).
 REMOVED_KEPT = timedelta(days=2)    # How long games removed by their feeds stay listed.
+# A show's priority, lowest first; its rank is the index. Grid blocks, OFF AIR and entries
+# queued by hand are normal.
+PRIORITIES = ('low', 'normal', 'high')
+NORMAL = PRIORITIES.index('normal')
 _COLOR = re.compile(r'^#[0-9a-fA-F]{6}$')
 log = logging.getLogger(__name__)
 
@@ -80,6 +89,16 @@ def _text(value, name, limit=48):
             or any(ord(c) < 32 or ord(c) == 127 for c in value)):
         raise ConfigError(f'{name} must be a single line of at most {limit} characters')
     return value.strip()
+
+
+def _priority(value):
+    if value not in PRIORITIES:
+        raise ConfigError('priority must be one of ' + ', '.join(PRIORITIES))
+    return value
+
+
+def show_rank(show):
+    return PRIORITIES.index(show.get('priority') or 'normal')
 
 
 def target_key(target):
@@ -207,7 +226,8 @@ class Programming:
             raise ConfigError('A show must end after it starts and last at most 12 hours')
         if end <= utc_now():
             raise ConfigError('This show has already ended')
-        show = {'id': uuid.uuid4().hex, 'mode': mode, 'start': start.isoformat(), 'end': end.isoformat()}
+        show = {'id': uuid.uuid4().hex, 'mode': mode, 'start': start.isoformat(), 'end': end.isoformat(),
+                'priority': _priority(value.get('priority') or 'normal')}
         if mode == 'game':
             game = value.get('game')
             if not isinstance(game, dict):
@@ -258,6 +278,30 @@ class Programming:
             self._save_locked()
         self.sync()
         return copy.deepcopy(show)
+
+    def set_priority(self, show_id, priority):
+        """Change a show's priority; None if it is unknown. Up next reads it live, so a game
+        already on air is cut, or kept, from now on."""
+        priority = _priority(priority)
+        with self.lock:
+            show = next((s for s in self.data['shows'] if s['id'] == show_id), None)
+            if show is None:
+                return None
+            show['priority'] = priority
+            self._save_locked()
+        self.sync()
+        return self.describe()
+
+    def rank(self, key):
+        """The priority rank of an Up next entry from its schedule key: its show's (a game's
+        return to the schedule has the game's), else normal (grid blocks, OFF AIR)."""
+        parts = (key or '').split('|', 3)
+        if len(parts) != 4 or parts[1] not in ('show', 'game', 'backup'):
+            return NORMAL
+        show_id = parts[2].split(':', 1)[0]
+        with self.lock:
+            show = next((s for s in self.data['shows'] if s['id'] == show_id), None)
+        return show_rank(show) if show else NORMAL
 
     def remove_show(self, show_id):
         with self.lock:
@@ -398,11 +442,12 @@ class Programming:
 
     def timeline(self, start, end, data=None):
         """Segments covering [start, end): OFF AIR is populated wherever nothing is scheduled.
-        A later show overrides an earlier one from its start."""
+        A later show overrides an earlier one from its start, unless the earlier one outranks it."""
         with self.lock:
             data = copy.deepcopy(data or self.data)
         segments = self._grid_segments(data, start, end)
-        for show, s_start, s_end in self._windows(data['shows']):
+        # Lower priorities are laid down first; within one, in start order (a stable sort).
+        for show, s_start, s_end in sorted(self._windows(data['shows']), key=lambda w: show_rank(w[0])):
             if s_end <= start or s_start >= end:
                 continue
             carved = []
@@ -456,7 +501,8 @@ class Programming:
             # times. The schedule here is the grid and program shows, never another game.
             parts = []
             programs = {**data, 'shows': [s for s in data['shows'] if s['mode'] != 'game']}
-            for part in self.timeline(parse_time(show['start']), run_end, programs):
+            # From where the game airs: a show that outranks it may hold it back past its start.
+            for part in self.timeline(segment['start'], run_end, programs):
                 if parts and target_key(parts[-1]['target']) == target_key(part['target']):
                     parts[-1]['end'] = part['end']
                 else:

@@ -20,14 +20,15 @@
 </head>
 <body>
 <header class="topbar" data-page="presentation"></header><script src="static/ui/vv.js"></script>
-<script src="static/ui/testcard.js"></script><script src="static/ui/continuity.js"></script>
+<script src="static/ui/testcard.js"></script><script src="static/ui/continuity.js"></script><script src="static/ui/promos.js"></script>
 <main class="page">
-  <div class="page-head"><div><h1>Presentation</h1><p>How the station looks and sounds: live captions, the off-air card and its audio, the station clock, the announcer at every break, the station ID, and the sonic identity.</p></div></div>
+  <div class="page-head"><div><h1>Presentation</h1><p>How the station looks and sounds: live captions, the off-air card and its audio, the station clock, the announcer at every break, the station ID, the promos in ad breaks, and the sonic identity.</p></div></div>
   <div class="tabs" role="tablist" aria-label="Presentation">
     <button type="button" role="tab" id="tab-offair" data-tab="offair">Off-air card</button>
     <button type="button" role="tab" id="tab-captions" data-tab="captions">Live captions</button>
     <button type="button" role="tab" id="tab-continuity" data-tab="continuity">Continuity</button>
     <button type="button" role="tab" id="tab-ident" data-tab="ident">Station ID</button>
+    <button type="button" role="tab" id="tab-promos" data-tab="promos">Promos</button>
     <button type="button" role="tab" id="tab-sonic" data-tab="sonic">Sonic identity</button>
   </div>
 
@@ -94,6 +95,10 @@
         <li>With continuity on, the announcer's lines are mixed over the ID's music bed at −20 LUFS. A voice or mix failure falls back to the plain ID.</li>
         <li>Skipped IDs are logged (“Station ID skipped: …” in the web log).</li>
         <li>Built by <code>ident/build.py</code>; the sound family is on the Sonic identity sheet.</li></ul></div></section>
+  </div>
+
+  <div role="tabpanel" id="panel-promos" aria-labelledby="tab-promos" hidden>
+    <div id="promos-panel"></div>
   </div>
 
   <div role="tabpanel" id="panel-sonic" aria-labelledby="tab-sonic" hidden>

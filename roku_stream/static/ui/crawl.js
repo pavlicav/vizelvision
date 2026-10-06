@@ -281,7 +281,7 @@
     const box = q('segments'); box.replaceChildren();
     for (const [seg, meta] of Object.entries(data.segments)) {
       const options = data.settings.segments[seg], live = data.rotation?.segments?.[seg] || {}, extra = data.feeds?.segments?.[seg];
-      const check = (text, set, cls = 'check') => { const input = h('input', {type: 'checkbox'}); set(input); input.addEventListener('input', () => mark('segments')); return h('label', {class: cls}, input, h('span', text)); };
+      const check = (text, set, cls = 'check') => { const input = h('input', {type: 'checkbox'}); set(input); if (input.dataset.field !== 'enabled') input.addEventListener('input', () => mark('segments')); return h('label', {class: cls}, input, h('span', text)); };
       const run = h('button', {type: 'button', class: 'xs quiet', 'aria-label': 'Run ' + meta.name + ' now'}, 'Run now');
       run.onclick = () => act(() => api('v1/crawl/run', {segment: seg}), meta.name + ' runs within a few seconds.');
       const every = h('input', {type: 'number', min: 2, max: 240, value: options.every, style: {width: '80px'}, data: {segment: seg, field: 'every'}});
@@ -295,7 +295,18 @@
       if (seg === 'scores' && !data.settings.teams.length) notes.push('choose teams to follow');
       if (seg === 'messages' && !data.settings.messages.length) notes.push('add station messages');
       const card = h('article', {class: 'seg-card' + (options.enabled ? '' : ' off'), data: {segment: seg}},
-        h('div', {class: 'row between'}, check(h('strong', meta.name), n => { n.checked = options.enabled; n.dataset.segment = seg; n.dataset.field = 'enabled'; }, 'switch'), h('span', {class: 'badge'}, meta.label), run),
+        h('div', {class: 'row between'}, check(h('strong', meta.name), n => {
+          n.checked = options.enabled; n.dataset.segment = seg; n.dataset.field = 'enabled';
+          n.onchange = async () => {
+            if (busy) { n.checked = data.settings.segments[seg].enabled; return; }
+            const enabled = n.checked;
+            n.disabled = true;
+            await act(() => api('v1/crawl', {segments: {[seg]: {enabled}}}), meta.name + (enabled ? ' turned on.' : ' turned off until you turn it back on.'));
+            n.checked = data.settings.segments[seg].enabled;
+            card.classList.toggle('off', !n.checked);
+            n.disabled = false;
+          };
+        }, 'switch'), h('span', {class: 'badge'}, meta.label), run),
         h('div', {class: 'row'}, extra ? check('Repeat every', n => { n.checked = extra.repeat; n.dataset.feed = seg; n.dataset.option = 'repeat'; }) : h('span', 'Every'), every, h('span', {class: 'small muted'}, 'min'),
           check('only when it changes', n => { n.checked = options.changed_only; n.dataset.segment = seg; n.dataset.field = 'changed_only'; })),
         extra ? check('New items pop up at once (once each)', n => { n.checked = extra.new_now; n.dataset.feed = seg; n.dataset.option = 'new_now'; }) : null,
@@ -307,15 +318,19 @@
   }
   q('save-segments').onclick = () => {
     const segments = {}, feedSegments = {};
-    document.querySelectorAll('[data-panel=segments] [data-segment]').forEach(n => { (segments[n.dataset.segment] ||= {})[n.dataset.field] = n.type === 'checkbox' ? n.checked : Number(n.value); });
+    document.querySelectorAll('[data-panel=segments] [data-segment][data-field]:not([data-field=enabled])').forEach(n => { (segments[n.dataset.segment] ||= {})[n.dataset.field] = n.type === 'checkbox' ? n.checked : Number(n.value); });
     document.querySelectorAll('[data-panel=segments] [data-feed]').forEach(n => {
       const options = feedSegments[n.dataset.feed] ||= {contexts: []};
       if (n.dataset.option) options[n.dataset.option] = n.checked; else if (n.checked) options.contexts.push(n.dataset.airs);
     });
     const nowhere = Object.entries(feedSegments).find(([, o]) => !o.contexts.length);
     if (nowhere) { toast(data.segments[nowhere[0]].name + ' needs somewhere to air; turn the segment off instead.', {error: true}); return; }
-    clean('segments');
-    act(async () => { const result = await api('v1/crawl', {segments}); return Object.keys(feedSegments).length ? api('v1/crawl/feeds', {segments: feedSegments}) : result; }, 'Segments saved.');
+    act(async () => {
+      let result = await api('v1/crawl', {segments});
+      if (Object.keys(feedSegments).length) result = await api('v1/crawl/feeds', {segments: feedSegments});
+      clean('segments');
+      return result;
+    }, 'Segments saved.');
   };
 
   /* Sources: alerts, Metro and bus, the weather location ---------------------------------------------------------- */

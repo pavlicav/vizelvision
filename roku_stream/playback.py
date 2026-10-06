@@ -1,7 +1,8 @@
 """What master will actually air: Up next and the schedule played forward under the
 queue's rules (source_queue), for the Schedule page.
 
-- A game holds master until its (estimated) final; entries due meanwhile wait.
+- A game holds master until its (estimated) final; entries due meanwhile wait, unless
+  one outranks it (a show of higher priority), which cuts in at its start.
 - At a final: a game already under way joins in progress, else recordings waiting in
   Up next play back to back, else what is due airs (the schedule's block under way).
 - Otherwise a timed entry cuts in at its time. OFF AIR gives way to recordings.
@@ -12,7 +13,7 @@ IDs, failures and pauses are not modelled.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 
 # A recording of unknown length is assumed to run this long.
@@ -22,6 +23,8 @@ LATE = timedelta(seconds=60)
 OFF_AIR = {'source_id': 'off-air', 'channel_id': 'off-air'}
 # Sources whose channel id is a game's id (NFL on ESPN, MLB gamePk).
 GAME_SOURCES = {'thursday-night-football': 'nfl', 'sunday-ticket': 'nfl', 'mlb': 'mlb'}
+# A show's priority rank (programming.PRIORITIES); takes held by hand are normal.
+NORMAL = 1
 
 
 @dataclass
@@ -37,6 +40,7 @@ class Entry:
     color: str | None = None
     source: str = 'schedule'  # schedule (not yet in Up next) or queue
     start: datetime | None = None  # Its scheduled time, before any game gate (default: due).
+    rank: int = NORMAL        # Its show's priority: one that outranks a held game cuts in.
 
     @property
     def scheduled(self):
@@ -56,6 +60,7 @@ class Program:
     color: str | None = None
     source: str = 'schedule'
     notes: list = field(default_factory=list)
+    rank: int = NORMAL
 
 
 def project(now, horizon, current, entries, recordings, *, game_end, schedule_at):
@@ -78,6 +83,10 @@ def project(now, horizon, current, entries, recordings, *, game_end, schedule_at
                              'color': program.color, 'source': program.source, 'estimated': program.holds
                              and program.kind == 'game', 'notes': list(program.notes)})
 
+    def cut_by(cur, end):
+        """The first entry starting after cur and due by end that outranks it (not a game's return)."""
+        return next((e for e in pending if cur.start < e.due <= end and e.rank > cur.rank and e.kind != 'backup'), None)
+
     def recording(at):
         title, target, length = fill.pop(0)
         return Program(title, 'recording', target, at, at + (length or UNKNOWN_LENGTH), source='recording',
@@ -87,7 +96,8 @@ def project(now, horizon, current, entries, recordings, *, game_end, schedule_at
         game = entry.kind == 'game' and entry.game
         return Program(entry.title, entry.kind, entry.target, at, game_end(game, entry.due) if game else None, bool(game),
                        entry.game, entry.color, entry.source,
-                       ['Joins in progress'] if entry.scheduled < at - LATE and entry.target.get('source_id') != 'off-air' else [])
+                       ['Joins in progress'] if entry.scheduled < at - LATE and entry.target.get('source_id') != 'off-air' else [],
+                       entry.rank)
 
     def off_air(at):
         return Program('OFF AIR', 'off_air', dict(OFF_AIR), at)
@@ -119,6 +129,15 @@ def project(now, horizon, current, entries, recordings, *, game_end, schedule_at
         cur = state['cur']
         if cur.holds:
             end = max(cur.until or horizon, t)
+            cutter = cut_by(cur, end)
+            if cutter is not None:
+                at = max(cutter.due, t)
+                emit(replace(cur, holds=False, notes=cur.notes + [f'Cut when {cutter.title or "the next show"} starts']), at)
+                # What it outranks and was waiting meanwhile never airs.
+                pending[:] = [e for e in pending if e is not cutter and not (e.due <= at and e.rank < cutter.rank)]
+                t = at
+                state['cur'] = enter(cutter, t)
+                continue
             emit(cur, end)
             if end >= horizon:
                 break
@@ -169,6 +188,7 @@ def project(now, horizon, current, entries, recordings, *, game_end, schedule_at
 def queue_inputs(queue, items, game_end, colors):
     """Up next's waiting timed entries, and its recordings in order, as projection inputs."""
     entries, recordings = [], []
+    rank = getattr(queue, '_rank', lambda item: NORMAL)
     for order, item in enumerate(items):
         if item.status not in ('queued', 'blocked'):
             continue
@@ -188,12 +208,13 @@ def queue_inputs(queue, items, game_end, colors):
                              # A game queued by hand carries its game in hold_end until taken.
                              queue._regular(item), item.game or (item.hold_end or {}).get('game'),
                              colors.get(ref), 'queue',
-                             datetime.fromisoformat(item.run_at) if item.run_at else None))
+                             datetime.fromisoformat(item.run_at) if item.run_at else None, rank(item)))
     return entries, recordings
 
 
-def schedule_inputs(transitions, game_end, colors, queued_keys, first_order):
-    """Schedule changes not yet in Up next, as the queue would hold them."""
+def schedule_inputs(transitions, game_end, colors, queued_keys, first_order, rank=lambda key: NORMAL):
+    """Schedule changes not yet in Up next, as the queue would hold them. rank(key) is a
+    change's priority rank (Programming.rank)."""
     entries = []
     for order, change in enumerate(transitions, first_order):
         if change['key'] in queued_keys:
@@ -206,7 +227,8 @@ def schedule_inputs(transitions, game_end, colors, queued_keys, first_order):
         entries.append(Entry(due, change['title'], kind, dict(change['target']), order,
                              datetime.fromisoformat(change['skip_after']) if change.get('skip_after') else None,
                              kind in ('block', 'show', 'off_air') or (kind == 'backup' and ':' in ref),
-                             change.get('game'), colors.get(ref), 'schedule', datetime.fromisoformat(change['run_at'])))
+                             change.get('game'), colors.get(ref), 'schedule', datetime.fromisoformat(change['run_at']),
+                             rank(change['key'])))
     return entries
 
 
@@ -236,7 +258,7 @@ def describe(now, horizon, *, queue, programming, on_air, game_info, length, lab
     entries, fills = queue_inputs(queue, items, game_end, colors)
     queued = {i.schedule_key for i in items if i.schedule_key}
     changes = programming.transitions(now, horizon) if programming.enabled else []
-    entries += schedule_inputs(changes, game_end, colors, queued, len(items))
+    entries += schedule_inputs(changes, game_end, colors, queued, len(items), programming.rank)
     recordings = [(label(i.target['channel_id']) if (i.target or {}).get('source_id') == 'library' else i.title or '',
                    dict(i.target or {}), _seconds(length(i.target['channel_id']) if (i.target or {}).get('source_id') == 'library' else None))
                   for i in fills]
@@ -289,7 +311,8 @@ def _current(now, status, items, on_air, game_end, length, label, colors, queue)
     kind, ref = queue._schedule_kind(aired) if aired else (None, None)
     if aired and aired.game:  # A scheduled game, or a game queued by hand: on until its final.
         return Program(aired.title or aired.game.get('title') or '', 'game', on_air, since,
-                       game_end(aired.game, since), True, aired.game, source='queue')
+                       game_end(aired.game, since), True, aired.game, source='queue',
+                       rank=getattr(queue, '_rank', lambda item: NORMAL)(aired))
     return Program((aired.title or (aired.program or {}).get('title') or '') if aired else '', kind or 'manual',
                    on_air, since, color=colors.get(ref), source='queue' if aired else 'schedule')
 

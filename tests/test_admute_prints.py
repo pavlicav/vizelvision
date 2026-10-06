@@ -13,7 +13,7 @@ try:
 except ImportError:  # the system Python (unittest discover): these run under conda
     raise unittest.SkipTest("needs numpy: run with /home/vivian/miniconda3/bin/python3")
 
-from admute import detector as D, fingerprint as FP
+from admute import detector as D, fingerprint as FP, overlays as OV
 
 
 def sound(seconds, seed):
@@ -152,7 +152,7 @@ class SessionTests(unittest.TestCase):
         t, h = fake_landmarks(100, 30, 5)
         cid = db._insert("ad", t - 100, h, {"seed": "x"})
         labels_written = []
-        svc = SimpleNamespace(embed=None, model=D.DEFAULT_MODEL, prints=db, library=None,
+        svc = SimpleNamespace(embed=None, model=D.DEFAULT_MODEL, overlays=OV.Library(catalogue=None), prints=db, library=None,
                               settings={"speech": False, "known_ads": True, "sensitivity": .5, "max_mute": 300, "learn": True},
                               speech=SimpleNamespace(usable=False), frames=SimpleNamespace(save=lambda *a: None),
                               label=labels_written.append, note=lambda *a, **k: None)
@@ -204,7 +204,7 @@ class GameLearningTests(unittest.TestCase):
         from admute.service import Session, Service
         db = FP.PrintDB()
         noted = []
-        svc = SimpleNamespace(embed=None, model=D.DEFAULT_MODEL, prints=db, library=T.AdLibrary(),
+        svc = SimpleNamespace(embed=None, model=D.DEFAULT_MODEL, overlays=OV.Library(catalogue=None), prints=db, library=T.AdLibrary(),
                               settings={"speech": False, "known_ads": True, "learn_games": True, "sensitivity": .5,
                                         "max_mute": 300},
                               speech=SimpleNamespace(usable=False), frames=SimpleNamespace(save=lambda *a: None),
@@ -262,7 +262,7 @@ class WhyTests(unittest.TestCase):
         from admute import text as T
         from admute.service import Session, Service
         db = FP.PrintDB()
-        svc = SimpleNamespace(embed=None, model=D.DEFAULT_MODEL, prints=db, library=T.AdLibrary(),
+        svc = SimpleNamespace(embed=None, model=D.DEFAULT_MODEL, overlays=OV.Library(catalogue=None), prints=db, library=T.AdLibrary(),
                               settings={"speech": False, "known_ads": True, "sensitivity": .5, "max_mute": 300},
                               speech=SimpleNamespace(usable=False), frames=SimpleNamespace(save=lambda *a: None),
                               note=lambda *a, **k: None)

@@ -16,7 +16,7 @@ from .admute_link import apply_gain, badge_words
 from .master import MasterStreamError, _gst
 from .config import MasterConfig
 from .production import PATTERN, DEFAULTS, ProductionSettings
-from .captions import LiveCaptions, LOOKAHEAD_SECONDS
+from .captions import LiveCaptions, LOOKAHEAD_SECONDS, SHARED_WORDS_DELAY
 from .programme_delay import ProgrammeDelay, retimable
 
 
@@ -216,6 +216,16 @@ class MasterMedia:
             self.ad_break = AdBreak(self, store.folder, store.plays_path)
         self.ad_break.configure(settings, self.admute_conf)
 
+    def configure_promos(self, snapshot, store):
+        """Station promos (promos.Promos.snapshot(); None if unreadable), which share My ads'
+        breaks and play log (store)."""
+        if self.ad_break is None:
+            if not (snapshot and snapshot['settings']['enabled']):
+                return
+            from .ad_break import AdBreak
+            self.ad_break = AdBreak(self, store.folder, store.plays_path)
+        self.ad_break.configure_promos(snapshot)
+
     def my_ads_status(self):
         return self.ad_break.status() if self.ad_break else None
 
@@ -338,10 +348,23 @@ class MasterMedia:
                 if pts != self.gst.CLOCK_TIME_NONE:
                     route = self._route_at('audio', pts)
                     self.captions.feed(buf.extract_dup(0, buf.get_size()), pts / self.gst.SECOND,
-                                       route=route[2] if route else None)
+                                       route=route[2] if route else None, words=self._detector_words(route))
         except Exception:
             logging.getLogger(__name__).exception('Caption audio tap failed')
         return self.gst.FlowReturn.OK
+
+    def _detector_words(self, route):
+        """The ad detector's new words for the input on air, on the programme clock
+        (seconds), when its Whisper can stand in for captions' own: None otherwise."""
+        tap = route[0] if route else None
+        if (not hasattr(tap, 'link') or not self.captions.settings['enabled']
+                or self.programme.delay_ns < SHARED_WORDS_DELAY * self.gst.SECOND):
+            return None
+        words = tap.link.take_words(tap.key)
+        if words is None:
+            return None
+        offset = route[1]
+        return [((a - offset) / self.gst.SECOND, (b - offset) / self.gst.SECOND, w) for a, b, w in words]
 
     def _caption_overlay(self, text):
         if text != self.caption_text:
@@ -612,8 +635,9 @@ DRIFTED = "Input {} is over a second behind its {}; prepare the source again"
 class DecodedInput:
     # A fresh HLS input can rewind its audio once, ~0.5 s into decoding. Off air,
     # a timeline fault restarts the anchor (at most MAX_RESYNCS times in RESYNC_WINDOW);
-    # ready() then waits for SETTLE of continuous media. A playing file which rides out
-    # stalls drops frames that arrive too late.
+    # ready() then waits for SETTLE of continuous media. A live input steps back under a
+    # second (a repeated packet) without one: that frame is dropped as overlap, on air or
+    # off. A playing file which rides out stalls drops frames that arrive too late.
     #
     # A live input on air rides out what used to fail it (2026-10-04: a FOX 5 game that
     # looked fine was failed off the air five times in eight minutes). Frames over a second
@@ -851,6 +875,8 @@ class DecodedInput:
                         return gst.FlowReturn.OK
                     if self.anchor is None:  # re-anchored past a held picture
                         fault = self._timeline_fault(kind, pts)
+                elif self._repeats(kind, pts, fault):
+                    return gst.FlowReturn.OK
                 if fault and self.output.active != self.slot and self._may_resync():
                     self.anchor = None
                     if self.delay:
@@ -915,6 +941,21 @@ class DecodedInput:
     def _live_on_air(self):
         return (self.RIDES_OUT_ON_AIR and not self.delay and self.anchor is not None
                 and self.output.active == self.slot)
+
+    def _repeats(self, kind, pts, fault):
+        """A live input being prepared that steps back under a second (a repeated packet) drops
+        that frame as overlap, as on air; True when it is dropped. A fresh session on the Roku
+        capture repeats a few ms of audio several times in its first seconds; each step back
+        used to re-anchor the input until the re-anchors ran out (2026-10-04 13:39 and 13:41:
+        12 and 43 ms back, and the game went back to a 2-minute navigation each time)."""
+        if (not self.RIDES_OUT_ON_AIR or self.anchor is None or self.output.active == self.slot
+                or fault == CLOCK_WINDOW or self.last[kind]["pts"] is None):
+            return False
+        behind = self.last[kind]["pts"] - (pts - self.anchor[0] + self.anchor[1])
+        if not 0 <= behind < self.OVERLAP:
+            return False
+        self.overlap[kind] += 1
+        return True
 
     def _ride(self, kind, pts, fault):
         """A live input on air drops a late frame, or one repeating what already aired,

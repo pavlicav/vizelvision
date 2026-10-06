@@ -17,7 +17,7 @@ try:
 except ImportError:  # the system Python (unittest discover): these run under conda
     raise unittest.SkipTest("needs numpy: run with /home/vivian/miniconda3/bin/python3")
 
-from admute import detector as D, features, fingerprint as FP, speech as W, text as T
+from admute import detector as D, features, fingerprint as FP, overlays as OV, speech as W, text as T
 from admute.frames import FrameStore
 from admute.service import Session, Service
 
@@ -190,6 +190,172 @@ class AudioGridTests(unittest.TestCase):
         self.assertGreater(min(sig.rms_db), -50)
 
 
+def words_at(text, t0, step=0.5):
+    """A phrase spoken from t0, one word every ``step`` s: [[start, end, word]]."""
+    return [[round(t0 + i * step, 2), round(t0 + i * step + 0.4, 2), w] for i, w in enumerate(text.split())]
+
+
+class FakeWhisper:
+    """Hears the words said in a window, a little off in time, and garbles any word the
+    window cuts off at either edge (as Whisper does)."""
+
+    def __init__(self, said, jitter=0.15):
+        self.said, self.jitter, self.n = said, jitter, 0
+
+    def __call__(self, model, audio, t0, prompt=None):
+        t1 = t0 + len(audio) / W.RATE
+        self.n += 1
+        nudge = self.jitter if self.n % 2 else -self.jitter
+        out = []
+        for a, b, w in self.said:
+            if b <= t0 or a >= t1:
+                continue
+            word = w if a >= t0 and b <= t1 else w[:2] + "#"
+            out.append([round(max(t0, a + nudge), 2), round(min(t1, b + nudge), 2), word])
+        return out
+
+
+class WindowTests(unittest.TestCase):
+    def stream(self, seconds, fake, gap_at=None, gap=0.0):
+        windows, committer, chunks = W.Windower(), W.Committer(), []
+        t = 0.0
+        for i in range(int(seconds * 10)):
+            if gap_at is not None and abs(t - gap_at) < 1e-6:
+                t += gap
+            for t0, audio, upto in windows.push(t, np.full(1600, 0.1, np.float32)):
+                chunks.append(committer.take(t0, upto, fake(None, audio, t0)))
+            t += 0.1
+        for t0, audio, upto in windows.flush():
+            chunks.append(committer.take(t0, upto, fake(None, audio, t0)))
+        return chunks
+
+    def test_every_word_once_and_whole_despite_window_edges_and_timing(self):
+        said = words_at(" ".join(f"word{i}" for i in range(60)), 0.3)       # 0.3 .. 30 s
+        chunks = self.stream(31, FakeWhisper(said))
+        got = [w[2] for _, _, ws in chunks for w in ws]
+        self.assertEqual(got, [w[2] for w in said])
+        for (a0, a1, _), (b0, b1, _) in zip(chunks, chunks[1:]):
+            self.assertEqual(a1, b0, "the chunks are contiguous")
+
+    def test_a_gap_gives_the_held_back_words_and_starts_over(self):
+        said = words_at("one two three four five", 4.5) + words_at("six seven eight", 12.5)
+        chunks = self.stream(10, FakeWhisper(said, jitter=0.0), gap_at=7.0, gap=5.0)
+        got = [w[2] for _, _, ws in chunks for w in ws]
+        self.assertEqual(got, [w[2] for w in said])
+        spans = [(round(a, 2), round(b, 2)) for a, b, _ in chunks]
+        self.assertEqual(spans[:3], [(0.0, 3.0), (3.0, 7.0), (12.0, 15.0)])
+
+    def test_dropped_windows_leave_a_hole_not_duplicates(self):
+        committer = W.Committer()
+        self.assertEqual(committer.take(0.0, 3.0, words_at("a b c d e", 0.2))[2:], ([w for w in words_at("a b c d e", 0.2)],))
+        got = committer.take(8.0, 15.0, words_at("x y", 8.2))            # the windows between were dropped
+        self.assertEqual((got[0], got[1], [w[2] for w in got[2]]), (8.0, 15.0, ["x", "y"]))
+        self.assertIsNone(committer.take(4.0, 11.0, []), "a window from before is ignored")
+
+    def test_speech_over_music_passes_but_hallucinations_and_garbage_do_not(self):
+        seg = lambda text, no_speech=0.1, logprob=-0.3, ratio=1.5: SimpleNamespace(
+            text=text, no_speech_prob=no_speech, avg_logprob=logprob, compression_ratio=ratio)
+        self.assertTrue(W.speech_like(seg("Get zero percent APR", no_speech=0.7, logprob=-0.6)), "music under a voice")
+        self.assertTrue(W.speech_like(seg("Get zero percent APR", no_speech=0.2, logprob=-1.2)), "unsure but speech")
+        self.assertFalse(W.speech_like(seg("la la", no_speech=0.7, logprob=-1.2)), "Whisper's own silence")
+        self.assertFalse(W.speech_like(seg("whatever", logprob=-1.6)))
+        self.assertFalse(W.speech_like(seg("go go go go go go", ratio=2.6)))
+        self.assertFalse(W.speech_like(seg(" Thank you. ")))
+        self.assertFalse(W.speech_like(seg("Thanks for watching!")))
+
+    def test_prompt(self):
+        self.assertIsNone(W.prompt(None))
+        self.assertEqual(W.prompt("Jeopardy!"), "Jeopardy!")
+        long = W.prompt("Game", [f"Player Number{i}" for i in range(200)])
+        self.assertLessEqual(len(long), W.PROMPT_CHARS + 1)
+        self.assertTrue(long.startswith("Game. Player Number0, Player Number1"))
+
+
+class SpeechLaneTests(unittest.TestCase):
+    def setUp(self):
+        from admute import service
+        self.service_mod = service
+        self.svc = SimpleNamespace(settings={"speech_model": "base.en"}, stopping=unittest.mock.Mock())
+        self.svc.stopping.is_set.return_value = False
+
+    def session(self):
+        heard = []
+
+        class FakeSession:
+            def heard(self, gen, *chunk):
+                heard.append((gen,) + chunk)
+
+            def hint(self):
+                return None
+        return FakeSession(), heard
+
+    def test_each_input_has_its_own_lane_and_backlog(self):
+        sp = self.service_mod.Speech(self.svc)
+        a, _ = self.session()
+        b, _ = self.session()
+        for i in range(4):
+            sp.submit(a, 1, 4.0 * i, np.zeros(16), 4.0 * i + 3)
+        sp.submit(b, 1, 0.0, np.zeros(16), 3.0)
+        self.assertEqual(sp.dropped, 2, "a slow input drops its own oldest windows ...")
+        self.assertEqual(len(sp.lanes[b].jobs), 1, "... and never another input's")
+        first = sp._next()
+        self.assertIs(first[0], a, "the window that has waited longest goes first")
+        first[1].busy = True
+        self.assertIs(sp._next()[0], b, "a busy input's lane waits; the other is transcribed meanwhile")
+        sp.forget(a)
+        self.assertNotIn(a, sp.lanes)
+
+    def test_words_arrive_as_contiguous_chunks(self):
+        sp = self.service_mod.Speech(self.svc)
+        s, heard = self.session()
+        lane = self.service_mod.Lane()
+        fake = FakeWhisper(words_at("alpha beta gamma delta epsilon zeta eta theta", 1.0))
+        with unittest.mock.patch.object(W, "load", return_value=object()), \
+                unittest.mock.patch.object(W, "transcribe", side_effect=fake):
+            win = W.Windower()
+            for t0, audio, upto in win.push(0.0, np.zeros(12 * W.RATE, np.float32)):
+                sp._work(s, lane, 1, t0, audio, upto, time.monotonic())
+        self.assertEqual([(c[1], c[2]) for c in heard], [(0.0, 3.0), (3.0, 7.0), (7.0, 11.0)])
+        self.assertEqual([w[2] for c in heard for w in c[3]], "alpha beta gamma delta epsilon zeta eta theta".split())
+        self.assertIsNotNone(sp.status()["load"])
+
+    def test_a_model_that_will_not_load_falls_back_to_base(self):
+        sp = self.service_mod.Speech(self.svc)
+        self.svc.settings["speech_model"] = "distil-large-v3"
+        loaded = []
+
+        def load(name, threads, workers):
+            if name != "base.en":
+                raise OSError("not cached")
+            loaded.append((name, threads, workers))
+            return object()
+        with unittest.mock.patch.object(W, "load", side_effect=load):
+            self.assertIsNotNone(sp._model())
+            self.assertEqual(sp.model_name, "base.en")
+            self.assertIn("distil-large-v3 is unavailable", sp.error)
+            self.assertTrue(sp.usable)
+            sp._model()
+        self.assertEqual(len(loaded), 1, "not loaded again for every window")
+        with unittest.mock.patch.object(W, "load", side_effect=OSError("gone")):
+            sp.failed.clear()
+            sp.model = None
+            self.assertIsNone(sp._model())
+        self.assertFalse(sp.usable, "no words at all: detection goes on without them")
+
+
+class GameNamesTests(unittest.TestCase):
+    def test_teams_then_lineups_then_rosters(self):
+        from admute.sports import names_from_feed
+        feed = {"gameData": {"teams": {"away": {"name": "Atlanta Braves", "teamName": "Braves"},
+                                       "home": {"name": "Los Angeles Dodgers", "teamName": "Dodgers"}},
+                             "players": {"ID1": {"fullName": "Bench Guy"}, "ID2": {"fullName": "Matt Olson"},
+                                         "ID3": {"fullName": "Yoshinobu Yamamoto"}}},
+                "liveData": {"boxscore": {"teams": {"away": {"battingOrder": [2]}, "home": {"pitchers": [3]}}}}}
+        self.assertEqual(names_from_feed(feed), ["Atlanta Braves", "Braves", "Los Angeles Dodgers", "Dodgers",
+                                                 "Matt Olson", "Yoshinobu Yamamoto", "Bench Guy"])
+        self.assertEqual(names_from_feed({}), [])
+
+
 class FrameStoreTests(unittest.TestCase):
     def test_save_and_prune(self):
         with tempfile.TemporaryDirectory() as d:
@@ -212,31 +378,53 @@ class FrameStoreTests(unittest.TestCase):
 class SessionSpeechTests(unittest.TestCase):
     def service(self):
         sent = []
-        svc = SimpleNamespace(embed=None, model=D.DEFAULT_MODEL, settings={"speech": True, "sensitivity": .5, "max_mute": 300},
+        svc = SimpleNamespace(embed=None, model=D.DEFAULT_MODEL, overlays=OV.Library(catalogue=None), settings={"speech": True, "sensitivity": .5, "max_mute": 300},
                               library=T.AdLibrary(), marked_show=lambda span_id: span_id.endswith("-199"),
                               prints=FP.PrintDB(), note=lambda *a, **k: None,
                               speech=SimpleNamespace(usable=True, submit=lambda *a: sent.append(a)),
-                              frames=SimpleNamespace(save=lambda *a: None))
+                              frames=SimpleNamespace(save=lambda *a: None), quiet=lambda *a: False)
         svc.policy_config = lambda lookahead: Service.policy_config(svc, lookahead)
         return svc, sent
 
-    def test_audio_is_cut_into_whisper_chunks(self):
+    def test_audio_is_cut_into_overlapping_whisper_windows(self):
         svc, sent = self.service()
         s = Session(svc, "k" * 32, {"lookahead": 3})
         s.base = 0
         piece = np.zeros(1600, np.float32)
-        for i in range(100):                       # 10 s in 0.1 s buffers
+        for i in range(130):                       # 13 s in 0.1 s buffers
             s._hear(i / 10, piece)
-        self.assertEqual([round(c[2], 2) for c in sent], [0.0, 4.0])
-        self.assertTrue(all(len(c[3]) == W.CHUNK * W.RATE for c in sent))
-        for i in range(150, 200):                  # after a gap: a new chunk starts at 15 s
+        # (session, gen, window start, audio, words given up to)
+        self.assertEqual([(round(c[2], 2), len(c[3]) / W.RATE, round(c[4], 2)) for c in sent],
+                         [(0.0, 4.0, 3.0), (0.0, 8.0, 7.0), (4.0, 8.0, 11.0)])
+        for i in range(150, 200):                  # a gap: the last window gives all it held back ...
             s._hear(i / 10, piece)
-        self.assertEqual(round(sent[-1][2], 2), 15.0)
+        self.assertEqual((round(sent[3][2], 2), round(sent[3][4], 2)), (8.0, 13.0))
+        self.assertEqual((round(sent[4][2], 2), round(sent[4][4], 2)), (15.0, 18.0), "... and a new run starts")
         gen = sent[0][1]
-        s.heard(gen, 0.0, 4.0, [[1.0, 1.3, "hello"]])
+        s.heard(gen, 0.0, 3.0, [[1.0, 1.3, "hello"]])
         s._reset()
-        s.heard(gen, 4.0, 8.0, [[5.0, 5.3, "stale"]])
+        s.heard(gen, 3.0, 7.0, [[5.0, 5.3, "stale"]])
         self.assertEqual(s.speech, [], "words for an earlier timeline are dropped")
+
+    def test_new_words_go_to_master_once_on_the_input_clock(self):
+        svc, _ = self.service()
+        s = Session(svc, "k" * 32, {"lookahead": 3})
+        s.base = 50 * 1_000_000_000
+        s.heard(s.gen, 0.0, 3.0, [[1.0, 1.25, "hello"], [1.5, 1.75, "there"]])
+        msg = s._message()
+        self.assertTrue(msg["speech"])
+        self.assertEqual(msg["words"], [[51_000_000_000, 51_250_000_000, "hello"], [51_500_000_000, 51_750_000_000, "there"]])
+        self.assertNotIn("words", s._message(), "each word once")
+        svc.speech.usable = False
+        self.assertFalse(s._message()["speech"], "captions transcribe for themselves")
+
+    def test_whisper_is_told_the_programme_and_its_names(self):
+        svc, _ = self.service()
+        s = Session(svc, "k" * 32, {"lookahead": 3, "title": "Baseball Night"})
+        self.assertEqual(s.hint(), "Baseball Night.")
+        s.game = {"title": "Atlanta Braves at Los Angeles Dodgers"}
+        s.gate = SimpleNamespace(names=["Atlanta Braves", "Braves", "Freddie Freeman"])
+        self.assertEqual(s.hint(), "Atlanta Braves at Los Angeles Dodgers. Atlanta Braves, Braves, Freddie Freeman.")
 
     def test_only_confirmed_breaks_teach_the_library(self):
         from admute.policy import Span

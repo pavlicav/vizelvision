@@ -164,8 +164,11 @@ class Recordings:
                 continue
             title = f"{game.get('title') or key} {time.strftime('%m-%d', time.localtime(start + LEAD))} (ad training)"
             try:
+                # from_live: copy TV-Thing's live stream rather than encode the broadcast a second time
+                # (~1.5 cores saved). That picture is plenty for training. Older TV-Thing ignores the flag.
                 got = self._post(f"{self.tv}/api/v1/recordings", {"mode": "manual", "channel_id": channel["id"],
-                                                                  "start": int(start), "end": int(end), "title": title})
+                                                                  "start": int(start), "end": int(end), "title": title,
+                                                                  "from_live": True})
             except Exception as exc:
                 self.state["skipped"][key] = {"title": game.get("title"), "start": round(start + LEAD),
                                               "why": f"TV-Thing refused the timer: {exc}"}

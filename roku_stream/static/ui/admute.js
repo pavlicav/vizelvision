@@ -67,6 +67,7 @@
     const heard = live?.heard;
     $('heard').hidden = !heard;
     if (heard) $('heard').textContent = 'Hears: “' + heard[1] + '”';
+    overlays(live);
     $('lamp').className = 'lamp ' + (live?.muted ? (mode === 'on' ? 'pgm' : 'warn') : live ? 'pvw' : '');
     const p = live?.p_ad;
     $('p-meter').style.width = (p == null ? 0 : Math.round(100 * p)) + '%';
@@ -83,12 +84,27 @@
     knownPanel(d, live, s);
     timeline(live);
     const sp = d?.speech, words = s.speech === false ? 'not listening' : !sp ? null : !sp.usable ? 'Whisper unavailable'
-      : 'Whisper ' + sp.model + (sp.load != null ? ' · ' + Math.round(100 * sp.load) + '% of a core' : '') + (sp.dropped ? ' · ' + sp.dropped + ' chunks dropped' : '');
+      : 'Whisper ' + sp.model + (sp.load != null ? ' · busy ' + Math.round(100 * sp.load) + '%' : '')
+        + (sp.lag != null ? ' · words up to ' + sp.lag + ' s late' : '') + (sp.dropped ? ' · ' + sp.dropped + ' windows dropped' : '');
     const fp = d?.prints, known = s.known_ads === false ? 'not fingerprinting' : !fp ? null
       : fp.ads + ' known ads' + (fp.ad_candidates > fp.ads ? ' (' + (fp.ad_candidates - fp.ads) + ' heard once)' : '') + ' · ' + fp.show + ' show sounds';
     $('model').textContent = [d?.model?.trained_on ? 'model: ' + d.model.trained_on.length + ' recordings' : null, words, known].filter(Boolean).join(' · ');
     $('model').title = sp?.error || '';
     if (!dirty) fill(s);
+  }
+
+  // The graphics it knows on this input: which are up now, which count (admute/overlays.py).
+  function overlays(live) {
+    const list = live?.overlays || [];
+    const el = $('overlays');
+    el.hidden = !list.length;
+    if (!list.length) return;
+    const up = list.filter(o => o.up && o.state === 'counts').map(o => o.name);
+    const checking = list.filter(o => o.state === 'checking').map(o => o.name);
+    const ignored = list.filter(o => o.state === 'ignored').map(o => o.name + (o.why ? ' (' + o.why + ')' : ''));
+    el.textContent = [up.length ? 'On screen: ' + up.join(', ') : 'No known graphics on screen',
+      checking.length ? 'checking ' + checking.join(', ') : null,
+      ignored.length ? 'not counted: ' + ignored.join(', ') : null].filter(Boolean).join(' · ');
   }
 
   // What is on master now, and the half-minute before it (the operator's player is behind).
@@ -269,6 +285,7 @@
     $('exceptions').value = s.exceptions.join('\n'); $('sensitivity').value = s.sensitivity; $('max-mute').value = s.max_mute;
     $('lookahead').value = s.lookahead; $('sound').value = s.sound; $('radio-db').value = s.radio_db; $('badge').value = s.badge;
     $('learn').checked = s.learn; $('speech').checked = s.speech !== false; $('speech').disabled = !('speech' in s);
+    $('speech-model-row').hidden = !('speech_model' in s); $('speech-model').value = s.speech_model || 'base.en';
     $('known-ads').checked = s.known_ads !== false; $('known-ads').disabled = !('known_ads' in s);
     for (const [id, key] of [['learn-ads', 'learn_ads'], ['learn-games', 'learn_games']]) { $(id).checked = s[key] !== false; $(id).disabled = !(key in s); }
     $('diagnostic').checked = s.diagnostic === true; $('diagnostic').disabled = !('diagnostic' in s);
@@ -287,6 +304,7 @@
       badge: $('badge').value, learn: $('learn').checked,
       // (A web app older than the Whisper switch rejects the key.)
       ...('speech' in (view?.settings || {}) ? {speech: $('speech').checked} : {}),
+      ...('speech_model' in (view?.settings || {}) ? {speech_model: $('speech-model').value} : {}),
       ...('known_ads' in (view?.settings || {}) ? {known_ads: $('known-ads').checked} : {}),
       ...('learn_ads' in (view?.settings || {}) ? {learn_ads: $('learn-ads').checked} : {}),
       ...('learn_games' in (view?.settings || {}) ? {learn_games: $('learn-games').checked} : {}),

@@ -139,7 +139,8 @@
   const named = t => draft?.blocks.find(b => b.target.source_id === t?.source_id && String(b.target.channel_id) === String(t?.channel_id))?.target || t;
   const routed = t => t?.source_id === 'mlb' ? 'automatic routing' + (t.antenna === false ? ' · YouTube TV only' : '') : t?.source_id === 'sunday-ticket' ? 'NFL Sunday Ticket' : t?.source_id === 'thursday-night-football' ? 'Prime Video' : targetLabel(t);
   function airDetail(s) {
-    const parts = s.kind === 'game' ? [(s.game?.league || 'mlb').toUpperCase() + ' · ' + routed(s.target), score(s), 'until its final' + (s.estimated ? ' (estimated)' : '')]
+    const cut = (s.notes || []).some(n => n.startsWith('Cut when'));
+    const parts = s.kind === 'game' ? [(s.game?.league || 'mlb').toUpperCase() + ' · ' + routed(s.target), score(s), cut ? '' : 'until its final' + (s.estimated ? ' (estimated)' : '')]
       : s.kind === 'recording' ? ['Recording from Up next'] : s.kind === 'manual' ? ['Queued in Up next · ' + targetLabel(named(s.target))] : offAir(s) ? ['Test card'] : s.kind === 'ident' ? ['Station ID']
       : [targetLabel(named(s.target)) + (s.kind === 'show' ? ' · scheduled show' : '')];
     return [...parts, ...(s.notes || [])].filter(Boolean).join(' · ');
@@ -261,7 +262,7 @@
     try {
       const start = new Date($('show-start').value), end = new Date($('show-end').value);
       if (!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime())) throw Error('Choose a start and window end');
-      const body = {mode: mode(), start: start.toISOString(), end: end.toISOString()};
+      const body = {mode: mode(), start: start.toISOString(), end: end.toISOString(), priority: $('show-priority').value};
       if (body.mode === 'game') {
         const g = games.find(g => String(g.game_id) === $('game').value); if (!g) throw Error('Choose a game');
         const target = $('game-target').value(); if (target) body.target = target;
@@ -292,12 +293,20 @@
       if (s.missing_since) { const since = Date.parse(s.missing_since); body.append(h('small', {class: 'note'}, 'Not on the ' + (s.game?.league || 'mlb').toUpperCase() + ' schedule since ' + hm(new Date(since)) + '; removed at ' + hm(new Date(since + gone * 6e4)) + ' if it stays off')); }
       const twins = shows.filter(o => o !== s && Date.parse(o.start) === a.getTime());
       if (twins.length) body.append(h('small', {class: 'note'}, 'Starts with ' + twins.map(o => o.title).join(', ') + ': remove one'));
+      const priority = s.priority || 'normal';
+      const prio = h('select', {class: 'prio ' + priority, 'aria-label': 'Priority of ' + s.title, title: 'Priority: a show that outranks what is on air cuts in at its start'},
+        ...['low', 'normal', 'high'].map(p => h('option', {value: p}, p[0].toUpperCase() + p.slice(1))));
+      prio.value = priority;
+      prio.onchange = async () => {
+        try { data = await post('v1/programming/shows/' + s.id, {priority: prio.value}); await adopt(true); say(s.title + ' is ' + prio.value + ' priority.'); }
+        catch (e) { prio.value = priority; say(e.message, true); }
+      };
       const del = h('button', {class: 'quiet sm', type: 'button', 'aria-label': 'Remove ' + s.title}, 'Remove');
       del.onclick = async () => {
         if (!await VV.confirm('Remove "' + s.title + '" from the schedule?', {title: 'Remove show', ok: 'Remove', danger: true})) return;
         try { data = await api('v1/programming/shows/' + s.id, undefined, {method: 'DELETE'}); await adopt(true); say('Show removed.'); } catch (e) { say(e.message, true); }
       };
-      list.append(h('li', {data: {show: s.id}}, h('time', {dateTime: s.start}, hm(a) + '–' + hm(b)), body, del));
+      list.append(h('li', {data: {show: s.id}}, h('time', {dateTime: s.start}, hm(a) + '–' + hm(b)), body, prio, del));
     }
     if (removed.length) {
       list.append(h('li', {class: 'day'}, 'Removed by the sports feeds'));

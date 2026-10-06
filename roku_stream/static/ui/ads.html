@@ -148,6 +148,43 @@ dialog.break{width:min(860px,94vw)}
 #panel-my-ads .screen.off .corner{display:none}
 #panel-my-ads td.when{white-space:nowrap;font-family:var(--mono);font-size:13px}
 #panel-my-ads td.aired{white-space:nowrap}
+/* Idents ----------------------------------------------------------------------------------------------- */
+#panel-idents .top{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(300px,1fr);gap:var(--gap);align-items:start;margin-bottom:var(--gap)}
+@media (max-width:1060px){#panel-idents .top{grid-template-columns:1fr}}
+#panel-idents .idcard{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:18px;align-items:center}
+@media (max-width:700px){#panel-idents .idcard{grid-template-columns:1fr}}
+#panel-idents .face{position:relative;aspect-ratio:16/9;border-radius:var(--r);overflow:hidden;background:#0b1233;border:1px solid var(--line-2)}
+#panel-idents .face img{width:100%;height:100%;object-fit:cover;display:block}
+#panel-idents .who{display:grid;gap:10px;min-width:0}
+#panel-idents .who .kicker{font:500 11px/1.4 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+#panel-idents .who .name{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+#panel-idents .who .name b{font:800 42px/.95 var(--display);letter-spacing:.03em;text-transform:uppercase}
+#panel-idents .who .name .cable{display:inline-grid;justify-items:center;padding:3px 9px;border-radius:4px;background:#c8202a;color:#fff;font:700 11px/1.15 var(--display);letter-spacing:.14em;text-transform:uppercase}
+#panel-idents .who .name .cable span{font-size:19px;letter-spacing:.04em}
+#panel-idents .who .legal{border-top:1px solid var(--line-3);padding-top:8px;font:500 12px/1.4 var(--body);letter-spacing:.3em;text-transform:uppercase;color:var(--ink-2)}
+#panel-idents .who .kv dd{min-width:0;overflow-wrap:anywhere}
+#panel-idents .who .kv .row{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+#panel-idents .status-big{font:700 26px/1.1 var(--display);text-transform:uppercase;letter-spacing:.02em;overflow-wrap:anywhere}
+#panel-idents .status-big.on{color:var(--pgm)}
+#panel-idents .lines{margin:0;padding:8px 10px;background:var(--well);border:1px solid var(--line);border-radius:var(--r);display:grid;gap:2px;font-size:13px;list-style:none}
+#panel-idents .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,250px),1fr));gap:12px}
+#panel-idents .ident{border:1px solid var(--line);background:var(--well);border-radius:var(--r-lg);overflow:hidden;display:grid;align-content:start}
+#panel-idents .ident.off{opacity:.6}
+#panel-idents .ident.onair{box-shadow:0 0 0 2px var(--pgm)}
+#panel-idents .ident.cued{box-shadow:0 0 0 1px var(--touch)}
+#panel-idents .still{position:relative;display:block;width:100%;height:auto;aspect-ratio:16/9;padding:0;border:0;border-radius:0;background:#000;cursor:pointer}
+#panel-idents .still:hover:not(:disabled){background:#000}
+#panel-idents .still:focus-visible{outline:2px solid var(--touch);outline-offset:-2px}
+#panel-idents .still img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block}
+#panel-idents .still .none{position:absolute;inset:0;display:grid;place-items:center;color:var(--dim);font:700 15px/1.2 var(--display);letter-spacing:.12em;text-transform:uppercase}
+#panel-idents .still .play{position:absolute;right:8px;bottom:8px;background:#000b;color:#fff;border-radius:999px;padding:3px 10px;font:600 12px/1.4 var(--mono)}
+#panel-idents .ident .text{padding:10px 12px;display:grid;gap:6px}
+#panel-idents .ident h3{font:600 15px/1.25 var(--body);margin:0;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+#panel-idents .ident p{margin:0}
+#panel-idents .ident .why{color:var(--warn)}
+#panel-idents td.when{white-space:nowrap;font-family:var(--mono);font-size:13px}
+dialog.ident-preview{width:min(960px,94vw)}
+dialog.ident-preview video{width:100%;display:block;background:#000;border-radius:var(--r);aspect-ratio:16/9}
 dialog.preview{width:min(900px,94vw)}
 dialog.preview video{width:100%;max-height:70vh;background:#000;border-radius:var(--r)}
 </style>
@@ -155,11 +192,12 @@ dialog.preview video{width:100%;max-height:70vh;background:#000;border-radius:va
 <body>
 <header class="topbar" data-page="ads"></header><script src="static/ui/vv.js"></script>
 <main class="page">
-  <div class="page-head"><div><h1>Ads</h1><p>The commercial breaks in live programmes: ad mute finds them and takes them off air, the ad database holds every ad it knows by its sound, and your own ads can air in their place.</p></div></div>
+  <div class="page-head"><div><h1>Ads</h1><p>The commercial breaks in live programmes: ad mute finds them and takes them off air, the ad database holds every ad it knows by its sound, your own ads can air in their place, and the idents say who the station is.</p></div></div>
   <div class="tabs" role="tablist" aria-label="Ads">
     <button type="button" role="tab" id="tab-admute" data-tab="admute">Ad mute</button>
     <button type="button" role="tab" id="tab-database" data-tab="database">Ad database</button>
     <button type="button" role="tab" id="tab-my-ads" data-tab="my-ads">My ads</button>
+    <button type="button" role="tab" id="tab-idents" data-tab="idents">Idents</button>
   </div>
 
   <div role="tabpanel" id="panel-admute" aria-labelledby="tab-admute" hidden>
@@ -177,6 +215,7 @@ dialog.preview video{width:100%;max-height:70vh;background:#000;border-radius:va
             <div class="small" id="status-detail">—</div>
             <p class="small" id="why" hidden></p>
             <p class="tiny muted" id="heard" hidden></p>
+            <p class="tiny muted" id="overlays" hidden></p>
             <div><div class="meter warn" title="How sure the detector is that an ad is airing"><i id="p-meter" style="width:0"></i></div>
               <div class="tiny muted" id="p-text">P(ad) —</div></div>
             <div class="fix">
@@ -224,6 +263,7 @@ dialog.preview video{width:100%;max-height:70vh;background:#000;border-radius:va
         <section class="panel" aria-label="How it works"><div class="head"><h2>How it works</h2></div>
           <div class="body"><details class="more" id="how"><summary>Watch, weigh, err towards sound, fix, learn</summary><ol class="flow" style="margin-top:10px">
             <li><b>It watches and listens ahead of you.</b> Master holds the programme a few seconds (6 s with captions on); in that time the detector sees each cut and black frame, hears the words (Whisper) and fingerprints the sound before you do.</li>
+            <li><b>It knows the graphics.</b> A score bug or a network logo where it sits (NBC's and FOX's MLB score bugs, FOX's bug, NBC's Sunday night ones, and any it learns on a channel: up in the programme, down in its breaks, and still up across the programme's cuts) means the programme: no mute starts under a score bug. YouTube TV's "Sponsored" label means an ad: it mutes at once. Tickers that run through the breaks never count, and a graphic seen up during a known ad (or a label during the programme) stops counting.</li>
             <li><b>It weighs the evidence.</b> The station or score bug, cutting, whether this looks like the programme so far, the words, and above all whether the sound is an ad it has heard before. A mute starts at a black frame, or at a hard cut when what follows is clearly an ad (stations like WJLA fade to black at every break; cable feeds often cut straight in), in games wherever it is sure, or on a known ad.</li>
             <li><b>It errs towards sound.</b> A mute must be confirmed within 10 s or it is taken back, and the sound returns once the detector is no longer sure and what it has already seen ahead agrees, so a mute doesn't cut in and out. Early in an MLB inning break, only a clear cut back to the game ends it. Mutes are capped, master brings the sound back if the detector stops answering, and with the detector down nothing is muted. During an MLB game, play in progress is never muted.</li>
             <li><b>You fix it in one press.</b> "It's the show" (u) and "It's an ad" (a), here or on On Air, act at once on the picture shown; the marks and fixes are kept as training data.</li>
@@ -246,7 +286,12 @@ dialog.preview video{width:100%;max-height:70vh;background:#000;border-radius:va
         <section class="panel"><div class="head"><h2>How it decides</h2></div><div class="body stack tight">
           <label class="field"><span>Sensitivity: <b id="sens-text"></b></span><input type="range" id="sensitivity" min="0" max="1" step="0.05"></label>
           <label class="switch"><input type="checkbox" id="speech"><span>Listen to what is said (Whisper)</span></label>
-          <p class="tiny muted">Words count as evidence: ads repeat, talk to "you", and use different words from the programme. About a third of a CPU core per analysed source.</p>
+          <p class="tiny muted">Words count as evidence: ads repeat, talk to "you", and use different words from the programme. Whisper hears 8 s at a time, every 4 s, and keeps speech over music. With live captions on and 8 s of lookahead, captions use these words too.</p>
+          <label class="field" id="speech-model-row"><span>Whisper model</span><select id="speech-model">
+            <option value="base.en">base.en (default: about half a core per analysed source)</option>
+            <option value="small.en">small.en (hears more; about four times the CPU)</option>
+            <option value="tiny.en">tiny.en (cheapest)</option>
+            <option value="distil-large-v3">distil-large-v3 (too heavy for this box; must be cached)</option></select></label>
           <label class="field"><span>Longest mute (seconds)</span><input type="number" id="max-mute" min="60" max="600" step="10"></label>
           <details class="more"><summary>Lookahead</summary>
             <label class="field" style="margin-top:6px"><span>Seconds the programme plays behind the detector</span><input type="number" id="lookahead" min="1" max="8" step="0.5"></label>
@@ -388,10 +433,45 @@ dialog.preview video{width:100%;max-height:70vh;background:#000;border-radius:va
       </div>
     </div>
   </div>
+  <div role="tabpanel" id="panel-idents" aria-labelledby="tab-idents" hidden>
+    <div class="lead"><p>Who the station is, on screen: its ID card, and every ident it airs. The station ID between programmes, the Sports ID before games, and the promos and legal ID in the breaks ad mute takes off air.</p>
+      <div class="end row"><a class="btn sm" href="presentation#ident">Station ID</a><a class="btn sm" href="presentation#continuity">Announcer</a><a class="btn sm" href="presentation#promos">Promo settings</a></div></div>
+
+    <div class="top">
+      <section class="panel" aria-label="ID card"><div class="head"><h2>ID card</h2></div>
+        <div class="body idcard">
+          <figure class="face" style="margin:0"><img id="idt-face" alt="The legal ID: VizelVision 19, Cable 70"></figure>
+          <div class="who">
+            <span class="kicker">Station identification</span>
+            <div class="name"><b>VizelVision 19</b><span class="cable">Cable<span>70</span></span></div>
+            <div class="legal">WVHZ-DB&ensp;&ensp;Washington</div>
+            <dl class="kv" id="idt-card"></dl>
+          </div></div></section>
+
+      <section class="panel" aria-label="Idents on air"><div class="head"><span class="lamp" id="idt-lamp"></span><h2>On air</h2><div class="end"><span class="chip" id="idt-chip">—</span></div></div>
+        <div class="body stack tight">
+          <div class="status-big" id="idt-status">—</div>
+          <div class="small" id="idt-detail"></div>
+          <dl class="kv" id="idt-next"></dl>
+          <ul class="lines" id="idt-lines" aria-label="What the next break says" hidden></ul>
+          <p class="note bad" id="idt-error" role="status"></p>
+        </div></section>
+    </div>
+
+    <section class="panel" aria-label="The idents"><div class="head"><h2>The idents</h2><div class="end"><span class="chip" id="idt-count">—</span></div></div>
+      <div class="body stack tight"><div class="grid" id="idt-grid"></div>
+        <p class="tiny muted">Click a picture to play it. The station ID and the Sports ID are built by <code>ident/build.py</code>, the promos by <code>ident/promos/build.py</code>, all from the sonic identity at −20 LUFS.</p></div></section>
+
+    <section class="panel" aria-label="Idents that aired" style="margin-top:var(--gap)"><div class="head"><h2>What aired</h2></div>
+      <div class="body scroll-x"><table class="data"><thead><tr><th>When</th><th>What</th><th>Detail</th></tr></thead><tbody id="idt-recent"></tbody></table>
+        <p class="hint" id="idt-recent-empty">Nothing yet: each ID, announced break and promo shows here once it airs.</p></div></section>
+  </div>
 </main>
 <script src="static/ui/admute.js"></script>
 <script src="static/ui/ad-database.js"></script>
 <script src="static/ui/my-ads.js"></script>
+<script src="static/ui/promos.js"></script>
+<script src="static/ui/idents.js"></script>
 <script src="static/ui/ads.js"></script>
 </body>
 </html>

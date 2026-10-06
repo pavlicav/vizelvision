@@ -16,6 +16,10 @@ tapes, as a new programme's will live, so the model does not over-trust it.
 With fingerprints cached (python -m admute.fingerprint TAPE), so do the fp_ features.
 Their known-ads database is cross-fitted the same way: seeded with the labelled ads of
 the other tapes only. Replays learn from their own confirmed breaks, as live does.
+
+The overlay features (ov_*) are set by hand in model.json and never fitted: an overlay
+only ever argues for the programme, which a fit on a few tapes (where the score bug is
+never up in an ad) would turn into an unbounded weight. They are carried over as they are.
 """
 from __future__ import annotations
 
@@ -23,6 +27,7 @@ import argparse
 import json
 import math
 import os
+import sys
 
 import collections
 import time
@@ -32,6 +37,7 @@ import numpy as np
 from . import detector, fingerprint, replay, speech, text
 
 LEX_MIN = 3          # a word needs this many labelled uses to get a weight
+HAND_SET = ("ov_",)  # features whose weights are set by hand, not fitted
 LEX_ALPHA = 1.0
 
 
@@ -130,6 +136,13 @@ def fit(X: np.ndarray, y: np.ndarray, names: list[str], base: dict) -> dict:
             "coef": clf.coef_[0].round(4).tolist(), "intercept": round(float(clf.intercept_[0]), 4)}
 
 
+def with_hand_set(m: dict, model: dict) -> dict:
+    """``m`` plus the hand-set features of ``model`` (weights as they are)."""
+    extra = [i for i, k in enumerate(model["features"]) if k.startswith(HAND_SET) and k not in m["features"]]
+    return {**m, **{key: list(m[key]) + [model[key][i] for i in extra] for key in ("mean", "scale", "coef")},
+            "features": list(m["features"]) + [model["features"][i] for i in extra]}
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(prog="admute.train")
     ap.add_argument("--dry-run", action="store_true")
@@ -141,10 +154,15 @@ def main(argv=None):
     ap.add_argument("--out", default=detector.MODEL_JSON, help="where to write the model")
     args = ap.parse_args(argv)
     base = detector.load_model()
+    model = base
     tapes = [(replay.find_tape(t["file"]), t) for _, t in replay.load_truths()]
-    use_text = not args.no_text and all(speech.words_for(p) for p, _ in tapes)
+    untranscribed = [os.path.basename(p) for p, _ in tapes if not speech.words_for(p)]
+    use_text = not args.no_text and not untranscribed
+    if untranscribed and not args.no_text:
+        print(f"no text features: no {speech.MODEL} {speech.SCHEME} transcript for {', '.join(untranscribed)} "
+              f"(python -m admute.speech TAPE)", file=sys.stderr)
     use_prints = not args.no_prints and all(fingerprint.prints_for(p, compute=False) is not None for p, _ in tapes)
-    visual = [k for k in base["features"] if not k.startswith(("txt_", "fp_"))]
+    visual = [k for k in base["features"] if not k.startswith(("txt_", "fp_") + HAND_SET)]
     names = args.features.split(",") if args.features else (
         visual + (list(detector.TEXT_FEATURES) if use_text else []) + (list(detector.PRINT_FEATURES) if use_prints else []))
     base = {**base, "features": names, "mean": [base["mean"][base["features"].index(k)] if k in base["features"] else 0
@@ -203,7 +221,7 @@ def main(argv=None):
             train = [k for k in data if k != name]
             X = np.concatenate([data_for(k, {k, name})[0] for k in train])
             y = np.concatenate([data_for(k, {k, name})[1] for k in train])
-            m = fit(X, y, names, base)
+            m = with_hand_set(fit(X, y, names, base), model)
             m["text"] = text_model({name})
             from .policy import PolicyConfig
             res = replay.run(replay.extract(path), model={**detector.load_model(), **m}, gate=replay.gate_for(truth),
@@ -218,12 +236,14 @@ def main(argv=None):
         return
     X = np.concatenate([data_for(k, {k})[0] for k in data])
     y = np.concatenate([data_for(k, {k})[1] for k in data])
-    m = fit(X, y, names, base)
+    m = with_hand_set(fit(X, y, names, base), model)
     m["trained_on"] = sorted(data)
-    m["text"] = {**text_model(set()), "model": speech.MODEL} if use_text else None
+    m["text"] = {**text_model(set()), "model": speech.MODEL, "scheme": speech.SCHEME} if use_text else None
     print(json.dumps({k: m[k] for k in ("features", "coef", "intercept")}))
     if not args.dry_run:
         out = {k: m[k] for k in ("features", "mean", "scale", "coef", "intercept", "trained_on")}
+        if model.get("notes"):
+            out["notes"] = model["notes"]
         if m["text"]:
             out["text"] = m["text"]
         if use_prints:

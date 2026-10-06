@@ -11,6 +11,8 @@ its own:
   * operator overrides apply here at once and hold until the sidecar acknowledges
     them, so "it's the show" works even with the sidecar down
   * only mode 'on' touches the sound; 'shadow' only draws the badge
+  * the words the sidecar's Whisper hears on an input come along, for live captions
+    (take_words), so the on-air input is not transcribed twice
 
 Pure Python (the worker's interpreter has no numpy).
 """
@@ -31,6 +33,7 @@ MARGIN = 1.0             # seconds between the sidecar's decision and its audio 
 LEASE_FADE = 250_000_000
 OVERRIDE_FADE = 150_000_000
 QUEUE_BYTES = 12 << 20   # about 6 s of tapped media
+WORDS_KEPT = 400         # words heard on an input that live captions have not taken yet
 RECONNECT = 2.0
 
 
@@ -59,6 +62,8 @@ class InputState:
         self.seq = 0
         self.override = None         # (seq, action, pts)
         self.last_pts = None         # newest programme audio pts seen by the worker
+        self.speech = False          # the sidecar is transcribing this input
+        self.words = deque(maxlen=WORDS_KEPT)   # (start pts, end pts, word) not yet taken
         self.updated = 0.
 
 
@@ -169,6 +174,18 @@ class AdMuteLink:
                     'lease': st.lease, 'override': override[1] if override else None,
                     'fresh': time.monotonic() - st.updated < 3}
 
+    def take_words(self, key):
+        """Words heard on this input since the last call, [(start pts, end pts, word)], or
+        None when the sidecar is not transcribing it (down, Whisper off, an older sidecar):
+        then live captions transcribe it themselves."""
+        with self.lock:
+            st = self.inputs.get(key)
+            if st is None or not st.speech or time.monotonic() - st.updated > 3:
+                return None
+            words = list(st.words)
+            st.words.clear()
+            return words
+
     def summary(self):
         with self.lock:
             return {'connected': self.connected, 'error': self.error, 'mode': self.mode,
@@ -260,6 +277,11 @@ class AdMuteLink:
             st.p_ad = msg.get('p_ad')
             st.state = msg.get('state') or st.state
             st.ack = max(st.ack, int(msg.get('ack') or 0))
+            st.speech = msg.get('speech') is True
+            for word in msg.get('words') or ():
+                if (isinstance(word, list) and len(word) == 3 and all(isinstance(x, int) for x in word[:2])
+                        and isinstance(word[2], str) and word[0] < word[1]):
+                    st.words.append((word[0], word[1], word[2][:40]))
             st.updated = time.monotonic()
 
 

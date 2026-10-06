@@ -6,6 +6,7 @@ run(async browser => {
   const t = await open(browser, '/schedule', {api: {
     'POST /v1/programming': (body, F) => ({...F.programming, settings: {...F.programming.settings, ...body}}),
     'POST /v1/programming/shows': () => ({status: 201, json: {}}),
+    'POST /v1/programming/shows/*': (body, F) => F.programming,
     'POST /v1/programming/follow-games': (body, F) => ({...F.programming, changes: [{title: 'Phillies at Braves', text: 'Moved to 8 PM'}]}),
     'DELETE /v1/programming/shows/*': (body, F) => F.programming,
   }});
@@ -75,12 +76,22 @@ run(async browser => {
   await page.locator('#show-title').fill('Election night');
   await page.locator('#show-target select').first().selectOption('tv-thing-digital');
   await page.waitForFunction(() => document.querySelectorAll('#show-target select')[1]?.options.length > 1);
+  assert.equal(await page.locator('#show-priority').inputValue(), 'normal');
+  await page.locator('#show-priority').selectOption('high');
   await page.locator('#add-show').click();
   await page.waitForTimeout(200);
   const show = t.posts.find(p => p.path === '/v1/programming/shows');
   assert.equal(show.body.mode, 'program');
   assert.equal(show.body.title, 'Election night');
   assert.equal(show.body.target.source_id, 'tv-thing-digital');
+  assert.equal(show.body.priority, 'high');
+
+  // A scheduled show's priority is changed in the list: Lions at Panthers to cut in at its start.
+  const lions = page.locator('#shows li[data-show="733b5476afb24bb5a036bc1080d2ed19"] select.prio');
+  assert.equal(await lions.inputValue(), 'normal');
+  await lions.selectOption('high');
+  await page.waitForTimeout(200);
+  assert.deepEqual(t.posts.at(-1), {...t.posts.at(-1), path: '/v1/programming/shows/733b5476afb24bb5a036bc1080d2ed19', body: {priority: 'high'}});
 
   // A game: league, date, game, then its window fills in.
   await page.locator('[name=mode][value=game]').check();

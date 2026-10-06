@@ -1,0 +1,429 @@
+{
+ "settings": {
+  "enabled": true,
+  "every": 15,
+  "fill": false,
+  "promos": {}
+ },
+ "promos": [
+  {
+   "id": "time-temp",
+   "name": "Time & Temperature",
+   "kind": "promo",
+   "description": "The 1970s station-break slide: the Washington skyline at dusk, and the time and temperature as they are when it airs, over easy-listening vibes. Voiced by The Daytime Announcer.",
+   "order": 1,
+   "duration": 10.0,
+   "file": "time-temp.mp4",
+   "still": "time-temp.png",
+   "still_at": 6.0,
+   "overlays": [
+    {
+     "field": "time",
+     "box": [
+      256,
+      398,
+      370,
+      140
+     ],
+     "from": 1.5,
+     "to": 9.55,
+     "style": {
+      "font": "URW Bookman",
+      "bold": true,
+      "italic": false,
+      "size": 150.0,
+      "min_size": 60.0,
+      "color": [
+       0.3,
+       0.16,
+       0.07
+      ],
+      "outline": null,
+      "outline_width": 0.0,
+      "shadow": [
+       5.0,
+       5.0,
+       0.96,
+       0.69,
+       0.17,
+       1.0
+      ],
+      "align": "center",
+      "tracking": 0.0,
+      "lines": 1,
+      "upper": false
+     },
+     "enter": {
+      "kind": "flip",
+      "seconds": 0.35
+     },
+     "exit": {
+      "kind": "fade",
+      "seconds": 0.3500000000000014
+     }
+    },
+    {
+     "field": "ampm",
+     "box": [
+      530,
+      356,
+      92,
+      38
+     ],
+     "from": 1.65,
+     "to": 9.55,
+     "style": {
+      "font": "URW Bookman",
+      "bold": true,
+      "italic": false,
+      "size": 30.0,
+      "min_size": 16.0,
+      "color": [
+       0.86,
+       0.38,
+       0.1
+      ],
+      "outline": null,
+      "outline_width": 0.0,
+      "shadow": null,
+      "align": "right",
+      "tracking": 0.1,
+      "lines": 1,
+      "upper": false
+     },
+     "enter": {
+      "kind": "fade",
+      "seconds": 0.3
+     },
+     "exit": {
+      "kind": "fade",
+      "seconds": 0.3500000000000014
+     }
+    },
+    {
+     "field": "temperature",
+     "box": [
+      654,
+      398,
+      370,
+      140
+     ],
+     "from": 2.0,
+     "to": 9.55,
+     "style": {
+      "font": "URW Bookman",
+      "bold": true,
+      "italic": false,
+      "size": 150.0,
+      "min_size": 60.0,
+      "color": [
+       0.3,
+       0.16,
+       0.07
+      ],
+      "outline": null,
+      "outline_width": 0.0,
+      "shadow": [
+       5.0,
+       5.0,
+       0.96,
+       0.69,
+       0.17,
+       1.0
+      ],
+      "align": "center",
+      "tracking": 0.0,
+      "lines": 1,
+      "upper": false
+     },
+     "enter": {
+      "kind": "flip",
+      "seconds": 0.35
+     },
+     "exit": {
+      "kind": "fade",
+      "seconds": 0.3500000000000014
+     }
+    },
+    {
+     "field": "place",
+     "box": [
+      654,
+      540,
+      370,
+      38
+     ],
+     "from": 2.3,
+     "to": 9.55,
+     "style": {
+      "font": "URW Bookman",
+      "bold": true,
+      "italic": true,
+      "size": 26.0,
+      "min_size": 14.0,
+      "color": [
+       0.86,
+       0.38,
+       0.1
+      ],
+      "outline": null,
+      "outline_width": 0.0,
+      "shadow": null,
+      "align": "center",
+      "tracking": 0.08,
+      "lines": 1,
+      "upper": true
+     },
+     "enter": {
+      "kind": "fade",
+      "seconds": 0.4
+     },
+     "exit": {
+      "kind": "fade",
+      "seconds": 0.3500000000000014
+     }
+    }
+   ],
+   "voice": null,
+   "needs": [
+    "temperature"
+   ],
+   "built_at": "2026-10-04T23:07:22-0400",
+   "present": true,
+   "enabled": true,
+   "ready": true,
+   "why": null,
+   "played": {
+    "day": 0,
+    "week": 0,
+    "last": null
+   }
+  },
+  {
+   "id": "watching",
+   "name": "You're Watching VizelVision",
+   "kind": "ident",
+   "description": "The station ID's jingle remixed for hype: a stuttered build, the drop on \"You're watching\", the wordmark stomping in for \"VizelVision!\", the crowd, the stadium horn and the lift. DJ Low Tide.",
+   "order": 2,
+   "duration": 10.0,
+   "file": "watching.mp4",
+   "still": "watching.png",
+   "still_at": 6.6,
+   "overlays": [],
+   "voice": null,
+   "needs": [],
+   "built_at": "2026-10-04T23:09:15-0400",
+   "present": true,
+   "enabled": true,
+   "ready": true,
+   "why": null,
+   "played": {
+    "day": 0,
+    "week": 0,
+    "last": 1790907000.0
+   }
+  },
+  {
+   "id": "only-on",
+   "name": "Only on VizelVision",
+   "kind": "promo",
+   "description": "An orange cat pushes a mug off the table, leaps onto the TV and loafs there while the set shows the programme on air: \"...only on VizelVision.\" The name is said aloud for each programme. Ophelia.",
+   "order": 3,
+   "duration": 10.0,
+   "file": "only-on.mp4",
+   "still": "only-on.png",
+   "still_at": 7.6,
+   "overlays": [
+    {
+     "field": "programme",
+     "box": [
+      796,
+      374,
+      238,
+      190
+     ],
+     "from": 5.5,
+     "to": 9.25,
+     "style": {
+      "font": "URW Gothic",
+      "bold": true,
+      "italic": false,
+      "size": 54.0,
+      "min_size": 20.0,
+      "color": [
+       0.93,
+       1.0,
+       1.0
+      ],
+      "outline": null,
+      "outline_width": 0.0,
+      "shadow": [
+       3.0,
+       3.0,
+       0.0,
+       0.05,
+       0.22,
+       0.9
+      ],
+      "align": "center",
+      "tracking": 0.02,
+      "lines": 2,
+      "upper": true
+     },
+     "enter": {
+      "kind": "flip",
+      "seconds": 0.3
+     },
+     "exit": {
+      "kind": "fade",
+      "seconds": 0.15
+     }
+    }
+   ],
+   "voice": {
+    "model": "aura-2-ophelia-en",
+    "template": "{name}... only on Vizel Vision.",
+    "music": "only-on-music.wav",
+    "earliest": 5.2,
+    "start": 5.6,
+    "end": 9.1
+   },
+   "needs": [
+    "programme"
+   ],
+   "built_at": "2026-10-04T23:10:42-0400",
+   "present": true,
+   "enabled": true,
+   "ready": true,
+   "why": null,
+   "played": {
+    "day": 0,
+    "week": 0,
+    "last": null
+   }
+  },
+  {
+   "id": "legal",
+   "name": "Legal ID",
+   "kind": "ident",
+   "description": "\"This is VizelVision 19, Cable 70.\" The emblem, a chrome 19 and CABLE 70, with the call letters and city of license, WVHZ-DB Washington, along the bottom as a legal ID has them. Voiced by Jupiter.",
+   "order": 4,
+   "duration": 5.0,
+   "file": "legal.mp4",
+   "still": "legal.png",
+   "still_at": 4.1,
+   "overlays": [],
+   "voice": null,
+   "needs": [],
+   "built_at": "2026-10-04T23:11:19-0400",
+   "present": true,
+   "enabled": true,
+   "ready": true,
+   "why": null,
+   "played": {
+    "day": 1,
+    "week": 1,
+    "last": 1790906100.0
+   }
+  },
+  {
+   "id": "press-start",
+   "name": "Press Start",
+   "kind": "ident",
+   "description": "VizelVision as an 8-bit game: the TV sprite bumps a ? block, a V coin pops out (+19), the wordmark drops in and the four-note logo plays on square waves. PRESS START.",
+   "order": 5,
+   "duration": 5.0,
+   "file": "press-start.mp4",
+   "still": "press-start.png",
+   "still_at": 3.3,
+   "overlays": [],
+   "voice": null,
+   "needs": [],
+   "built_at": "2026-10-04T23:11:37-0400",
+   "present": true,
+   "enabled": true,
+   "ready": true,
+   "why": null,
+   "played": {
+    "day": 0,
+    "week": 0,
+    "last": null
+   }
+  }
+ ],
+ "problems": {
+  "script": "its id does not match its file name"
+ },
+ "values": {
+  "temperature": {
+   "f": 61,
+   "c": 16.1,
+   "place": "Reagan National",
+   "station": "KDCA",
+   "observed_at": 1790905900.0
+  },
+  "programme": {
+   "title": "Lions at Panthers",
+   "spoken": "the Lions and the Panthers",
+   "variants": {
+    "only-on": "only-on-0f1e2d3c4b5a6978.mp4"
+   }
+  }
+ },
+ "errors": {},
+ "master": {
+  "active": true,
+  "state": "idle",
+  "ads_on": true,
+  "ad": null,
+  "promo": null,
+  "cued": null,
+  "promos": {
+   "active": true,
+   "cued": "time-temp",
+   "last": 1790906100.0,
+   "due": true,
+   "draw_failed": null
+  },
+  "error": null,
+  "promos_error": null
+ },
+ "recent": [
+  {
+   "kind": "promo",
+   "id": "watching",
+   "name": "You're Watching VizelVision",
+   "at": 1790907000.0,
+   "seconds": 3.1,
+   "length": 10.0,
+   "complete": false,
+   "counted": false
+  },
+  {
+   "kind": "promo",
+   "id": "legal",
+   "name": "Legal ID",
+   "at": 1790906100.0,
+   "seconds": 5.0,
+   "length": 5.0,
+   "complete": true,
+   "counted": true
+  }
+ ],
+ "last": 1790906100.0,
+ "next_due": 1790907000.0,
+ "due": true,
+ "every_choices": [
+  5,
+  10,
+  15,
+  20,
+  30,
+  45,
+  60,
+  90,
+  120
+ ],
+ "now": 1790907400.0,
+ "admute_mode": "on"
+}

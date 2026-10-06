@@ -1,0 +1,19 @@
+{
+  "id": "legal",
+  "version": 1,
+  "name": "Legal ID",
+  "kind": "ident",
+  "order": 4,
+  "description": "\"This is VizelVision 19, Cable 70.\" The emblem, a chrome 19 and CABLE 70, with the call letters and city of license, WVHZ-DB Washington, along the bottom as a legal ID has them. Voiced by Jupiter.",
+  "duration": 5.0,
+  "file": "legal.mp4",
+  "still": "legal.png",
+  "still_at": 4.1,
+  "overlays": [],
+  "voice": null,
+  "loudness": {
+    "input": "-13.54",
+    "target": -20.0
+  },
+  "built_at": "2026-10-04T23:11:19-0400"
+}

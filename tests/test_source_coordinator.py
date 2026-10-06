@@ -1,3 +1,4 @@
+import contextlib
 import copy
 import json
 from pathlib import Path
@@ -6,10 +7,12 @@ import threading
 import time
 from types import SimpleNamespace
 import unittest
+from unittest import mock
 from unittest.mock import Mock
 
 from roku_stream.config import FeedbackConfig, MasterConfig, TvThingConfig
-from roku_stream.errors import ConfigError, ControlBusyError, CueCancelledError
+from roku_stream.errors import ConfigError, ControlBusyError, CueCancelledError, NavigationError
+from roku_stream.feedback import PpmFrame
 from roku_stream.master import MasterStreamError
 from roku_stream.roku_input import RokuLease, selection_path
 from roku_stream.source_coordinator import SourceCoordinator
@@ -470,3 +473,146 @@ class CoordinatorTests(unittest.TestCase):
         with self.assertRaisesRegex(MasterStreamError, 'capture restarted'):
             RokuLease(self.config, {**TARGET, 'selection_id': claim['selection_id']},
                       publisher_reader=lambda: 'replacement').check()
+
+
+class StillPlayingTests(unittest.TestCase):
+    """A Roku feed that fails is nearly always a blip in the capture card, not the Roku
+    (2026-10-04 13:35: Sunday Ticket went back to a 2-minute navigation because its
+    verification was over 15 minutes old, and was off the air for 5 minutes). What the Roku
+    was verified playing goes back on without navigating, after a brief check."""
+
+    finish, prepare = CoordinatorTests.finish, CoordinatorTests.prepare
+
+    def setUp(self):
+        CoordinatorTests.setUp(self)
+        self.controller.ecp.active_app.return_value = SimpleNamespace(id='195316', name='YouTube TV')
+        self.player = {'state': 'play', 'error': 'false', 'plugin': {'id': '195316', 'name': 'YouTube TV'}}
+        self.controller.ecp.media_player.side_effect = lambda: dict(self.player)
+        self.frozen = False
+        self.frames = 0
+        def capture():
+            self.frames += 1
+            self.feedback.last_capture = {'fresh': True, 'stream_id': self.feedback.status.return_value['stream_id']}
+            return PpmFrame(64, 36, bytes([0 if self.frozen or self.frames % 2 else 200]) * (64 * 36 * 3))
+        self.feedback.capture.side_effect = capture
+
+    def lapse(self):
+        """The verification is over 15 minutes old, as for any game by its second quarter."""
+        self.coordinator.last_prepared.record['prepared_at'] -= 901
+
+    def queue(self, action='execute_queue'):
+        self.coordinator.queue = Mock()
+        self.coordinator.queue.take_guard = lambda _: contextlib.nullcontext()
+        return getattr(self.coordinator, action)(SimpleNamespace(id='q', target=TARGET))
+
+    def test_a_lapsed_verification_goes_back_on_without_navigating_while_the_roku_plays(self):
+        self.prepare()
+        selection = self.coordinator.claim['selection_id']
+        self.coordinator.request('fallback')
+        self.finish()
+        self.lapse()
+        self.master.calls.clear()
+        with self.assertLogs('roku_stream.source_coordinator', 'WARNING') as logs:
+            result = self.queue()
+        self.assertEqual(result['on_air']['channel_id'], 'NBC')
+        self.controller.play.assert_called_once()
+        self.assertEqual([a for a, _ in self.master.calls], ['prepare', 'take'])
+        self.assertEqual(self.master.calls[0][1]['selection_id'], selection, 'the selection an input may hold')
+        self.assertTrue(self.coordinator.status()['roku_last_prepared']['reusable'])
+        self.assertTrue(any('goes back on without navigating' in line for line in logs.output), logs.output)
+
+    def test_a_restarted_capture_gets_a_new_selection_of_the_same_feed(self):
+        self.prepare()
+        old = self.coordinator.claim['selection_id']
+        self.coordinator.request('fallback')
+        self.finish()
+        self.feedback.status.return_value['stream_id'] = 'new-capture'
+        self.coordinator.publisher_reader = lambda: 'replacement'
+        def check(action, body):
+            if action == 'prepare':
+                lease = RokuLease(self.config, body, publisher_reader=lambda: 'replacement')
+                self.assertEqual(lease.check(), self.config.feedback.contribution_url)
+        self.master.hook = check
+        self.master.calls.clear()
+        self.assertEqual(self.queue()['on_air']['channel_id'], 'NBC')
+        self.controller.play.assert_called_once()
+        self.assertNotEqual(self.master.calls[0][1]['selection_id'], old)
+
+    def test_a_roku_that_stopped_playing_is_navigated_again(self):
+        changes = {'paused': lambda: self.player.update(state='pause'),
+                   'another app': lambda: self.controller.ecp.active_app.configure_mock(
+                       return_value=SimpleNamespace(id='12', name='Netflix')),
+                   'frozen': lambda: setattr(self, 'frozen', True),
+                   'no picture': lambda: self.feedback.capture.configure_mock(
+                       side_effect=NavigationError('Capture stream stopped'))}
+        for name, change in changes.items():
+            with self.subTest(name), mock.patch('roku_stream.source_coordinator.PLAYING_SECONDS', .3):
+                self.setUp()
+                self.prepare()
+                self.coordinator.request('fallback')
+                self.finish()
+                self.lapse()
+                change()
+                with self.assertLogs('roku_stream.source_coordinator', 'WARNING') as logs:
+                    self.assertEqual(self.queue()['on_air']['channel_id'], 'NBC')
+                self.assertEqual(self.controller.play.call_count, 2)
+                self.assertTrue(any('no longer plays' in line for line in logs.output), logs.output)
+
+    def test_any_navigation_since_means_navigating_again_without_a_check(self):
+        self.prepare()
+        self.coordinator.request('fallback')
+        self.finish()
+        with self.coordinator.navigation_guard():
+            pass  # an operator's channel change
+        self.lapse()
+        self.controller.ecp.media_player.reset_mock()
+        self.queue()
+        self.assertEqual(self.controller.play.call_count, 2)
+        self.controller.ecp.media_player.assert_not_called()
+
+    def test_a_reattach_that_fails_is_retried_without_navigating(self):
+        self.prepare()
+        self.coordinator.request('fallback')
+        self.finish()
+        self.lapse()
+        def once(action, body):
+            if action == 'prepare':
+                self.master.hook = lambda *_: None
+                raise MasterStreamError('Input audio timestamps changed (delta_ms=-42.666666); prepare the source again')
+        self.master.hook = once
+        with self.assertRaises(MasterStreamError):
+            self.queue()
+        self.assertIsNone(self.coordinator.claim)
+        self.assertEqual(self.queue()['on_air']['channel_id'], 'NBC')
+        self.controller.play.assert_called_once()
+
+    def test_feed_recovery_asks_briefly_and_the_answer_holds_for_the_reattach(self):
+        self.assertFalse(self.coordinator.roku_playing(TARGET), 'nothing verified yet')
+        self.prepare()
+        self.assertFalse(self.coordinator.roku_playing({**TARGET, 'channel_id': 'FOX'}))
+        self.assertTrue(self.coordinator.roku_playing({**TARGET, 'antenna': False}))
+        self.coordinator.request('fallback')
+        self.finish()
+        self.lapse()
+        self.controller.ecp.media_player.reset_mock()
+        self.queue()
+        self.controller.ecp.media_player.assert_not_called()
+        self.controller.play.assert_called_once()
+
+    def test_a_manual_take_known_still_needs_a_recent_preparation(self):
+        self.prepare()
+        self.coordinator.request('fallback')
+        self.finish()
+        self.lapse()
+        self.coordinator.request('take-known', TARGET)
+        self.assertEqual(self.finish()['operation']['state'], 'failed')
+
+    def test_the_way_back_to_youtube_tv_reattaches_without_navigating(self):
+        self.prepare()
+        self.coordinator.request('fallback')
+        self.finish()
+        self.lapse()
+        self.master.state.update(state='live', on_air={'id': 'antenna', 'source_id': 'tv-thing-digital'})
+        self.assertEqual(self.queue('preroll_queue'), 'prepared')
+        self.assertEqual(self.queue('upgrade_queue')['on_air']['channel_id'], 'NBC')
+        self.controller.play.assert_called_once()

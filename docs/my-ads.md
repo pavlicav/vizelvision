@@ -49,6 +49,15 @@ there).
 - **Sound.** An ad's sound replaces the programme's, crossfaded with ad mute's gain.
   Under the break card, the sound is ad mute's own break sound: silence or Cairo radio.
 
+## Station promos in the break
+
+The station's own bumpers share the break ([promos.md](promos.md)). When one is due (none for
+15 minutes, by default), the break opens with it, and your ads follow. With **Fill** on, promos
+also stand in before the break card when none of your ads may play. They are logged in
+`my-ads-plays.jsonl` with `kind: promo`, and master's status reads `state: promo` while one
+airs. With My ads switched off, a due promo still opens the break, and the break then goes on
+as ad mute has it (`state: pass`).
+
 ## Order and limits
 
 - **Shuffle** (the default) plays every ad once, in a random order, before any plays

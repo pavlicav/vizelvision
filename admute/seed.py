@@ -279,7 +279,7 @@ def build(out=EXTRA, only=None):
 def _words(file):
     """A recording's cached Whisper words, as [[t, word]] for a span (None: not transcribed)."""
     from . import speech
-    chunks = speech.words_for(replay.find_tape(file)) or []
+    chunks = speech.words_for(replay.find_tape(file), legacy=True) or []
 
     def between(a, b):
         heard = sum(max(0.0, min(t1, b) - max(t0, a)) for t0, t1, _ in chunks)

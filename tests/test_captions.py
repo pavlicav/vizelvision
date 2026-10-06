@@ -8,7 +8,7 @@ from unittest.mock import Mock, patch
 
 from roku_stream.api import handler_factory
 from roku_stream.caption_settings import CaptionSettings, DEFAULTS
-from roku_stream.captions import CHUNK_BYTES, LiveCaptions, caption_lines, timed_cues
+from roku_stream.captions import CHUNK_BYTES, SHARED_WORDS_DELAY, LiveCaptions, caption_lines, timed_cues
 from roku_stream.config import MasterConfig, TvThingConfig
 from roku_stream.errors import ConfigError
 from roku_stream.master_worker import MasterWorker
@@ -154,6 +154,45 @@ class CaptionRuntimeTests(unittest.TestCase):
         self.assertEqual(len(helper.transcribe.call_args.args[0]), CHUNK_BYTES // 4)
         self.assertEqual(engine.buffer_pts, 1)
         self.assertEqual(len(engine.buffer), CHUNK_BYTES // 4)
+
+    def test_the_ad_detectors_words_stand_in_for_a_second_whisper(self):
+        engine, helper = self.runtime(lambda pcm: transcript('own whisper'))
+        engine.configure({**DEFAULTS, 'enabled': True})
+        engine.feed(bytes(CHUNK_BYTES // 4), 0, 'game')                  # our own, until the detector's come
+        engine.feed(bytes(CHUNK_BYTES), 1, 'game', words=[(1.2, 1.5, 'Freddie'), (1.55, 1.9, 'Freeman.'),
+                                                         (2.6, 2.9, 'Strike')])
+        wait(lambda: helper.transcribe.call_count == 1)
+        self.assertEqual(len(helper.transcribe.call_args.args[0]), CHUNK_BYTES // 4,
+                         'what was collected before still gets transcribed; nothing after it')
+        self.assertEqual(engine.text_at(1.3), 'Freddie Freeman.')
+        self.assertEqual(engine.text_at(2.7), 'Strike')
+        self.assertEqual(engine.status()['words_from'], 'detector')
+        self.assertEqual(engine.buffer, bytearray())
+        engine.feed(bytes(CHUNK_BYTES), 5, 'game', words=[(2.0, 2.3, 'late')])   # its moment has aired
+        self.assertEqual(engine.status()['late_cues'], 1)
+        engine.feed(bytes(CHUNK_BYTES), 9, 'game')                       # the detector went away
+        wait(lambda: helper.transcribe.call_count == 2)
+        self.assertEqual(engine.status()['words_from'], 'whisper')
+
+    def test_master_uses_the_detectors_words_only_with_time_for_them(self):
+        from roku_stream.master_media import MasterMedia
+        media = object.__new__(MasterMedia)
+        media.gst = SimpleNamespace(SECOND=1_000_000_000)
+        media.captions = SimpleNamespace(settings={**DEFAULTS, 'enabled': False})
+        link = Mock()
+        link.take_words.return_value = [(12_000_000_000, 12_500_000_000, 'hello')]
+        tap = SimpleNamespace(link=link, key='k')
+        media.programme = SimpleNamespace(delay_ns=int(SHARED_WORDS_DELAY * 1e9) - 1)
+        self.assertIsNone(media._detector_words((tap, 2_000_000_000, 7)), 'a 6 s delay: words would come late')
+        media.programme.delay_ns = 9_000_000_000
+        self.assertIsNone(media._detector_words((tap, 2_000_000_000, 7)), 'captions are off')
+        link.take_words.assert_not_called()
+        media.captions.settings['enabled'] = True
+        self.assertEqual(media._detector_words((tap, 2_000_000_000, 7)), [(10.0, 10.5, 'hello')])
+        self.assertIsNone(media._detector_words((None, 0, 3)), 'an input the detector does not analyse')
+        self.assertIsNone(media._detector_words(None))
+        link.take_words.return_value = None
+        self.assertIsNone(media._detector_words((tap, 0, 7)))
 
     def test_late_result_is_not_replayed_over_later_speech(self):
         entered, release = threading.Event(), threading.Event()

@@ -1,0 +1,19 @@
+{
+  "id": "watching",
+  "version": 1,
+  "name": "You're Watching VizelVision",
+  "kind": "ident",
+  "order": 2,
+  "description": "The station ID's jingle remixed for hype: a stuttered build, the drop on \"You're watching\", the wordmark stomping in for \"VizelVision!\", the crowd, the stadium horn and the lift. DJ Low Tide.",
+  "duration": 10.0,
+  "file": "watching.mp4",
+  "still": "watching.png",
+  "still_at": 6.6,
+  "overlays": [],
+  "voice": null,
+  "loudness": {
+    "input": "-16.58",
+    "target": -20.0
+  },
+  "built_at": "2026-10-04T23:09:15-0400"
+}

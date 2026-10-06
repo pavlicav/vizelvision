@@ -33,6 +33,7 @@ function reads(F) {
     [/^\/v1\/admute$/, () => F.admute], [/^\/v1\/admute\/recordings$/, () => F.admute_recordings],
     [/^\/v1\/admute\/known$/, () => F.admute_known], [/^\/v1\/my-ads$/, () => F.my_ads],
     [/^\/v1\/captions$/, () => F.captions],
+    [/^\/v1\/promos$/, () => F.promos],
     [/^\/v1\/continuity$/, () => F.continuity], [/^\/v1\/production$/, () => F.production], [/^\/v1\/production\/monitor$/, () => F.monitor],
     [/^\/v1\/sports\/week$/, () => F.nfl], [/^\/v1\/sports\/upcoming$/, () => F.mlb], [/^\/v1\/sports\/teams$/, () => F.teams_nhl],
     [/^\/v1\/sports\/games$/, () => ({games: F.nfl.games.slice(0, 3)})],
@@ -82,6 +83,16 @@ async function open(browser, page, {width = 1280, height = 900, api = {}, storag
     // My ads' files: pictures and the card are the stand-in picture; an ad itself is a few bytes.
     if (/^\/v1\/my-ads\/file\/[0-9a-f]{12}$/.test(where)) return route.fulfill({contentType: 'video/mp4', body: Buffer.from('not really a video')});
     if (/^\/v1\/my-ads\/file\/[0-9a-z-]+\.(jpg|png)$/.test(where)) {
+      frames.push(where);
+      return route.fulfill({contentType: 'image/jpeg', body: fs.readFileSync(path.join(FIXTURES, 'frame.jpg'))});
+    }
+    // Station promos' stills, live texts and videos: the stand-in picture (a video does not play here).
+    if (/^\/v1\/promos\/(still|overlay|file)\//.test(where)) {
+      frames.push(where);
+      return route.fulfill({contentType: 'image/jpeg', body: fs.readFileSync(path.join(FIXTURES, 'frame.jpg'))});
+    }
+    // The station ID's and the Sports ID's end cards and videos.
+    if (/^\/v1\/idents\/(station|sports)-id\.(png|mp4)$/.test(where)) {
       frames.push(where);
       return route.fulfill({contentType: 'image/jpeg', body: fs.readFileSync(path.join(FIXTURES, 'frame.jpg'))});
     }

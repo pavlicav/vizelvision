@@ -1,0 +1,68 @@
+{
+  "id": "only-on",
+  "version": 1,
+  "name": "Only on VizelVision",
+  "kind": "promo",
+  "order": 3,
+  "description": "An orange cat pushes a mug off the table, leaps onto the TV and loafs there while the set shows the programme on air: \"...only on VizelVision.\" The name is said aloud for each programme. Ophelia.",
+  "duration": 10.0,
+  "file": "only-on.mp4",
+  "still": "only-on.png",
+  "still_at": 7.6,
+  "overlays": [
+    {
+      "field": "programme",
+      "box": [
+        796,
+        374,
+        238,
+        190
+      ],
+      "from": 5.5,
+      "to": 9.25,
+      "style": {
+        "font": "URW Gothic",
+        "bold": true,
+        "size": 54,
+        "min_size": 20,
+        "color": [
+          0.93,
+          1.0,
+          1.0
+        ],
+        "shadow": [
+          3,
+          3,
+          0.0,
+          0.05,
+          0.22,
+          0.9
+        ],
+        "lines": 2,
+        "upper": true,
+        "tracking": 0.02
+      },
+      "enter": {
+        "kind": "flip",
+        "seconds": 0.3
+      },
+      "exit": {
+        "kind": "fade",
+        "seconds": 0.15
+      }
+    }
+  ],
+  "voice": {
+    "model": "aura-2-ophelia-en",
+    "template": "{name}... only on Vizel Vision.",
+    "music": "only-on-music.wav",
+    "earliest": 5.2,
+    "start": 5.6,
+    "end": 9.1
+  },
+  "loudness": {
+    "input": "-14.61",
+    "target": -20.0
+  },
+  "built_at": "2026-10-04T23:10:42-0400"
+}

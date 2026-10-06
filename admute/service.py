@@ -7,12 +7,16 @@ input's tap (roku_stream/admute_protocol.py); per input, the same Signals ->
 Detector -> Policy chain that admute.replay scores runs every TICK seconds and
 answers with a gain schedule, a lease and the AD badge. It also:
 
-  * transcribes each analysed input with Whisper (Speech, one thread), so what is
-    being said counts as evidence (admute/text.py)
+  * transcribes each analysed input with Whisper (Speech: a lane per input, overlapping
+    windows), so what is being said counts as evidence (admute/text.py); the words also
+    go to master, whose live captions use them instead of transcribing again
   * fingerprints each analysed input's sound against a database of known ads (and of
     show sound that repeats), which confirmed breaks keep teaching (admute/fingerprint.py);
     each ad keeps its script (the words said over it) and a few pictures (admute-ads/),
     for the Ad database page
+  * watches for the programme's overlays -- score bugs, network and station logos -- from
+    the catalogue and as learnt live, kept per channel in admute-overlays.json
+    (admute/overlays.py)
   * looks as far ahead as the programme delay allows: with live captions on, master
     holds the programme 6 s, not lookahead + 1 (docs/live-captions.md)
 
@@ -52,7 +56,7 @@ from roku_stream.admute_settings import AdMuteSettings, paused  # noqa: E402
 from roku_stream.caption_settings import CaptionSettings  # noqa: E402
 from roku_stream.captions import LOOKAHEAD_SECONDS as CAPTION_DELAY  # noqa: E402
 
-from . import detector as D, features, fingerprint as FP, speech as W, sports, text as T  # noqa: E402
+from . import detector as D, features, fingerprint as FP, overlays as OV, speech as W, sports, text as T  # noqa: E402
 from .frames import FrameStore  # noqa: E402
 from .policy import Policy, PolicyConfig  # noqa: E402
 
@@ -66,7 +70,11 @@ STATE_EVERY = 1.0
 TIMELINE = 3600            # seconds of P(ad) kept for the page
 DRIFT = 0.001              # the wall-clock mapping may creep later by this much per second
 MARGIN = 1.0               # seconds between a decision and its audio leaving master's delay (admute_link.MARGIN)
-SPEECH_BACKLOG = 3         # chunks waiting for Whisper; older ones are dropped (their seconds are frozen by then)
+SPEECH_BACKLOG = 2         # windows waiting for Whisper per input; older ones are dropped (their seconds freeze soon)
+SPEECH_WORKERS = 2         # inputs transcribed at once (one model; bigger models: one at a time, for memory)
+SPEECH_THREADS = 1         # threads per transcription. 2 bought nothing on 10/4 (3.0 s a window either way:
+                           # the box is saturated) and leaned on master's hyperthreads
+SPEECH_RETRY = 600.0       # a model that would not load is tried again after this long
 LEARN_AFTER = 600.0        # a break's wording joins the ad library this long after it ends (time to mark it)
 JUMP_BACK, JUMP_AHEAD = SECOND // 2, 10 * SECOND   # a frame this far off its kind's timeline is off it
 NEW_TIMELINE = 3.0         # seconds a source must stay off its timeline before analysis starts over
@@ -74,6 +82,7 @@ FAILURES = 5               # consecutive failed ticks before an input's analysis
 GAME_EVERY = 60.0          # how often a game's completed breaks are looked for in its feed
 USE_CAPTION_DELAY = True   # look as far ahead as live captions' 6 s programme delay allows
 BEHIND_WARN = 1.5          # seconds the analysis may trail the media received before mutes land late
+RESUME_WITHIN = 120.0      # an input analysed this recently before a restart is resumed: no take grace
 PICTURES = (0.15, 0.4, 0.65, 0.9)   # where in an ad its pictures are taken (admute-ads/<clip>-<i>.jpg)
 
 
@@ -123,6 +132,11 @@ class Source:
             return (np.array(s.emb[i:j], np.float32).reshape(-1, 1000) if j > i else np.zeros((0, 1000), np.float32),
                     np.array(s.hist[i:j], np.float32).reshape(-1, 64) if j > i else np.zeros((0, 64), np.float32))
 
+    def pics(self, a, b):
+        s = self.sig
+        with s.lock:
+            return list(s.pics[max(0, a - s.seconds_since):max(0, b - s.seconds_since)])
+
 
 class Session:
     """Detection for one input."""
@@ -145,6 +159,12 @@ class Session:
         self.gate = None
         self.started = time.time()
         self._reset()
+        resumed = getattr(service, "resumed", None)
+        if resumed and key in resumed:
+            # On air before the detector restarted: not a take, so no grace (the restart
+            # at 22:29 on 10/5 left the rest of a break audible).
+            resumed.discard(key)
+            self.pol.start = -math.inf
 
     def _reset(self):
         self.base = None
@@ -152,12 +172,14 @@ class Session:
         self.sig = features.Signals(embed=self.service.embed, limited_range=self.info.get("range") == "limited")
         self.gen += 1                # Whisper results for an earlier timeline are dropped
         self.speech = []             # [(t0, t1, words)] transcribed, in order
-        self.pcm, self.pcm_t0, self.pcm_n = [], None, 0
+        self.windows = W.Windower()  # the sound, cut into Whisper's windows
+        self.words_sent = 0          # chunks of self.speech whose words went to master (live captions)
         self.landmarks = []          # [(t, hash)] from the fingerprinter, in order
         self.print_known = None      # landmarks are complete before this input time
         self.printer = None
         self.src = Source(self.sig, self.speech, self)
-        self.det = D.Detector(self.service.model, library=self.service.library, prints=self.service.prints)
+        self.det = D.Detector(self.service.model, library=self.service.library, prints=self.service.prints,
+                              overlays=self.service.overlays, channel=self.info.get("channel_id"))
         self.det.prints.session = f"{self.key[:8]}-{self.gen}-{int(time.time())}"
         self.learnt = set()          # breaks whose wording has been offered to the ad library
         self.pol = Policy(self.service.policy_config(self.lookahead), gate=self._gate)
@@ -195,6 +217,8 @@ class Session:
         self.wall_off_t = t
 
     def _gate(self, t):
+        """The sports feed's view of input time t, read as it comes. (Reading it as far
+        behind as the broadcast runs, tried on 10/5, held a TBS mute 15 s into the game.)"""
         if self.gate is None or not self.service.settings.get("sports_gate", True):
             return None
         return self.gate(self.wall(t))
@@ -260,27 +284,21 @@ class Session:
                 self.print_known = p.known
 
     def _hear(self, t, samples):
-        """Collect audio into CHUNK-second pieces for Whisper (a gap starts a new piece)."""
+        """Cut the sound into Whisper's overlapping windows (speech.Windower)."""
         with self.lock:
-            if self.pcm_t0 is not None and abs(t - (self.pcm_t0 + self.pcm_n / W.RATE)) > 0.1:
-                self.pcm, self.pcm_t0, self.pcm_n = [], None, 0
-            if self.pcm_t0 is None:
-                self.pcm_t0 = t
-            self.pcm.append(samples)
-            self.pcm_n += len(samples)
-            size = int(W.CHUNK * W.RATE)
-            if self.pcm_n < size:
-                return
-            audio = np.concatenate(self.pcm)
-            chunk, rest = audio[:size].copy(), audio[size:]
-            t0, gen = self.pcm_t0, self.gen
-            self.pcm, self.pcm_t0, self.pcm_n = [rest], t0 + size / W.RATE, len(rest)
-        self.service.speech.submit(self, gen, t0, chunk)
+            jobs, gen = self.windows.push(t, samples), self.gen
+        for t0, audio, upto in jobs:
+            self.service.speech.submit(self, gen, t0, audio, upto)
 
     def heard(self, gen, t0, t1, words):
         with self.lock:
             if gen == self.gen:
                 self.speech.append((t0, t1, words))
+
+    def hint(self):
+        """Whisper's prompt: the programme's title and, for an MLB game, its teams and players."""
+        game = self.game or {}
+        return W.prompt(game.get("title") or self.title, getattr(self.gate, "names", None) or ())
 
     def override(self, pts, action, seq):
         with self.lock:
@@ -290,6 +308,7 @@ class Session:
             t = self.t(pts)
             if action == "unmute":
                 self.pol.override_unmute(t)
+                self.det.mark("show", t - 5, t + 15)
                 # A known ad playing as the operator says "it's the show" was learnt wrongly.
                 gone = self.service.prints.remove(self.det.prints.matched_ads(t - 10, t))
                 if gone:
@@ -297,6 +316,7 @@ class Session:
                     log.info("%s: unlearnt ad clip(s) %s (it's the show)", self.key[:8], gone)
             elif action == "mute":
                 self.pol.override_mute(t)
+                self.det.mark("ad", t, t + self.pol.cfg.min_hold)
             self.ack = max(self.ack, seq)
             self.service.label({"input": self.key, "title": self.title, "source": self.info.get("source_id"),
                                 "action": action, "t": round(t, 2), "wall": round(self.wall(t), 2),
@@ -437,13 +457,14 @@ class Session:
                      title, len(new), sum(new), lag)
 
     # ------------------------------------------------------------------ diagnostics
-    GROUPS = {"picture": ("bug", "cut_rate", "recurrence", "colour", "ad_match"),
+    GROUPS = {"picture": ("bug", "cut_rate", "recurrence", "colour", "ad_match") + D.OVERLAY_FEATURES,
               "words": D.TEXT_FEATURES, "sound": ("fp_known", "fp_repeat", "fp_show")}
     PLAIN = {"bug": "no station or score bug", "cut_rate": "fast cutting", "recurrence": "unlike the programme",
              "colour": "unlike the programme's colours", "ad_match": "looks like earlier ads",
              "txt_lexicon": "ad words", "txt_known_ad": "ad wording heard before", "txt_repeat": "repeated words",
              "txt_show_vocab": "not the programme's words", "txt_ad_vocab": "ads' words", "txt_you": "talks to you",
-             "fp_known": "a known ad", "fp_repeat": "repeats an earlier ad", "fp_show": "show sound"}
+             "fp_known": "a known ad", "fp_repeat": "repeats an earlier ad", "fp_show": "show sound",
+             "ov_score": "score bug on screen", "ov_logo": "network logo on screen", "ov_ad": "an ad label on screen"}
 
     def why(self, span=None) -> list:
         """[headline, detail] for the moment about to air: how sure, and what says so."""
@@ -461,6 +482,9 @@ class Session:
                 v = det.feats.get(name, [])[k] if k < len(det.feats.get(name, [])) else math.nan
                 if v == v and scale:
                     contrib[name] = contrib.get(name, 0.0) + coef * (v - mean) / scale
+        label = det.overlays.showing(s, "ad")
+        if label:
+            return [f"{pct} · AD LABEL", f"{label} on screen"[:48]]
         known = det.feats["fp_known"][s] if s < len(det.feats["fp_known"]) else math.nan
         if known == known and known >= 0.12:
             qt, qh = det.prints.span(s - 1.5, s + 2.5)
@@ -505,10 +529,17 @@ class Session:
             badge = [self.pts(sp.start), self.pts(sp.end), "AD" if sp.confirmed else "AD?", round(sp.peak, 3)]
             why = sp.why
         # "why" is a field of its own: a worker that predates it ignores it, while badge
-        # keeps the four items every worker unpacks.
-        return {"input": self.key, "ack": self.ack, "events": events,
-                "lease": self.pts(self.aired + LEASE_AHEAD), "badge": badge, "p_ad": self.p_ad,
-                "why": why, "state": self.state()}
+        # keeps the four items every worker unpacks. So are "speech" (this input is being
+        # transcribed) and "words" (new ones, on the input's timeline): live captions use
+        # them rather than running a Whisper of their own (docs/live-captions.md).
+        msg = {"input": self.key, "ack": self.ack, "events": events,
+               "lease": self.pts(self.aired + LEASE_AHEAD), "badge": badge, "p_ad": self.p_ad,
+               "why": why, "state": self.state(),
+               "speech": bool(self.service.settings.get("speech", True) and self.service.speech.usable)}
+        if self.words_sent < len(self.speech):
+            new, self.words_sent = self.speech[self.words_sent:], len(self.speech)
+            msg["words"] = [[self.pts(a), self.pts(b), w] for _, _, ws in new for a, b, w in ws]
+        return msg
 
     def state(self):
         if self.service.quiet(self.title, self.key):
@@ -543,6 +574,8 @@ class Session:
                     "since": round(self.started, 1), "analysed_seconds": round(self.edge, 1),
                     "behind": round(self.behind, 1),
                     "heard": self._heard(), "known_now": known_now,
+                    "overlays": self.det.overlays.describe(now),
+                    "overlay_events": list(self.det.overlays.events)[-8:],
                     "why": self.why(self.pol.current) if self.pol.current is not None else None,
                     "game_learning": ({**self.game_stats, "lag": self.game_lag} if self.gate is not None else None),
                     "spans": spans, "seams": seams[-200:], "timeline": list(self.timeline)}
@@ -571,6 +604,14 @@ class Service:
         self.speech = Speech(self)
         self.library = T.AdLibrary(path=str(sock.with_name("admute-adtext.json")))
         self.prints = FP.PrintDB(path=str(sock.with_name("admute-prints.npz")))
+        self.overlays = OV.Library(path=str(sock.with_name("admute-overlays.json")))
+        self.resumed = set()        # inputs on air when the detector last stopped (no take grace for them)
+        try:
+            old = json.loads(self.state_path.read_text())
+            if time.time() - float(old.get("updated", 0)) < RESUME_WITHIN:
+                self.resumed = {i["input"] for i in old.get("inputs", []) if i.get("input")}
+        except (OSError, ValueError, TypeError):
+            pass
         self.catalogue_path = sock.with_name("admute-prints.json")
         self.catalogue_version = None
         self.ads_dir = sock.with_name("admute-ads")          # pictures of each ad, for the Ad database
@@ -811,7 +852,7 @@ class Service:
         server.bind(str(self.path))
         os.chmod(self.path, 0o600)
         server.listen(2)
-        for target in (self._ticker, self._housekeeping, self.speech.run):
+        for target in (self._ticker, self._housekeeping) + (self.speech.run,) * SPEECH_WORKERS:
             threading.Thread(target=target, daemon=True).start()
         log.info("ad-mute detector listening on %s", self.path)
         while not self.stopping.is_set():
@@ -845,6 +886,7 @@ class Service:
                     self.conn = None
             with self.lock:
                 self.sessions.clear()
+            self.speech.forget()
 
     def _frame(self, kind, key, pts, payload):
         if kind == b"S":
@@ -862,6 +904,8 @@ class Service:
             with self.lock:
                 ended = self.sessions.pop(key, None)
             log.info("input %s ended", key[:8])
+            if ended is not None:
+                self.speech.forget(ended)
             if ended is not None and ended.gate is not None:
                 # a game's last breaks: learnt from the feed once it has caught up
                 threading.Thread(target=self._last_breaks, args=(ended,), daemon=True).start()
@@ -927,9 +971,15 @@ class Service:
             self._prune_pictures()
             if time.monotonic() >= next_save:
                 next_save = time.monotonic() + 60
+                with self.lock:
+                    sessions = list(self.sessions.values())
+                for session in sessions:
+                    with session.lock:
+                        session.det.overlays.flush()
                 try:
                     self.library.save()
                     self.prints.save()
+                    self.overlays.save()
                 except OSError as exc:
                     log.warning("cannot save the ad libraries: %s", exc)
                 self.marked_show("")      # picks up new "Was the show" marks
@@ -981,6 +1031,7 @@ class Service:
                  "model": {k: self.model.get(k) for k in ("features", "coef", "trained_on")},
                  "speech": self.speech.status(),
                  "prints": self.prints.summary(), "prints_log": list(self.prints_log)[-30:],
+                 "overlays": self.overlays.summary(),
                  "library": {"seed": len(self.library.seed), "learnt": len(self.library.learnt),
                              "known": sum(v[0] >= T.KNOWN_MIN for v in self.library.learnt.values())},
                  "inputs": [s.describe() for s in sessions]}
@@ -992,63 +1043,157 @@ class Service:
             log.warning("cannot write the ad-mute state: %s", exc)
 
 
+class Lane:
+    """One input's windows, in order: one worker at a time takes them."""
+
+    def __init__(self):
+        self.jobs = collections.deque()     # (gen, t0, audio, upto, queued at)
+        self.busy = False
+        self.gen = None
+        self.committer = W.Committer()
+        self.lag = None                     # seconds from a window's end to its words
+
+
 class Speech:
-    """Whisper for every analysed input, a chunk at a time, on one thread. If the
-    model cannot load, detection carries on without words (usable goes False)."""
+    """Whisper for every analysed input. Each input has a lane of windows (at most
+    SPEECH_BACKLOG waiting; older ones are dropped), and SPEECH_WORKERS lanes are
+    transcribed at once, SPEECH_THREADS deep each, by one model: admute.json's
+    speech_model. A model that cannot load falls back to base.en; with neither,
+    detection carries on without words (usable goes False until a retry)."""
 
     def __init__(self, service):
         self.service = service
         self.cond = threading.Condition()
-        self.queue = collections.deque()
+        self.lanes: dict[Session, Lane] = {}
+        self.load_lock = threading.Lock()
         self.model = None
-        self.usable = True
+        self.model_name = None
+        self.failed: dict[str, float] = {}  # model -> when it would not load
         self.error = None
         self.dropped = 0
         self.done = 0
-        self.busy = collections.deque(maxlen=60)    # (finished at, seconds of work, seconds of audio)
+        self.busy = collections.deque(maxlen=120)    # (finished at, seconds of work, seconds of new audio)
 
-    def submit(self, session, gen, t0, audio):
+    def wanted(self):
+        return self.service.settings.get("speech_model") or W.MODEL
+
+    def _failed(self, name):
+        at = self.failed.get(name)
+        return at is not None and time.monotonic() - at < SPEECH_RETRY
+
+    @property
+    def usable(self):
+        return not (self._failed(self.wanted()) and self._failed(W.MODEL))
+
+    def submit(self, session, gen, t0, audio, upto):
         with self.cond:
-            self.queue.append((session, gen, t0, audio))
-            while len(self.queue) > SPEECH_BACKLOG:
-                self.queue.popleft()
+            lane = self.lanes.get(session)
+            if lane is None:
+                lane = self.lanes[session] = Lane()
+            lane.jobs.append((gen, t0, audio, upto, time.monotonic()))
+            while len(lane.jobs) > SPEECH_BACKLOG:
+                lane.jobs.popleft()
                 self.dropped += 1
             self.cond.notify()
+
+    def forget(self, session=None):
+        """An input ended (None: all of them)."""
+        with self.cond:
+            if session is None:
+                self.lanes.clear()
+            else:
+                self.lanes.pop(session, None)
+
+    def _next(self):
+        """The idle lane whose oldest window has waited longest."""
+        ready = [(lane.jobs[0][4], id(lane), session, lane) for session, lane in self.lanes.items()
+                 if lane.jobs and not lane.busy]
+        return min(ready)[2:] if ready else None
 
     def run(self):
         while not self.service.stopping.is_set():
             with self.cond:
-                while not self.queue and not self.service.stopping.is_set():
+                got = self._next()
+                if got is None:
                     self.cond.wait(1)
-                if not self.queue:
                     continue
-                session, gen, t0, audio = self.queue.popleft()
-            if self.model is None:
-                try:
-                    self.model = W.load(W.MODEL, threads=1)
-                    log.info("Whisper %s loaded", W.MODEL)
-                except Exception as exc:
-                    self.usable, self.error = False, f"Whisper is unavailable: {exc}"[:300]
-                    log.warning("%s; detecting without words", self.error)
-                    return
-            began = time.monotonic()
+                session, lane = got
+                job = lane.jobs.popleft()
+                lane.busy = True
             try:
-                words = W.transcribe(self.model, audio, t0)
-            except Exception as exc:
-                self.error = f"transcription failed: {exc}"[:300]
-                log.warning(self.error)
-                continue
+                self._work(session, lane, *job)
+            except Exception:
+                log.exception("transcription failed")
+            finally:
+                with self.cond:
+                    lane.busy = False
+                    self.cond.notify()
+
+    def _work(self, session, lane, gen, t0, audio, upto, queued):
+        if lane.gen is not None and gen < lane.gen:
+            return                                  # for an earlier timeline
+        model = self._model()
+        if model is None:
+            return
+        began = time.monotonic()
+        try:
+            words = W.transcribe(model, audio, t0, session.hint())
+        except Exception as exc:
+            self.error = f"transcription failed: {exc}"[:300]
+            log.warning(self.error)
+            return
+        if self.error and self.error.startswith("transcription failed"):
             self.error = None
+        if gen != lane.gen:
+            lane.gen, lane.committer = gen, W.Committer()
+        got = lane.committer.take(t0, upto, words)
+        if got is None:
+            return
+        now = time.monotonic()
+        # The stretch's first word was said this long ago (the window ended when it was queued).
+        lane.lag = round(now - queued + t0 + len(audio) / W.RATE - got[0], 1)
+        with self.cond:
             self.done += 1
-            self.busy.append((time.monotonic(), time.monotonic() - began, len(audio) / W.RATE))
-            session.heard(gen, t0, t0 + len(audio) / W.RATE, words)
+            self.busy.append((now, now - began, got[1] - got[0]))
+        session.heard(gen, *got)
+
+    def _model(self):
+        want = self.wanted()
+        with self.load_lock:
+            for name in dict.fromkeys([want, W.MODEL]):
+                if self._failed(name):
+                    continue
+                if self.model is not None and self.model_name == name:
+                    return self.model
+                workers = SPEECH_WORKERS if name in ("tiny.en", "base.en") else 1
+                try:
+                    self.model = W.load(name, threads=SPEECH_THREADS, workers=workers)
+                except Exception as exc:
+                    self.failed[name] = time.monotonic()
+                    self.error = f"Whisper {name} is unavailable: {exc}"[:300]
+                    log.warning("%s", self.error)
+                    continue
+                self.model_name = name
+                self.error = None if name == want else f"Whisper {want} is unavailable; using {name}"
+                log.info("Whisper %s loaded (%d at once, %d threads each)", name, workers, SPEECH_THREADS)
+                return self.model
+            log.warning("no Whisper model loads; detecting without words")
+            self.model = self.model_name = None
+            return None
 
     def status(self):
-        work = sum(b[1] for b in self.busy)
-        audio = sum(b[2] for b in self.busy)
-        return {"model": W.MODEL, "usable": self.usable, "error": self.error, "chunks": self.done,
-                "dropped": self.dropped, "queued": len(self.queue),
-                "load": round(work / audio, 2) if audio else None}
+        with self.cond:
+            busy = list(self.busy)
+            lags = [lane.lag for lane in self.lanes.values() if lane.lag is not None]
+            queued = sum(len(lane.jobs) for lane in self.lanes.values())
+            inputs = len(self.lanes)
+        work = sum(b[1] for b in busy)
+        audio = sum(b[2] for b in busy)
+        return {"model": self.model_name or self.wanted(), "wanted": self.wanted(), "usable": self.usable,
+                "error": self.error, "chunks": self.done, "dropped": self.dropped, "queued": queued,
+                "inputs": inputs, "threads": SPEECH_THREADS,
+                # Time Whisper spends per second of sound, and how late words come after they are said.
+                "load": round(work / audio, 2) if audio else None, "lag": max(lags) if lags else None}
 
 
 def main(argv=None):

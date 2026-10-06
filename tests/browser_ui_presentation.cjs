@@ -1,4 +1,4 @@
-// Presentation and Engineering: the off-air card, continuity, the station ID, the viewer
+// Presentation and Engineering: the off-air card, continuity, the station ID, promos, the viewer
 // monitor, the API explorer. node tests/browser_ui_presentation.cjs /path/to/playwright
 const {open, run, assert} = require('./ui_harness.cjs');
 
@@ -6,6 +6,9 @@ run(async browser => {
   let t = await open(browser, '/presentation', {api: {
     'POST /v1/production': (body, F) => ({...F.production, settings: body}),
     'POST /v1/continuity': (body, F) => ({...F.continuity, settings: {...F.continuity.settings, ...body}}),
+    'POST /v1/promos': (body, F) => ({...F.promos, settings: {...F.promos.settings, ...body}}),
+    'POST /v1/promos/promo/*': (body, F, where) => ({...F.promos, promos: F.promos.promos.map(p =>
+      where.endsWith('/' + p.id) ? {...p, ...body} : p)}),
   }});
   let page = t.page;
   await page.waitForSelector('[data-card=master]');
@@ -43,6 +46,30 @@ run(async browser => {
   await page.locator('#tab-ident').click();
   assert.match(await page.locator('#ident').innerText(), /Ready/);
   assert.match(await page.locator('#last-id').innerText(), /Sports ID/);
+
+  // Promos: settings save themselves; each promo has its still, its live text and a switch;
+  // the preview lays the live text over the video.
+  await page.locator('#tab-promos').click();
+  await page.waitForSelector('#promos-panel .promo');
+  assert.equal(await page.locator('#promos-panel .promo').count(), t.F.promos.promos.length);
+  assert.match(await page.locator('#promos-panel [data-id=master]').innerText(), /Lions at Panthers/);
+  assert.match(await page.locator('#promos-panel [data-id=master]').innerText(), /61°F/);
+  await page.locator('#promos-panel [data-id=every]').selectOption('30');
+  await page.waitForTimeout(200);
+  assert.deepEqual(t.posts.at(-1), {method: 'POST', path: '/v1/promos', body: {every: 30}});
+  await page.locator('#promos-panel [data-id=fill]').check();
+  await page.waitForTimeout(200);
+  assert.deepEqual(t.posts.at(-1).body, {fill: true});
+  const legal = page.locator('#promos-panel .promo', {hasText: 'Legal ID'});
+  await legal.getByRole('checkbox').uncheck();
+  await page.waitForTimeout(200);
+  assert.deepEqual(t.posts.at(-1), {method: 'POST', path: '/v1/promos/promo/legal', body: {enabled: false}});
+  await page.locator('#promos-panel .promo', {hasText: 'Time & Temperature'}).locator('.still').click();
+  await page.waitForSelector('dialog.promo-preview video');
+  assert.equal(await page.locator('dialog.promo-preview .stage img').count(), 4, 'its four live texts');
+  await page.locator('dialog.promo-preview').getByRole('button', {name: 'Close'}).click();
+  assert.ok(t.frames.some(f => f === '/v1/promos/still/time-temp.png'));
+  assert.match(page.url(), /#promos$/);
   assert.deepEqual(t.errors, []);
   await t.ctx.close();
 

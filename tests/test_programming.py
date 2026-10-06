@@ -187,6 +187,57 @@ class ProgrammingTests(unittest.TestCase):
         self.assertEqual([(c['title'], c['target'], parse_time(c['skip_after']) - NOON) for c in backups],
                          [('Special', NBC, timedelta(hours=3))])
 
+    def test_priority_is_validated_stored_changed_and_read_from_entry_keys(self):
+        from roku_stream.programming import SCHEDULE
+        future = datetime.now(timezone.utc).replace(microsecond=0) + timedelta(days=1)
+        show = self.programming.add_show({'mode': 'game', 'game': GAME, 'target': ESPN, 'backup': dict(SCHEDULE),
+                                          'priority': 'high', 'start': future.isoformat(),
+                                          'end': (future + timedelta(hours=3)).isoformat()})
+        self.assertEqual(show['priority'], 'high')
+        with self.assertRaisesRegex(ConfigError, 'priority must be one of low, normal, high'):
+            self.programming.add_show({'mode': 'program', 'title': 'X', 'target': NBC, 'priority': 'urgent',
+                                       'start': (future + timedelta(hours=5)).isoformat(),
+                                       'end': (future + timedelta(hours=6)).isoformat()})
+        changes = self.programming.transitions(future - timedelta(minutes=1), future + timedelta(hours=4))
+        game, backup = [c for c in changes if c['kind'] in ('game', 'backup')][:2]
+        block = next(c for c in changes if c['kind'] == 'off_air')
+        self.assertEqual([self.programming.rank(c['key']) for c in (game, backup, block)], [2, 2, 1])
+        self.assertEqual(self.programming.rank(None), 1)
+        described = self.programming.set_priority(show['id'], 'low')
+        self.assertEqual(described['settings']['shows'][0]['priority'], 'low')
+        self.assertEqual(self.programming.rank(game['key']), 0)
+        self.assertIsNone(self.programming.set_priority('missing', 'high'))
+        with self.assertRaises(ConfigError):
+            self.programming.set_priority(show['id'], None)
+
+    def test_a_show_starting_inside_one_that_outranks_it_waits_for_its_end(self):
+        self.load(self.grid(wed=[(cell(12), cell(19), 'news')]))
+        special = {'id': 'p', 'mode': 'program', 'title': 'Election night', 'target': NBC, 'priority': 'high',
+                   'start': (NOON + timedelta(hours=1)).isoformat(), 'end': (NOON + timedelta(hours=4)).isoformat()}
+        later = {'id': 's', 'mode': 'program', 'title': 'Movie', 'target': ESPN,
+                 'start': (NOON + timedelta(hours=2)).isoformat(), 'end': (NOON + timedelta(hours=5)).isoformat()}
+        self.programming.data['shows'] = [special, later]
+        self.assertEqual([(s['title'], s['start'] - NOON) for s in self.programming.timeline(NOON, NOON + timedelta(hours=6))],
+                         [('News', timedelta()), ('Election night', timedelta(hours=1)), ('Movie', timedelta(hours=4)),
+                          ('News', timedelta(hours=5))])
+        special['priority'] = 'normal'  # Of equal priority the later show takes over from its start, as before.
+        self.assertEqual([s['title'] for s in self.programming.timeline(NOON, NOON + timedelta(hours=6))],
+                         ['News', 'Election night', 'Movie', 'News'])
+        self.assertEqual(self.programming.timeline(NOON, NOON + timedelta(hours=6))[2]['start'] - NOON, timedelta(hours=2))
+
+    def test_a_game_held_back_by_a_show_that_outranks_it_joins_and_returns_from_there(self):
+        from roku_stream.programming import SCHEDULE
+        self.load(self.grid(wed=[(cell(12), cell(19), 'news')]))
+        self.programming.data['shows'] = [
+            {'id': 'p', 'mode': 'program', 'title': 'Election night', 'priority': 'high',
+             'target': {'source_id': 'youtube-tv', 'channel_id': 'CNN'},
+             'start': (NOON + timedelta(hours=1)).isoformat(), 'end': (NOON + timedelta(hours=3)).isoformat()},
+            self.game_show('g', timedelta(hours=2), timedelta(hours=5), ESPN, dict(SCHEDULE))]
+        changes = self.programming.transitions(NOON + timedelta(minutes=30), NOON + timedelta(hours=6))
+        self.assertEqual([(c['kind'], c['title'], parse_time(c['run_at']) - NOON) for c in changes],
+                         [('show', 'Election night', timedelta(hours=1)), ('game', 'g', timedelta(hours=3)),
+                          ('backup', 'News', timedelta(hours=3)), ('block', 'News', timedelta(hours=5))])
+
     def test_sync_adds_within_lookahead_once_and_withdraws_edits(self):
         self.load(self.grid(wed=[(cell(12, 30), cell(14), 'news')]))
         self.assertEqual(self.programming.sync(NOON), [])  # 12:30 is outside the 10-minute lookahead.
@@ -281,6 +332,35 @@ class GameOverrunTests(unittest.TestCase):
         self.game['finished'] = True
         self.wait(lambda: self.aired == ['Game', 'Postgame', 'News'])
         self.assertEqual(self.queue.get(backup.id).status, 'succeeded')
+
+    def test_a_show_that_outranks_the_game_cuts_in_at_its_start(self):
+        # 2026-10-04: Braves at Dodgers on air, Lions at Panthers set to cut in at 8:20.
+        self.queue.rank = lambda key: 2 if key == 'Lions' else 1
+        self.add('Game', {'source_id': 'mlb', 'channel_id': '1'}, run_in=.05)
+        backup = self.add('Postgame', ESPN, run_in=.05, skip_in=.3, game=True)
+        waiting = self.add('News', NBC, run_in=.1, skip_in=60)
+        lions = self.add('Lions', NBC, run_in=.4)
+        self.queue.resume()
+        self.wait(lambda: self.aired == ['Game'])
+        self.wait(lambda: self.aired == ['Game', 'Lions'])
+        self.assertGreaterEqual(datetime.now(timezone.utc), parse_time(lions.run_at), 'it cuts in at its start, not before')
+        self.assertFalse(self.game['finished'])
+        for item in (backup, waiting):
+            self.assertEqual((self.queue.get(item.id).status, self.queue.get(item.id).gate_status), ('skipped', 'cut'))
+        self.assertIn('Lions cut in', self.queue.get(backup.id).gate_detail)
+
+    def test_a_show_that_does_not_outrank_the_game_waits_for_its_final(self):
+        self.queue.rank = lambda key: 0 if key == 'Game' or key == 'Postgame' else 1
+        self.add('Game', {'source_id': 'mlb', 'channel_id': '1'}, run_in=.05)
+        self.add('Postgame', ESPN, run_in=.05, skip_in=.1, game=True)
+        self.add('Lions', NBC, run_in=.15)
+        self.queue.rank = lambda key: 1  # Normal, as the game: no cut.
+        self.queue.resume()
+        self.wait(lambda: self.aired == ['Game'])
+        time.sleep(.3)
+        self.assertEqual(self.aired, ['Game'])
+        self.game['finished'] = True
+        self.wait(lambda: self.aired == ['Game', 'Lions'])
 
     def test_backup_is_superseded_when_game_overruns_its_window(self):
         self.add('Game', {'source_id': 'mlb', 'channel_id': '1'}, run_in=.05)

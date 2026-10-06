@@ -130,6 +130,31 @@ class StallTests(unittest.TestCase):
         self.assertEqual((feed.error, feed.overlap['audio']), (None, 3))
         self.assertEqual(len(pushed(feed, 'audio')), 41)
 
+    def test_small_audio_rewinds_while_preparing_are_dropped_not_re_anchored_until_it_fails(self):
+        # The Roku feed going back on, 2026-10-04 13:39:22 and 13:41:24: "Input audio
+        # timestamps changed (delta_ms=-12.03 / -42.67)" 5 s into preparation, every time.
+        clock = [600 * SECOND]
+        feed = make(DecodedInput, clock, active=False)
+        chunk = 21_333_333
+        n = 0
+        for _ in range(DecodedInput.MAX_RESYNCS + 3):
+            for _ in range(10):
+                feed._sample(sink(n * chunk, chunk), 'audio')
+                feed._sample(sink(n * chunk, FRAME), 'video')
+                clock[0] += chunk
+                n += 1
+            feed._sample(sink((n - 2) * chunk, chunk), 'audio')  # 42.67 ms back
+            feed._sample(sink((n - 1) * chunk, chunk), 'audio')  # the same again
+        self.assertEqual((feed.error, feed.resyncs, feed.overlap['audio']), (None, 0, 2 * (DecodedInput.MAX_RESYNCS + 3)))
+        self.assertEqual(len(pushed(feed, 'audio')), n)
+
+    def test_a_rewind_over_a_second_while_preparing_still_re_anchors(self):
+        clock = [600 * SECOND]
+        feed = make(DecodedInput, clock, active=False)
+        play(feed, clock, 0, 60)
+        play(feed, clock, 60 * FRAME - 2 * SECOND, 1)
+        self.assertEqual((feed.error, feed.resyncs, feed.overlap['video']), (None, 1, 0))
+
     def test_a_live_rewind_over_a_second_is_late_but_a_jump_ahead_still_fails(self):
         clock = [600 * SECOND]
         feed = make(DecodedInput, clock)

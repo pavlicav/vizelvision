@@ -44,6 +44,10 @@ most overdue segment goes first.
 
 ### Segments
 
+In Crawl → Segments, on/off switches save immediately and stay set across page reloads
+and service restarts. Turn AlertDC (or any other segment) back on with the same switch.
+Use **Save segments** for timing and other options.
+
 | Segment | Source | Every |
 | --- | --- | --- |
 | Weather alerts | Lesser EAS and NWS alerts (watches, advisories, statements), from the worker | 10 min |
