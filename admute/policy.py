@@ -13,7 +13,10 @@ that gets through.
     play resumed. After the cap or an "it's the show" override, stay audible until
     a stretch of show has passed.
   * "It's an ad" holds for at least min_hold whatever the detector says, then until
-    a seam into show (one seen during the lock counts if it is still the show) or the cap.
+    a black frame or digital silence into show (one seen during the lock counts if it is
+    still the show), a trusted score bug back, or the cap. Not at a cut: the operator
+    pressed it because the detector said "show", and ads cut every few seconds (on
+    2026-10-07 five presses each held 10 s, to the next cut, in WJLA's news breaks).
   * Never while a score bug the detector trusts is up (admute/overlays.py): the break
     begins once the game's graphics have gone. Only the operator mutes over one.
   * At once while an ad player's label is up (YouTube TV's "Sponsored"): no seam, P(ad)
@@ -70,7 +73,8 @@ class PolicyConfig:
     # detector second-guessing a sports-looking ad.
     break_hold: float = 130.0          # MLB tape: the game came back 124-167 s after the feed's end of inning
     break_z: float = -2.5
-    min_hold: float = 10.0            # an operator's "it's an ad" stays quiet at least this long
+    min_hold: float = 30.0            # an operator's "it's an ad" stays quiet at least this long
+    held_seams: tuple = ("black", "silence")   # where an operator's mute may end after min_hold
     agree: float = 3.0                # a mute ends when the next this-many seconds seen ahead agree it's the programme
                                       # (all of the look-ahead, 8 s, until 10/5: returns came back late)
     overlay_veto: bool = True         # no mute starts while a trusted score bug is up
@@ -169,7 +173,7 @@ class Policy:
                 if self.held == "mute":
                     if p >= c.t_unmute:
                         self.held_seam = False
-                    elif seg.seam:
+                    elif seg.seam in c.held_seams or getattr(seg, "overlay", None):
                         self.held_seam = True
                     locked = t - self.held_at < c.min_hold
                     if not locked and (self.held_seam or t - span.start >= max(c.max_mute, c.max_mute_gated)):
@@ -219,7 +223,8 @@ class Policy:
             self.suppressed, self.show_since = True, None
 
     def override_mute(self, t: float):
-        """'It's an ad': quiet now, for at least min_hold, then until a seam into show or the cap."""
+        """'It's an ad': quiet now, for at least min_hold, then until a black frame or silence into
+        show, a trusted score bug back, or the cap."""
         if self.current:
             self.current.confirmed = True
         else:

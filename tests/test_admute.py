@@ -202,8 +202,9 @@ class LinkTests(unittest.TestCase):
 
 
 class Seg:
-    def __init__(self, start, end, p, seam=None, post_z=None):
+    def __init__(self, start, end, p, seam=None, post_z=None, overlay=None):
         self.start, self.end, self.p_ad, self.seam, self.post_z = start, end, p, seam, post_z
+        self.overlay = overlay
 
 
 def run(policy, segs, lookahead=3.0):
@@ -320,24 +321,42 @@ class PolicyTests(unittest.TestCase):
         run(p, [Seg(103, 104, .999, 'black')])
         self.assertIsNone(p.current)                       # suppressed until a show stretch
         p.override_mute(110)
-        run(p, [Seg(111, 112, .1), Seg(112, 113, .2, 'black')] + secs(113, 120, .2))
-        self.assertTrue(p.muted)                           # locked: at least 10 s
-        run(p, [Seg(120, 121, .2)])
-        self.assertEqual((p.spans[-1].end, p.spans[-1].end_reason), (120, 'show'))   # the seam during the lock counts
+        run(p, [Seg(111, 112, .1), Seg(112, 113, .2, 'black')] + secs(113, 140, .2))
+        self.assertTrue(p.muted)                           # locked: at least 30 s
+        run(p, [Seg(140, 141, .2)])
+        self.assertEqual((p.spans[-1].end, p.spans[-1].end_reason), (140, 'show'))   # the black frame during the lock counts
 
-    def test_its_an_ad_locks_for_ten_seconds(self):
+    def test_its_an_ad_locks_for_thirty_seconds(self):
         p = Policy(PolicyConfig())
         p.override_mute(200)
         run_seen(p, [Seg(200, 201, .05, 'black', post_z=-4)] + secs(201, 205, .05) + [Seg(205, 206, .05, 'cut')]
-                 + secs(206, 210, .05))
+                 + secs(206, 230, .05))
         self.assertTrue(p.muted)                           # the detector is sure it's the show: still quiet
         # A seam into show, then an ad-like stretch, then no seam: it holds on after the lock.
         p = Policy(PolicyConfig())
         p.override_mute(200)
-        run(p, [Seg(202, 203, .1, 'black')] + secs(203, 206, .99) + secs(206, 215, .1))
+        run(p, [Seg(202, 203, .1, 'black')] + secs(203, 206, .99) + secs(206, 235, .1))
         self.assertTrue(p.muted)
-        run(p, [Seg(215, 216, .1, 'black')])
+        run(p, [Seg(235, 236, .1, 'black')])
         self.assertEqual(p.spans[-1].end_reason, 'show')
+
+    def test_its_an_ad_is_not_ended_by_a_cut(self):
+        # 2026-10-07, WJLA's noon news: the detector called a long local ad the programme (its
+        # phone-number band read as the station's bug), and each press held only to the next cut.
+        p = Policy(PolicyConfig())
+        p.override_mute(300)
+        segs = []
+        for t in range(300, 400, 5):                       # an ad cutting every 5 s, read as the show
+            segs += [Seg(t, t + 1, .02, 'cut', post_z=-4)] + secs(t + 1, t + 5, .02)
+        run(p, segs)
+        self.assertTrue(p.muted, 'cuts never end it')
+        run(p, [Seg(400, 401, .02, 'black', post_z=-4)])
+        self.assertEqual((p.spans[-1].end, p.spans[-1].end_reason), (400, 'show'), 'the black frame into the programme does')
+        # A trusted score bug back ends it too: the game is on again.
+        p = Policy(PolicyConfig())
+        p.override_mute(300)
+        run(p, secs(300, 340, .02) + [Seg(340, 341, .02, overlay='score')])
+        self.assertEqual(p.spans[-1].end, 340)
         # "It's the show" still ends it at once.
         p = Policy(PolicyConfig())
         p.override_mute(200)
