@@ -645,8 +645,8 @@ class Service:
         self.api_key = server.get("api_key")
         self.model = D.load_model()
         self.models = {"classic": self.model}
-        if NEW_MODEL_JSON.exists():
-            self.models["new"] = D.load_model(str(NEW_MODEL_JSON))
+        self.new_model_at = None                           # model_new.json's mtime as loaded
+        self._load_new_model()
         self.engine, self.engine_error = "classic", None   # the detector running, and why not the one asked for
         self.scorer, self.scorer_error = None, None        # CLIP, loaded when the new detector first runs
         self.clip_took = collections.deque(maxlen=120)     # seconds per frame, for the page
@@ -708,6 +708,10 @@ class Service:
         input's analysis over (as when a source restarts): each detector keeps its own memory."""
         want = self.settings.get("detector", "classic")
         error = None
+        if self._load_new_model() and self.engine == "new":
+            # New weights while they run: start over on them (as on a switch, no take grace).
+            log.info("new detector's model changed; every input starts over")
+            self._restart_sessions()
         if want == "new":
             if "new" not in self.models:
                 error = "its model (admute/model_new.json) is missing"
@@ -727,6 +731,27 @@ class Service:
             return
         log.info("detector: %s (was %s); every input starts over", running, self.engine)
         self.engine = running
+        self._restart_sessions()
+
+    def _load_new_model(self) -> bool:
+        """(Re)load model_new.json when it changes, so new weights need no restart. True if
+        new weights were loaded."""
+        try:
+            at = NEW_MODEL_JSON.stat().st_mtime
+        except OSError:
+            return False
+        if at == self.new_model_at:
+            return False
+        try:
+            model = D.load_model(str(NEW_MODEL_JSON))
+        except (OSError, ValueError) as exc:      # half written: try again next second
+            log.warning("cannot load %s: %s", NEW_MODEL_JSON, exc)
+            return False
+        first = self.new_model_at is None
+        self.models["new"], self.new_model_at = model, at
+        return not first
+
+    def _restart_sessions(self):
         with self.lock:
             sessions = list(self.sessions.values())
         for session in sessions:
