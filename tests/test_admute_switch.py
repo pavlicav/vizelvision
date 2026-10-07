@@ -83,5 +83,33 @@ class ReloadTests(unittest.TestCase):
                 self.assertEqual(svc.models["new"]["intercept"], -2.0)
 
 
+class TraceTests(unittest.TestCase):
+    def test_the_terms_add_up_to_the_score(self):
+        m = {"features": ["bug", "recurrence", "img_zeroshot3"], "mean": [0.1, 0.5, 0.0], "scale": [0.2, 0.25, 0.05],
+             "coef": [-2.0, -1.5, 1.2], "intercept": -0.4,
+             "warm": {"features": ["bug", "img_zeroshot3"], "mean": [0.1, 0.0], "scale": [0.2, 0.05],
+                      "coef": [-2.5, 1.6], "intercept": -0.9}}
+        det = SimpleNamespace(m=m, feats={"bug": [0.3, 0.3], "recurrence": [math.nan, 0.2], "img_zeroshot3": [0.06, math.nan]})
+        for s in (0, 1):
+            terms = D.Detector.evidence(det, s)
+            lp_ad, _ = D.Detector._score(det, s)
+            self.assertAlmostEqual(-float(np.logaddexp(0, -sum(terms.values()))), lp_ad)
+        self.assertEqual(D.Detector.evidence(det, 0)["bias"], -0.9, "warming up: the warm-up weights decide")
+        self.assertNotIn("img_zeroshot3", D.Detector.evidence(det, 1), "unknown: no term")
+
+    def test_the_trace_appends_and_rolls_over(self):
+        with tempfile.TemporaryDirectory() as d:
+            svc = SimpleNamespace(trace_path=Path(d) / "admute-trace.jsonl", trace_rows=[], trace_lock=S.threading.Lock())
+            S.Service.trace(svc, {"t": 1})
+            S.Service._write_trace(svc)
+            S.Service._write_trace(svc)
+            self.assertEqual(svc.trace_path.read_text(), '{"t": 1}\n')
+            with mock.patch.object(S, "TRACE_BYTES", 5):
+                S.Service.trace(svc, {"t": 2})
+                S.Service._write_trace(svc)
+            self.assertEqual(svc.trace_path.read_text(), '{"t": 2}\n')
+            self.assertEqual((Path(d) / "admute-trace.1.jsonl").read_text(), '{"t": 1}\n')
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -469,6 +469,18 @@ class Detector:
                 z += coef * (v - mean) / scale
         return -float(np.logaddexp(0, -z)), -float(np.logaddexp(0, z))
 
+    def evidence(self, s: int) -> dict:
+        """Second s's logit term by term, under the weights deciding it ("bias": the intercept)."""
+        m = self.m
+        if m.get("warm") and math.isnan(self.feats["recurrence"][s]):
+            m = m["warm"]
+        out = {"bias": m["intercept"]}
+        for name, mean, scale, coef in zip(m["features"], m["mean"], m["scale"], m["coef"]):
+            v = self.feats[name][s] if s < len(self.feats[name]) else math.nan
+            if not math.isnan(v) and scale:
+                out[name] = coef * (v - mean) / scale
+        return out
+
     def _carried(self, name: str, s: int) -> float:
         """While a late answer is on its way, the latest one from the seconds before (provisional:
         the second is scored again when its own answer arrives)."""

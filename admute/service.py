@@ -70,6 +70,8 @@ SECOND = 1_000_000_000
 QUEUE_EVERY = 15.0
 STATE_EVERY = 1.0
 TIMELINE = 3600            # seconds of P(ad) kept for the page
+TRACE_BYTES = 5_000_000    # admute-trace.jsonl (what the detector weighed each second aired, to
+                           # diagnose a miss) rolls over to admute-trace.1.jsonl past this
 DRIFT = 0.001              # the wall-clock mapping may creep later by this much per second
 MARGIN = 1.0               # seconds between a decision and its audio leaving master's delay (admute_link.MARGIN)
 SPEECH_BACKLOG = 2         # windows waiting for Whisper per input; older ones are dropped (their seconds freeze soon)
@@ -363,6 +365,7 @@ class Session:
                     self.p_ad = seg.p_ad
                 for s in range(int(math.ceil(self.aired)), int(math.ceil(a))):
                     self.timeline.append((round(self.wall(s), 1), round(self.p_ad or 0, 3), int(self.pol.muted)))
+                    self._trace(s)
                 self.aired = a
                 self._learn()
         try:
@@ -595,6 +598,17 @@ class Session:
                     "game_learning": ({**self.game_stats, "lag": self.game_lag} if self.gate is not None else None),
                     "spans": spans, "seams": seams[-200:], "timeline": list(self.timeline)}
 
+    def _trace(self, s: int):
+        """One line of admute-trace.jsonl: second s as aired, and what the detector weighed."""
+        try:
+            terms = self.det.evidence(s)
+        except (IndexError, KeyError):
+            return
+        self.service.trace({"t": round(self.wall(s), 1), "input": self.key[:8], "detector": self.engine,
+                            "p": round(self.p_ad or 0, 3), "muted": int(self.pol.muted),
+                            "gate": self._gate(s) if self.base is not None else None,
+                            "z": {k: round(v, 2) for k, v in terms.items() if abs(v) >= 0.05}})
+
     def _heard(self):
         """The last few words transcribed, for the page: [wall time, text]."""
         words = [w for _, _, ws in self.speech[-4:] for w in ws][-16:]
@@ -612,6 +626,9 @@ class Service:
         self.dir = sock.parent
         self.path = sock.with_name("admute.sock")
         self.state_path = sock.with_name("admute-state.json")
+        self.trace_path = sock.with_name("admute-trace.jsonl")
+        self.trace_rows: list[dict] = []
+        self.trace_lock = threading.Lock()
         self.labels_path = sock.with_name("admute-labels.jsonl")
         self.frames = FrameStore(sock.with_name("admute-frames"))
         self.captions = CaptionSettings(sock)
@@ -1066,6 +1083,7 @@ class Service:
                 self._follow_queue()
             self._commands()
             self._write_state()
+            self._write_trace()
             self._catalogue()
             self.frames.prune()
             self._prune_pictures()
@@ -1121,6 +1139,23 @@ class Service:
         wanted = {s.game["game_pk"] for s in sessions if s.game and s.gate}
         for pk in [pk for pk in self.gates if pk not in wanted]:
             self.gates.pop(pk).stop()
+
+    def trace(self, row: dict):
+        with self.trace_lock:
+            self.trace_rows.append(row)
+
+    def _write_trace(self):
+        with self.trace_lock:
+            rows, self.trace_rows = self.trace_rows, []
+        if not rows:
+            return
+        try:
+            if self.trace_path.exists() and self.trace_path.stat().st_size > TRACE_BYTES:
+                os.replace(self.trace_path, self.trace_path.with_name("admute-trace.1.jsonl"))
+            with open(self.trace_path, "a") as f:
+                f.write("".join(json.dumps(r) + "\n" for r in rows))
+        except OSError as exc:
+            log.warning("cannot write the ad-mute trace: %s", exc)
 
     def _write_state(self):
         with self.lock:
