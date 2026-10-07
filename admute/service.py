@@ -20,7 +20,9 @@ answers with a gain schedule, a lease and the AD badge. It also:
   * looks as far ahead as the programme delay allows: with live captions on, master
     holds the programme 6 s, not lookahead + 1 (docs/live-captions.md)
 
-  * reads admute.json (the web app's settings) every second
+  * reads admute.json (the web app's settings) every second, including which detector
+    runs: classic, or new (classic plus a CLIP picture score and warm-up weights,
+    admute/model_new.json); a change starts each input's analysis over
   * asks the web app's queue what is airing: its title (exceptions) and, for a
     game, the gamePk (the MLB sports gate)
   * appends operator corrections to admute-labels.jsonl (training data)
@@ -56,7 +58,7 @@ from roku_stream.admute_settings import AdMuteSettings, paused  # noqa: E402
 from roku_stream.caption_settings import CaptionSettings  # noqa: E402
 from roku_stream.captions import LOOKAHEAD_SECONDS as CAPTION_DELAY  # noqa: E402
 
-from . import detector as D, features, fingerprint as FP, overlays as OV, speech as W, sports, text as T  # noqa: E402
+from . import clip, detector as D, features, fingerprint as FP, overlays as OV, speech as W, sports, text as T  # noqa: E402
 from .frames import FrameStore  # noqa: E402
 from .policy import Policy, PolicyConfig  # noqa: E402
 
@@ -84,6 +86,7 @@ USE_CAPTION_DELAY = True   # look as far ahead as live captions' 6 s programme d
 BEHIND_WARN = 1.5          # seconds the analysis may trail the media received before mutes land late
 RESUME_WITHIN = 120.0      # an input analysed this recently before a restart is resumed: no take grace
 PICTURES = (0.15, 0.4, 0.65, 0.9)   # where in an ad its pictures are taken (admute-ads/<clip>-<i>.jpg)
+NEW_MODEL_JSON = ROOT / "admute" / "model_new.json"   # the new detector's weights (lab.prod_model)
 
 
 class Source:
@@ -124,6 +127,13 @@ class Source:
             if not maps:          # nothing new this tick (numpy cannot reshape an empty list)
                 return np.zeros((0, 0), np.uint8)
             return np.array(maps, np.uint8).reshape(len(maps), -1)
+
+    def image(self, name, s, edge=math.inf):
+        """A picture score (admute/clip.py) of second s, or NaN where none was scored."""
+        sig = self.sig
+        with sig.lock:
+            vals, i = sig.img.get(name), s - sig.seconds_since
+            return float(vals[i]) if vals is not None and 0 <= i < len(vals) else math.nan
 
     def seconds(self, a, b):
         s = self.sig
@@ -169,7 +179,9 @@ class Session:
     def _reset(self):
         self.base = None
         self.last = {}
-        self.sig = features.Signals(embed=self.service.embed, limited_range=self.info.get("range") == "limited")
+        self.engine = self.service.engine        # which detector: classic or new
+        self.sig = features.Signals(embed=self.service.embed, limited_range=self.info.get("range") == "limited",
+                                    scorer=self.service.score if self.engine == "new" else None)
         self.gen += 1                # Whisper results for an earlier timeline are dropped
         self.speech = []             # [(t0, t1, words)] transcribed, in order
         self.windows = W.Windower()  # the sound, cut into Whisper's windows
@@ -178,11 +190,11 @@ class Session:
         self.print_known = None      # landmarks are complete before this input time
         self.printer = None
         self.src = Source(self.sig, self.speech, self)
-        self.det = D.Detector(self.service.model, library=self.service.library, prints=self.service.prints,
+        self.det = D.Detector(self.service.models[self.engine], library=self.service.library, prints=self.service.prints,
                               overlays=self.service.overlays, channel=self.info.get("channel_id"))
         self.det.prints.session = f"{self.key[:8]}-{self.gen}-{int(time.time())}"
         self.learnt = set()          # breaks whose wording has been offered to the ad library
-        self.pol = Policy(self.service.policy_config(self.lookahead), gate=self._gate)
+        self.pol = Policy(self.service.policy_config(self.lookahead, engine=self.engine), gate=self._gate)
         self.aired = 0.0
         self.edge = 0.0
         self.behind = 0.0          # how far the analysis edge trails the newest media received
@@ -338,7 +350,7 @@ class Session:
             self.sig.trim(edge - 20)
             self.sig.trim_seconds(edge - 10)
             self.lookahead = self.service.lookahead(self.info)
-            self.pol.cfg = self.service.policy_config(self.lookahead, game=bool(self.game))
+            self.pol.cfg = self.service.policy_config(self.lookahead, game=bool(self.game), engine=self.engine)
             a = edge - self.lookahead
             if a > self.aired:
                 segs = self.det.decide(self.aired, a)
@@ -457,14 +469,15 @@ class Session:
                      title, len(new), sum(new), lag)
 
     # ------------------------------------------------------------------ diagnostics
-    GROUPS = {"picture": ("bug", "cut_rate", "recurrence", "colour", "ad_match") + D.OVERLAY_FEATURES,
+    GROUPS = {"picture": ("bug", "cut_rate", "recurrence", "colour", "ad_match") + D.OVERLAY_FEATURES + clip.FEATURES,
               "words": D.TEXT_FEATURES, "sound": ("fp_known", "fp_repeat", "fp_show")}
     PLAIN = {"bug": "no station or score bug", "cut_rate": "fast cutting", "recurrence": "unlike the programme",
              "colour": "unlike the programme's colours", "ad_match": "looks like earlier ads",
              "txt_lexicon": "ad words", "txt_known_ad": "ad wording heard before", "txt_repeat": "repeated words",
              "txt_show_vocab": "not the programme's words", "txt_ad_vocab": "ads' words", "txt_you": "talks to you",
              "fp_known": "a known ad", "fp_repeat": "repeats an earlier ad", "fp_show": "show sound",
-             "ov_score": "score bug on screen", "ov_logo": "network logo on screen", "ov_ad": "an ad label on screen"}
+             "ov_score": "score bug on screen", "ov_logo": "network logo on screen", "ov_ad": "an ad label on screen",
+             "img_zeroshot2": "looks like an ad", "img_split": "split-screen"}
 
     def why(self, span=None) -> list:
         """[headline, detail] for the moment about to air: how sure, and what says so."""
@@ -476,6 +489,8 @@ class Session:
             return ["YOU · it's an ad", f"detector: {pct} ad"]
         if s < 0:
             return [pct, ""]
+        if m.get("warm") and math.isnan(det.feats["recurrence"][s]):
+            m = m["warm"]                                 # warming up: these weights are the ones deciding
         contrib = {}
         for k in range(max(0, s - 2), s + 1):             # the last three seconds, together
             for name, mean, scale, coef in zip(m["features"], m["mean"], m["scale"], m["coef"]):
@@ -568,7 +583,7 @@ class Session:
                      if s.t > self.edge - 3600 and s.kind != "cut"]       # (cuts: several a minute)
             return {"input": self.key, "title": self.title, "source_id": self.info.get("source_id"),
                     "channel_id": self.info.get("channel_id"), "lane": self.info.get("lane"),
-                    "lookahead": self.lookahead, "state": self.state(), "p_ad": self.p_ad,
+                    "lookahead": self.lookahead, "state": self.state(), "p_ad": self.p_ad, "detector": self.engine,
                     "muted": self.pol.muted, "warm": math.isfinite(self.det.warm_from) and self.aired >= self.det.warm_from,
                     "game": self.game, "gate": self._gate(self.aired) if self.base is not None else None,
                     "since": round(self.started, 1), "analysed_seconds": round(self.edge, 1),
@@ -629,6 +644,13 @@ class Service:
         self.web = f"http://127.0.0.1:{server.get('port', 6969)}"
         self.api_key = server.get("api_key")
         self.model = D.load_model()
+        self.models = {"classic": self.model}
+        if NEW_MODEL_JSON.exists():
+            self.models["new"] = D.load_model(str(NEW_MODEL_JSON))
+        self.engine, self.engine_error = "classic", None   # the detector running, and why not the one asked for
+        self.scorer, self.scorer_error = None, None        # CLIP, loaded when the new detector first runs
+        self.clip_took = collections.deque(maxlen=120)     # seconds per frame, for the page
+        self.clip_failures = 0
         seed = self.model.get("prints") or {}
         if seed.get("seed"):
             try:   # the labelled recordings' ads, once (a newer seed is added beside the old)
@@ -651,15 +673,66 @@ class Service:
         own = float(info.get("lookahead", 3.0))
         return max(own, CAPTION_DELAY - MARGIN) if self.captions_on and USE_CAPTION_DELAY else own
 
-    def policy_config(self, lookahead, game=False):
+    def policy_config(self, lookahead, game=False, engine="classic"):
         """Outside games a mute starts only at a seam -- a black frame or a hard cut -- or on a
         known ad: on the recordings that removed early starts. (Black alone, before 10/3:
         WJLA fades to black at every break, but cable feeds often cut straight to an ad.)
         NBC's games flash black inside breaks, not always at their edges, so a game's mute
         may start where the detector is sure."""
         s = self.settings
-        return PolicyConfig.from_sensitivity(s["sensitivity"], lookahead=lookahead, max_mute=float(s["max_mute"]),
-                                             open_at="any" if game else "seam")
+        cfg = PolicyConfig.from_sensitivity(s["sensitivity"], lookahead=lookahead, max_mute=float(s["max_mute"]),
+                                            open_at="any" if game else "seam")
+        # The new detector was tested with a 5 s grace after a take: its warm-up weights
+        # judge the first minutes without the programme memory.
+        grace = (self.models.get(engine) or {}).get("policy", {}).get("grace")
+        if grace is not None:
+            cfg.grace = float(grace)
+        return cfg
+
+    def score(self, rgb):
+        """CLIP's picture scores of one frame (Signals calls this once a second per input)."""
+        began = time.perf_counter()
+        try:
+            out = self.scorer(rgb)
+        except Exception as exc:       # never in the reader's way: the second just has no score
+            if not self.clip_failures:
+                log.warning("CLIP failed on a frame: %s", exc)
+            self.clip_failures += 1
+            return {}
+        self.clip_took.append(time.perf_counter() - began)
+        return out
+
+    def choose_engine(self):
+        """Run the detector the settings ask for, if it can run: the new one needs its model and
+        CLIP's. If it can't, the classic one runs and the page says why. A change starts every
+        input's analysis over (as when a source restarts): each detector keeps its own memory."""
+        want = self.settings.get("detector", "classic")
+        error = None
+        if want == "new":
+            if "new" not in self.models:
+                error = "its model (admute/model_new.json) is missing"
+            elif self.scorer is None and self.scorer_error is None:
+                try:
+                    self.scorer = clip.Scorer(threads=1)
+                    log.info("CLIP loaded from %s", clip.MODEL)
+                except Exception as exc:
+                    self.scorer_error = f"CLIP cannot load: {exc}"[:300]
+                    log.warning("%s; the classic detector runs", self.scorer_error)
+            error = error or self.scorer_error
+        else:
+            self.scorer_error = None          # asking for the new one again tries CLIP again
+        running = want if error is None else "classic"
+        self.engine_error = error
+        if running == self.engine:
+            return
+        log.info("detector: %s (was %s); every input starts over", running, self.engine)
+        self.engine = running
+        with self.lock:
+            sessions = list(self.sessions.values())
+        for session in sessions:
+            with session.lock:
+                session._reset()
+                session.pol.start = -math.inf     # not a take: no grace (as for an input resumed after a restart)
 
     def quiet(self, title, key=None):
         s = self.settings
@@ -844,6 +917,7 @@ class Service:
     def serve(self):
         from .embed import Embedder
         self.embed = Embedder(threads=1)
+        self.choose_engine()
         try:
             self.path.unlink()
         except FileNotFoundError:
@@ -957,6 +1031,7 @@ class Service:
                 self.settings = self.settings_store.read()
             except Exception as exc:
                 log.warning("cannot read ad-mute settings: %s", exc)
+            self.choose_engine()
             try:
                 self.captions_on = bool(self.captions.read()["enabled"])
             except Exception as exc:
@@ -1027,8 +1102,13 @@ class Service:
             sessions = list(self.sessions.values())
         with self.conn_lock:
             connected = self.conn is not None
+        took = sorted(self.clip_took)
+        model = self.models[self.engine]
         state = {"updated": round(time.time(), 1), "connected": connected,
-                 "model": {k: self.model.get(k) for k in ("features", "coef", "trained_on")},
+                 "model": {k: model.get(k) for k in ("features", "coef", "trained_on")},
+                 "detector": {"selected": self.settings.get("detector", "classic"), "running": self.engine,
+                              "error": self.engine_error, "available": sorted(self.models),
+                              "clip_ms": round(1000 * took[len(took) // 2]) if took and self.engine == "new" else None},
                  "speech": self.speech.status(),
                  "prints": self.prints.summary(), "prints_log": list(self.prints_log)[-30:],
                  "overlays": self.overlays.summary(),

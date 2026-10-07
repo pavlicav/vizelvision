@@ -43,6 +43,7 @@
     if (!view) return;
     const s = view.settings, w = view.worker || {}, d = view.detector, live = input();
     document.querySelectorAll('#mode [data-mode]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.mode === s.mode)));
+    detectorChoice(s, d);
     const mode = s.mode;
     const detectorUp = d && !view.detector_stale;
     $('detector-chip').textContent = !detectorUp ? 'detector offline' : w.connected ? 'detector linked' : 'detector up · master not linked';
@@ -56,7 +57,7 @@
       status = mode === 'shadow' && live.muted ? 'Would mute · ad break' : text;
       cls = mode === 'shadow' && live.muted ? 'shadow-now' : c;
       detail = [live.behind > 1.5 ? `⚠ detection ${live.behind.toFixed(1)} s behind: mutes land late or not at all` : null,
-        live.title, live.known_now ? 'a known ad is playing' : null, live.game ? 'MLB feed ' + (live.gate || 'quiet') : null,
+        live.title, live.detector === 'new' ? 'new detector' : null, live.known_now ? 'a known ad is playing' : null, live.game ? 'MLB feed ' + (live.gate || 'quiet') : null,
         'analysed ' + fmt.dur(live.analysed_seconds), live.lookahead + ' s lookahead'].filter(Boolean).join(' · ');
     }
     $('status').textContent = status; $('status').className = 'status-big ' + cls;
@@ -280,6 +281,22 @@
     catch (e) { toast(e.message, {error: true}); }
   }
 
+  // Classic or new detector: saved at once, like the mode. What runs is the sidecar's call:
+  // the new one needs its model and CLIP, and falls back to classic (saying why) without them.
+  function detectorChoice(s, d) {
+    const known = 'detector' in s, run = d?.detector;
+    document.querySelectorAll('#detector [data-detector]').forEach(b => {
+      b.setAttribute('aria-pressed', String(b.dataset.detector === (s.detector || 'classic')));
+      b.disabled = !known || busy;
+    });
+    const ms = run?.clip_ms != null ? ` (${run.clip_ms} ms a frame here)` : '';
+    $('detector-note').textContent = !known ? 'This web app predates the detector choice.'
+      : s.detector === 'new' && run && run.running !== 'new' ? `The new detector cannot run: ${run.error || 'not ready'}. The classic one is running.`
+      : s.detector === 'new' && d && !run ? 'The detector sidecar predates the new detector: restart vizelvision-admute to use it.'
+      : s.detector === 'new' ? `New: the classic evidence plus a CLIP picture score${ms}, which knows ads it has never seen, and its own weights for the first minutes after a source starts. Uses the known-ads database like classic.`
+      : 'Classic: the detector as it has been. New adds a picture score that knows ads it has never seen and settles faster after a source starts; switching starts each input over.';
+  }
+
   function fill(s) {
     $('src-tv').checked = s.sources.tv_thing; $('src-roku').checked = s.sources.roku; $('gate').checked = s.sports_gate;
     $('exceptions').value = s.exceptions.join('\n'); $('sensitivity').value = s.sensitivity; $('max-mute').value = s.max_mute;
@@ -337,6 +354,11 @@
     if (mode === 'on' && !await VV.confirm('Breaks it finds will go quiet on air. The two big buttons (or u / a) fix a mistake at once.',
       {title: 'Turn ad mute on', ok: 'Turn on'})) return;
     post('v1/admute', {mode}, {off: 'Ad mute is off.', shadow: 'Shadow: the AD badge shows what it would mute.', on: 'Ad mute is on.'}[mode]);
+  };
+  $('detector').onclick = e => {
+    const detector = e.target.closest('[data-detector]')?.dataset.detector;
+    if (!detector || detector === (view?.settings.detector || 'classic')) return;
+    post('v1/admute', {detector}, detector === 'new' ? 'New detector: each input starts over.' : 'Classic detector: each input starts over.');
   };
   $('unmute').onclick = () => override('unmute');
   $('mute').onclick = () => override('mute');

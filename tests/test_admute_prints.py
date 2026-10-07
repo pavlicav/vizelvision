@@ -152,13 +152,14 @@ class SessionTests(unittest.TestCase):
         t, h = fake_landmarks(100, 30, 5)
         cid = db._insert("ad", t - 100, h, {"seed": "x"})
         labels_written = []
-        svc = SimpleNamespace(embed=None, model=D.DEFAULT_MODEL, overlays=OV.Library(catalogue=None), prints=db, library=None,
+        svc = SimpleNamespace(embed=None, model=D.DEFAULT_MODEL, models={"classic": D.DEFAULT_MODEL}, engine="classic",
+                              overlays=OV.Library(catalogue=None), prints=db, library=None,
                               settings={"speech": False, "known_ads": True, "sensitivity": .5, "max_mute": 300, "learn": True},
                               speech=SimpleNamespace(usable=False), frames=SimpleNamespace(save=lambda *a: None),
                               label=labels_written.append, note=lambda *a, **k: None)
         from admute import text as T
         svc.library = T.AdLibrary()
-        svc.policy_config = lambda lookahead: Service.policy_config(svc, lookahead)
+        svc.policy_config = lambda lookahead, game=False, engine="classic": Service.policy_config(svc, lookahead, game, engine)
         s = Session(svc, "k" * 32, {"lookahead": 3})
         s.base = 0
         s.det.prints.add(list(zip(t, h)), 140.0)
@@ -204,12 +205,13 @@ class GameLearningTests(unittest.TestCase):
         from admute.service import Session, Service
         db = FP.PrintDB()
         noted = []
-        svc = SimpleNamespace(embed=None, model=D.DEFAULT_MODEL, overlays=OV.Library(catalogue=None), prints=db, library=T.AdLibrary(),
+        svc = SimpleNamespace(embed=None, model=D.DEFAULT_MODEL, models={"classic": D.DEFAULT_MODEL}, engine="classic",
+                              overlays=OV.Library(catalogue=None), prints=db, library=T.AdLibrary(),
                               settings={"speech": False, "known_ads": True, "learn_games": True, "sensitivity": .5,
                                         "max_mute": 300},
                               speech=SimpleNamespace(usable=False), frames=SimpleNamespace(save=lambda *a: None),
                               note=lambda what, **k: noted.append((what, k)))
-        svc.policy_config = lambda lookahead, game=False: Service.policy_config(svc, lookahead, game)
+        svc.policy_config = lambda lookahead, game=False, engine="classic": Service.policy_config(svc, lookahead, game, engine)
         s = Session(svc, "g" * 32, {"lookahead": 3})
         s.base, s.wall_off = 0, 1000.0                   # session time t is wall time t + 1000
         wall = lambda t: t + 1000.0 - 50                 # feed times: 50 s ahead of the broadcast
@@ -262,11 +264,12 @@ class WhyTests(unittest.TestCase):
         from admute import text as T
         from admute.service import Session, Service
         db = FP.PrintDB()
-        svc = SimpleNamespace(embed=None, model=D.DEFAULT_MODEL, overlays=OV.Library(catalogue=None), prints=db, library=T.AdLibrary(),
+        svc = SimpleNamespace(embed=None, model=D.DEFAULT_MODEL, models={"classic": D.DEFAULT_MODEL}, engine="classic",
+                              overlays=OV.Library(catalogue=None), prints=db, library=T.AdLibrary(),
                               settings={"speech": False, "known_ads": True, "sensitivity": .5, "max_mute": 300},
                               speech=SimpleNamespace(usable=False), frames=SimpleNamespace(save=lambda *a: None),
                               note=lambda *a, **k: None)
-        svc.policy_config = lambda lookahead, game=False: Service.policy_config(svc, lookahead, game)
+        svc.policy_config = lambda lookahead, game=False, engine="classic": Service.policy_config(svc, lookahead, game, engine)
         s = Session(svc, "w" * 32, {"lookahead": 3})
         s.base, s.aired, s.p_ad = 0, 20.0, 0.97
         for name in s.det.feats:

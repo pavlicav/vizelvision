@@ -74,6 +74,11 @@ SCRIPT_MEMORY = 1800.0    # words kept this long, for the scripts of breaks lear
 TEXT_FEATURES = tuple("txt_" + n for n in T.NAMES)
 PRINT_FEATURES = ("fp_known", "fp_repeat", "fp_show")
 OVERLAY_FEATURES = OV.FEATURES
+# Per-second evidence served by the source: img_ picture scores (admute/clip.py, the new
+# detector), and in the lab captions, sound and LLM answers.
+EXTRA_PREFIXES = ("img_", "cc_", "aud_", "llm_")
+CARRY = os.environ.get("ADMUTE_CARRY") == "1"       # lab: score pending llm_ seconds with the last answer
+CARRY_SECONDS = 12
 KNOWN_CLEAR = 0.18        # a known ad this clear may start a mute without a seam (re-airings match ~0.18-0.31)
 BUG_AFTER = 6             # seconds after a moment in which the programme's score bug must be up for it to be the game
 
@@ -149,11 +154,39 @@ class ArraySource:
     """Signals already in memory (replay), served up to the replay clock. Transcribed
     chunks [(t0, t1, words)], if given, become known ``latency`` seconds after they end."""
 
-    def __init__(self, sig: dict, chunks=None, latency: float = 1.5, prints=None):
+    def __init__(self, sig: dict, chunks=None, latency: float = 1.5, prints=None, images=None):
         self.sig = sig
         self._chunks = list(chunks or [])
         self._ready = [t1 + latency for _, t1, _ in self._chunks]
         self._prints = None if prints is None else np.asarray(prints, np.float64).reshape(-1, 2)
+        # Extra per-second evidence (img_, cc_, aud_, llm_ features): name -> values, or
+        # name -> (values, known_at) for evidence that arrives after its second. Picture
+        # scores the Signals kept (img_*, admute/clip.py) come with the signals.
+        self._images = {**{k: v for k, v in sig.items() if k.startswith("img_")}, **(images or {})}
+
+    def image(self, name: str, s: int, edge: float = math.inf) -> float:
+        """An extra per-second score, if it is known by ``edge``."""
+        v = self._images.get(name)
+        if isinstance(v, tuple):
+            v, ready = v
+            if s < len(ready) and ready[s] > edge:
+                return math.nan
+        return float(v[s]) if v is not None and s < len(v) else math.nan
+
+    def late_extras(self) -> bool:
+        return any(isinstance(v, tuple) for v in self._images.values())
+
+    def extras_pending(self, names, edge: float) -> float:
+        """The first second whose late extra evidence is still on its way at ``edge`` (inf: none)."""
+        first = math.inf
+        for name in names:
+            v = self._images.get(name)
+            if isinstance(v, tuple):
+                vals, ready = v
+                k = np.flatnonzero(~np.isnan(vals) & (ready > edge) & (ready < math.inf))
+                if len(k):
+                    first = min(first, float(k[0]))
+        return first
 
     def landmarks(self, i: int, edge: float):
         """Fingerprint landmarks known by the replay clock (FP.LATENCY after their time)."""
@@ -215,8 +248,10 @@ class Detector:
         self.mask_at = -1e9
         self.bug_scores: list[float] = []       # per edge map, with the mask of its time
         # per-second evidence
+        self.image_features = tuple(k for k in self.m["features"] if k.startswith(EXTRA_PREFIXES))
         self.feats: dict[str, list[float]] = {k: [] for k in ("bug", "cut_rate", "recurrence", "colour", "ad_match")
-                                              + TEXT_FEATURES + PRINT_FEATURES + OVERLAY_FEATURES}
+                                              + TEXT_FEATURES + PRINT_FEATURES + OVERLAY_FEATURES + self.image_features}
+        self.src = None
         # model.json "overlays": false switches overlays off (no evidence, no score-bug veto,
         # no ad label): nothing is matched or learnt.
         self.overlays = OV.Tracker(overlays if self.m.get("overlays", True) else OV.Library(catalogue=None), channel)
@@ -410,6 +445,8 @@ class Detector:
             self.feats[name].append(math.nan)       # filled in as the words and prints arrive
         for name, v in self.overlays.features(s).items():
             self.feats[name].append(v)
+        for name in self.image_features:
+            self.feats[name].append(self.src.image(name, s, self.edge_t) if hasattr(self.src, "image") else math.nan)
         self.label.append(-1)
         lp_ad, lp_show = self._score(s)
         self.lp_ad.append(lp_ad)
@@ -418,22 +455,49 @@ class Detector:
         self.cum_show.append(self.cum_show[-1] + lp_show)
 
     def _score(self, s: int) -> tuple[float, float]:
-        z = self.m["intercept"]
-        for name, mean, scale, coef in zip(self.m["features"], self.m["mean"], self.m["scale"], self.m["coef"]):
+        m = self.m
+        # Warm-up: until the programme memory exists (recurrence still unknown), weights fitted
+        # without the memory features, so the evidence that is there carries its full weight.
+        if m.get("warm") and math.isnan(self.feats["recurrence"][s]):
+            m = m["warm"]
+        z = m["intercept"]
+        for name, mean, scale, coef in zip(m["features"], m["mean"], m["scale"], m["coef"]):
             v = self.feats[name][s]
+            if math.isnan(v) and CARRY and name.startswith("llm_"):
+                v = self._carried(name, s)
             if not math.isnan(v) and scale:
                 z += coef * (v - mean) / scale
         return -float(np.logaddexp(0, -z)), -float(np.logaddexp(0, z))
 
+    def _carried(self, name: str, s: int) -> float:
+        """While a late answer is on its way, the latest one from the seconds before (provisional:
+        the second is scored again when its own answer arrives)."""
+        vals = self.feats[name]
+        for k in range(s - 1, max(-1, s - CARRY_SECONDS - 1), -1):
+            if not math.isnan(vals[k]):
+                return vals[k]
+        return math.nan
+
     def _late(self, src, edge: float) -> None:
         """Evidence that arrives after its second (words, fingerprints): revise unfrozen
         seconds, then score them again."""
-        changed = [f for f in (self._text(src, edge), self._prints(src, edge)) if f is not None]
+        changed = [f for f in (self._text(src, edge), self._prints(src, edge), self._extras(src, edge)) if f is not None]
         if changed:
             for k in range(min(changed), len(self.lp_ad)):
                 self.lp_ad[k], self.lp_show[k] = self._score(k)
                 self.cum_ad[k + 1] = self.cum_ad[k] + self.lp_ad[k]
                 self.cum_show[k + 1] = self.cum_show[k] + self.lp_show[k]
+
+    def _extras(self, src, edge: float):
+        """Extra evidence that arrives late (llm_ scores): fill unfrozen seconds now known."""
+        if not self.image_features or not getattr(src, "late_extras", lambda: False)():
+            return None
+        first = None
+        for s in range(int(math.ceil(self.frozen_to)), len(self.lp_ad)):
+            for name in self.image_features:
+                if math.isnan(self.feats[name][s]) and self._set(name, s, src.image(name, s, edge)):
+                    first = s if first is None else first
+        return first
 
     def _set(self, name: str, s: int, v: float) -> bool:
         old = self.feats[name][s]
@@ -549,6 +613,7 @@ class Detector:
 
     def update(self, src, edge: float) -> None:
         """Take in media up to input time ``edge`` (the analysis edge)."""
+        self.src = src
         self._consume(src, edge)
         self.edge_t = edge
         complete = min(int(edge), self.n_sec, len(self.cut) // 10, len(self.rms) // 10, len(self.bug_scores) // 2)
@@ -559,6 +624,8 @@ class Detector:
         freeze = min(edge - SEAM_PENDING, float(len(self.lp_ad)))
         waits = ([self.text_done] if self.text.known is not None else []) + \
                 ([self.fp_done] if self.prints.known is not None else [])
+        if self.image_features and getattr(src, "late_extras", lambda: False)():
+            waits.append(src.extras_pending(self.image_features, edge))     # LLM answers still coming
         if waits:
             freeze = min(freeze, max(float(min(waits)), edge - TEXT_HOLD))
         keep = []

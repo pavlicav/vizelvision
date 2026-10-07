@@ -184,6 +184,27 @@ run(async browser => {
   assert.equal(await t.page.locator('#known-ads').isDisabled(), true);
   await t.ctx.close();
 
+  // Classic or new detector: saved at once, and the page says what actually runs.
+  t = await open(browser, '/ads#admute', {
+    edit: F => { F.admute.settings.detector = 'classic'; F.admute.detector.detector = {selected: 'classic', running: 'classic', error: null, available: ['classic', 'new'], clip_ms: null}; },
+    api: {'POST /v1/admute': (body, F) => (F.admute = {...view(F, body), detector: {...F.admute.detector, detector: {selected: body.detector, running: 'classic', error: 'CLIP cannot load: no model', available: ['classic', 'new'], clip_ms: null}}})},
+  });
+  await t.page.waitForTimeout(800);
+  assert.equal(await t.page.locator('#detector [data-detector=classic]').getAttribute('aria-pressed'), 'true');
+  assert.match(await t.page.locator('#detector-note').textContent(), /^Classic/);
+  await t.page.locator('#detector [data-detector=new]').click();
+  await t.page.waitForTimeout(300);
+  assert.deepEqual([t.posts.at(-1).path, t.posts.at(-1).body], ['/v1/admute', {detector: 'new'}]);
+  assert.equal(await t.page.locator('#detector [data-detector=new]').getAttribute('aria-pressed'), 'true');
+  assert.match(await t.page.locator('#detector-note').textContent(), /cannot run: CLIP cannot load.*classic one is running/);
+  await t.ctx.close();
+  // A web app without the choice: the switch is off.
+  t = await open(browser, '/ads#admute');
+  await t.page.waitForTimeout(800);
+  assert.equal(await t.page.locator('#detector [data-detector=new]').isDisabled(), true);
+  assert.match(await t.page.locator('#detector-note').textContent(), /predates/);
+  await t.ctx.close();
+
   // With the detector down, the page says nothing is muted.
   t = await open(browser, '/ads#admute', {edit: F => { F.admute.detector_stale = true; }});
   await t.page.waitForTimeout(800);

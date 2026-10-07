@@ -284,6 +284,10 @@ dialog.preview video{width:100%;max-height:70vh;background:#000;border-radius:va
           <label class="field"><span>Never mute these programmes (one per line)</span><textarea class="exceptions" id="exceptions" placeholder="e.g. Jeopardy!"></textarea></label>
           <p class="tiny muted">Which inputs are analysed is decided when a source is prepared.</p></div></section>
         <section class="panel"><div class="head"><h2>How it decides</h2></div><div class="body stack tight">
+          <div class="field"><span>Detector</span><div class="seg" role="group" aria-label="Detector" id="detector" style="justify-self:start">
+            <button type="button" data-detector="classic" aria-pressed="false">Classic</button>
+            <button type="button" data-detector="new" aria-pressed="false">New</button></div></div>
+          <p class="tiny muted" id="detector-note">—</p>
           <label class="field"><span>Sensitivity: <b id="sens-text"></b></span><input type="range" id="sensitivity" min="0" max="1" step="0.05"></label>
           <label class="switch"><input type="checkbox" id="speech"><span>Listen to what is said (Whisper)</span></label>
           <p class="tiny muted">Words count as evidence: ads repeat, talk to "you", and use different words from the programme. Whisper hears 8 s at a time, every 4 s, and keeps speech over music. With live captions on and 8 s of lookahead, captions use these words too.</p>

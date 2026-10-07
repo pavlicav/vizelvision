@@ -378,12 +378,13 @@ class FrameStoreTests(unittest.TestCase):
 class SessionSpeechTests(unittest.TestCase):
     def service(self):
         sent = []
-        svc = SimpleNamespace(embed=None, model=D.DEFAULT_MODEL, overlays=OV.Library(catalogue=None), settings={"speech": True, "sensitivity": .5, "max_mute": 300},
+        svc = SimpleNamespace(embed=None, model=D.DEFAULT_MODEL, models={"classic": D.DEFAULT_MODEL}, engine="classic",
+                              overlays=OV.Library(catalogue=None), settings={"speech": True, "sensitivity": .5, "max_mute": 300},
                               library=T.AdLibrary(), marked_show=lambda span_id: span_id.endswith("-199"),
                               prints=FP.PrintDB(), note=lambda *a, **k: None,
                               speech=SimpleNamespace(usable=True, submit=lambda *a: sent.append(a)),
                               frames=SimpleNamespace(save=lambda *a: None), quiet=lambda *a: False)
-        svc.policy_config = lambda lookahead: Service.policy_config(svc, lookahead)
+        svc.policy_config = lambda lookahead, game=False, engine="classic": Service.policy_config(svc, lookahead, game, engine)
         return svc, sent
 
     def test_audio_is_cut_into_overlapping_whisper_windows(self):

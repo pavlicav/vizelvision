@@ -21,6 +21,7 @@ BADGES = ('off', 'shadow', 'always')
 # Whisper models the sidecar can use, cheapest first (admute/speech.py). Only cached
 # models load: one that does not falls back to base.en.
 SPEECH_MODELS = ('tiny.en', 'base.en', 'small.en', 'distil-large-v3')
+DETECTORS = ('classic', 'new')
 DEFAULTS = {
     # off: nothing is analysed (and no delay). shadow: the detector runs and the AD badge
     # shows what it would mute; the sound is never touched. on: breaks go quiet.
@@ -29,6 +30,10 @@ DEFAULTS = {
     'sources': {'tv_thing': True, 'roku': True},
     # Seconds the programme plays behind the detector (applies at the next prepare).
     'lookahead': 3.0,
+    # classic: the detector as it was. new: the classic evidence plus a CLIP picture score
+    # (admute/clip.py) and memoryless warm-up weights for the first minutes after a take.
+    # Both use the known-ads database. A change starts each input's analysis over.
+    'detector': 'classic',
     # 0 = cautious (mutes only when sure), 1 = eager.
     'sensitivity': 0.5,
     'max_mute': 300,
@@ -74,7 +79,8 @@ def validate(value, *, lenient=False):
     elif not set(value) <= set(DEFAULTS):
         raise ConfigError('Ad-mute settings take ' + ', '.join(DEFAULTS))
     result = {**copy.deepcopy(DEFAULTS), **copy.deepcopy(value)}
-    for key, choices in (('mode', MODES), ('sound', SOUNDS), ('badge', BADGES), ('speech_model', SPEECH_MODELS)):
+    for key, choices in (('mode', MODES), ('sound', SOUNDS), ('badge', BADGES), ('speech_model', SPEECH_MODELS),
+                         ('detector', DETECTORS)):
         if result[key] not in choices:
             raise ConfigError(f'{key} must be one of ' + ', '.join(choices))
     sources = result['sources']

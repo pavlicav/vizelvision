@@ -15,6 +15,7 @@ at s. ``trim`` drops what live detection no longer needs; replay keeps it all.
 """
 from __future__ import annotations
 
+import math
 import threading
 
 import numpy as np
@@ -63,9 +64,10 @@ class Signals:
     """Growing arrays of signals for one input. Each push_* is called from one
     thread per kind; readers take ``lock`` and use the ``*_since`` offsets."""
 
-    def __init__(self, embed=None, limited_range=False):
+    def __init__(self, embed=None, limited_range=False, scorer=None):
         self.lock = threading.Lock()
         self.embed = embed                 # callable(rgb224) -> vector, or None
+        self.scorer = scorer               # callable(rgb224) -> {name: score} (admute/clip.py), or None
         self.lut = LIMITED_TO_FULL if limited_range else None
         self.frame_t: list[float] = []
         self.frame_mean: list[float] = []
@@ -80,6 +82,7 @@ class Signals:
         self.emb: list[np.ndarray] = []
         self.hist: list[np.ndarray] = []
         self.pics: list[np.ndarray] = []   # packed pic_edges per second (live only: not in snapshots)
+        self.img: dict[str, list[float]] = {}   # picture scores per second, on the emb grid
         self.seconds_since = 0
         self._prev = None
         self._next_step = 0
@@ -118,11 +121,14 @@ class Signals:
             vec = self.embed(f) if self.embed else np.zeros(1, np.float32)
             hist = colour_hist(f)
             pic = np.packbits(pic_edges(f))
+            scores = self.scorer(f) if self.scorer else {}
             with self.lock:
                 while self._next_second <= s:      # a missing second repeats the next one
                     self.emb.append(vec)
                     self.hist.append(hist)
                     self.pics.append(pic)
+                    for name in set(self.img) | set(scores):      # an unscored second is NaN
+                        self.img.setdefault(name, [math.nan] * (len(self.emb) - 1)).append(scores.get(name, math.nan))
                     self._next_second += 1
 
     def push_audio(self, t0: float, samples: np.ndarray):
@@ -178,6 +184,8 @@ class Signals:
             n = max(0, int(before) - self.seconds_since)
             if n:
                 del self.emb[:n], self.hist[:n], self.pics[:n]
+                for vals in self.img.values():
+                    del vals[:n]
                 self.seconds_since += n
 
     def snapshot(self) -> dict:
@@ -190,7 +198,8 @@ class Signals:
                     "edges_since": self.edges_since,
                     "rms_db": np.array(self.rms_db, np.float32), "audio_since": self.audio_since,
                     "emb": np.array(self.emb, np.float32), "hist": np.array(self.hist, np.float32),
-                    "seconds_since": self.seconds_since}
+                    "seconds_since": self.seconds_since,
+                    **{name: np.array(vals, np.float32) for name, vals in self.img.items()}}
 
     def edge(self) -> float:
         """Input time up to which every kind of signal is complete."""

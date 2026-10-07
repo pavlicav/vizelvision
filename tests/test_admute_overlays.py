@@ -469,11 +469,12 @@ class SessionGameTests(unittest.TestCase):
         from types import SimpleNamespace
         from admute import text as T
         from admute.service import Session, Service
-        svc = SimpleNamespace(embed=None, model=D.DEFAULT_MODEL, overlays=OV.Library(catalogue=None), prints=None,
+        svc = SimpleNamespace(embed=None, model=D.DEFAULT_MODEL, models={"classic": D.DEFAULT_MODEL}, engine="classic",
+                              overlays=OV.Library(catalogue=None), prints=None,
                               library=T.AdLibrary(), settings={"sensitivity": .5, "max_mute": 300, "sports_gate": True},
                               speech=SimpleNamespace(usable=False), frames=SimpleNamespace(save=lambda *a: None),
                               quiet=lambda *a: False, resumed=set(resumed))
-        svc.policy_config = lambda la, game=False: Service.policy_config(svc, la, game)
+        svc.policy_config = lambda la, game=False, engine="classic": Service.policy_config(svc, la, game, engine)
         svc.lookahead = lambda info: 3.0
         return Session(svc, "k" * 32, {"lookahead": 3}), svc
 
