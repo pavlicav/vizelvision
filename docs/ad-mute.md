@@ -201,6 +201,13 @@ counted (the score bug wins).
     ad") stops counting for the session; an ad label seen up during clear programme
     (known show sound, or "It's the show") likewise. After two such sessions it is
     rejected for good.
+  - A programme's graphic counts at once only on its home channels: where it was learnt,
+    or the catalogue's (a call sign matches as a word of the channel id: WTTG is
+    `wttg_dt_5_1` over the antenna). Anywhere else it starts out checking and counts
+    once it passes the same test as a new one there. Failing it there says nothing about
+    it at home: no strike, no rejection. Until 10/7 every overlay counted on every
+    channel: FS1's top-right score bug, up in none of TBS's game and 14% of its ads,
+    matched a ro ad's corner text and held 29 s of it audible.
 
 ### 4. It decides where breaks are
 

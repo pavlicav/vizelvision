@@ -277,6 +277,88 @@ class LiveLearningTests(unittest.TestCase):
         self.assertTrue(all(o.status == "rejected" for o in pieces), [(o.box, o.status) for o in pieces])
 
 
+class HomeTests(unittest.TestCase):
+    """A programme's graphic is its channel's (2026-10-07: FS1's score bug, carried to TBS,
+    matched a ro ad's corner text and held 29 s of it audible)."""
+
+    def fs1_bug(self, rng, **kw):
+        ov = overlay_from([logo_on(picture(rng)) for _ in range(60)], kind="score", id="live-fs1-280-8-27002",
+                          name="FS1 · top right score bug", origin="live")
+        d = {**ov.to_json(), "channels": ["FS1", "wjla_7_1", "TBS"], **kw}     # watched everywhere since
+        return OV.Overlay.from_json(d)
+
+    def run_tbs(self, lib, up_in_show, up_in_ads, seconds=760):
+        rng = np.random.default_rng(31)
+        tr = OV.Tracker(lib, channel="TBS")
+        label = lambda s: 1 if s % 300 >= 240 else 0          # noqa: E731
+        for s in range(seconds):
+            for _ in range(2):
+                m = picture(rng)
+                if (up_in_ads if label(s) else up_in_show):
+                    logo_on(m)
+                tr.see(m, pack(m))
+            if s >= 60:
+                tr.settle(s - 60, label(s - 60), cut=(s - 60) % 5 == 4)
+        return tr
+
+    def test_it_counts_at_once_only_where_it_was_learnt(self):
+        lib = OV.Library(catalogue=None)
+        lib.add(self.fs1_bug(np.random.default_rng(30)))
+        self.assertEqual(lib.items["live-fs1-280-8-27002"].home, ["FS1"], "from its id, not where it was carried")
+        self.assertIn("live-fs1-280-8-27002", OV.Tracker(lib, channel="FS1").trusted)
+        tbs = OV.Tracker(lib, channel="TBS")
+        self.assertNotIn("live-fs1-280-8-27002", tbs.trusted)
+        self.assertEqual(tbs.describe(0)[0]["state"], "checking")
+
+    def test_up_in_this_channels_ads_it_is_ignored_here_only(self):
+        lib = OV.Library(catalogue=None)
+        lib.add(self.fs1_bug(np.random.default_rng(30)))
+        tr = self.run_tbs(lib, up_in_show=False, up_in_ads=True)
+        self.assertIn("not this channel's", tr.distrusted["live-fs1-280-8-27002"])
+        self.assertTrue(all(math.isnan(tr.features(s)["ov_score"]) for s in range(240, 300)))
+        ov = lib.items["live-fs1-280-8-27002"]
+        self.assertEqual((ov.status, ov.strikes, ov.home), ("active", 0, ["FS1"]), "still FS1's")
+
+    def test_proving_itself_here_it_counts_here_too(self):
+        lib = OV.Library(catalogue=None)
+        lib.add(self.fs1_bug(np.random.default_rng(30)))
+        tr = self.run_tbs(lib, up_in_show=True, up_in_ads=False)
+        self.assertIn("live-fs1-280-8-27002", tr.trusted)
+        self.assertEqual(lib.items["live-fs1-280-8-27002"].home, ["FS1", "TBS"])
+        with tempfile.TemporaryDirectory() as d:
+            lib.path = os.path.join(d, "admute-overlays.json")
+            lib.dirty = True
+            lib.save()
+            again = OV.Library(path=lib.path, catalogue=None)
+            self.assertIn("live-fs1-280-8-27002", OV.Tracker(again, channel="TBS").trusted)
+
+    def test_a_catalogue_entry_is_at_home_on_its_own_channels(self):
+        with tempfile.TemporaryDirectory() as d:
+            cat = os.path.join(d, "overlays.json")
+            ov = self.fs1_bug(np.random.default_rng(30))
+            entry = {**ov.to_json(), "id": "nbc-mlb-score", "origin": "catalogue", "channels": ["NBC", "WRC"]}
+            entry.pop("home", None)
+            with open(cat, "w") as f:
+                json.dump({"overlays": [entry]}, f)
+            saved = os.path.join(d, "admute-overlays.json")
+            with open(saved, "w") as f:
+                json.dump({"overlays": [{"id": "nbc-mlb-score", "origin": "catalogue", "status": "active",
+                                         "channels": ["NBC", "WRC", "TBS", "FS1"]}]}, f)
+            lib = OV.Library(path=saved, catalogue=cat)
+            self.assertEqual(lib.items["nbc-mlb-score"].home, ["NBC", "WRC"])
+            self.assertIn("nbc-mlb-score", OV.Tracker(lib, channel="NBC").trusted, "YouTube TV's NBC")
+            self.assertIn("nbc-mlb-score", OV.Tracker(lib, channel="wrc_hd_4_1").trusted, "WRC over the antenna")
+            self.assertNotIn("nbc-mlb-score", OV.Tracker(lib, channel="TBS").trusted)
+            self.assertNotIn("nbc-mlb-score", OV.Tracker(lib, channel="wrcx_2").trusted, "a whole word only")
+
+    def test_an_ad_label_counts_everywhere(self):
+        lib = OV.Library(catalogue=None)
+        label = overlay_from([logo_on(picture(np.random.default_rng(32))) for _ in range(60)], kind="ad",
+                             id="yttv-sponsored", name="YouTube TV ad label", channels=["youtube-tv"], home=["youtube-tv"])
+        lib.add(label)
+        self.assertIn("yttv-sponsored", OV.Tracker(lib, channel="TBS").trusted)
+
+
 class AdLabelTests(unittest.TestCase):
     def setUp(self):
         self.lib = OV.Library(catalogue=None)

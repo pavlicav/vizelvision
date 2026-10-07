@@ -48,6 +48,15 @@ an ad" -- stops counting for the session; after STRIKES such sessions, for good.
 an ad label seen up during clear programme -- known show sound, or "it's the show" -- stops
 counting.
 
+A programme's graphic is that channel's. Each overlay has a ``home``: the channels it has
+proved itself on (learnt there, or the catalogue's). Elsewhere it starts out checking, and
+counts only once it passes the same test as a new one on this channel; failing it there
+says nothing about it at home (no strike, no rejection). On 2026-10-07 every overlay
+counted on every channel: FS1's top-right score bug, up in none of TBS's game and 14% of
+its ads, matched a ro ad's corner text, called it the programme (and barred the mute) for
+29 s. ``channels`` (where it has been watched) had grown to every channel it was carried
+to, so it could not tell.
+
 The evidence (detector.Detector), per second, 1 while a trusted overlay is up and nothing
 otherwise:
   ov_score  a score bug: the programme, strongly (and no mute may start: admute.policy)
@@ -67,6 +76,7 @@ import json
 import logging
 import math
 import os
+import re
 import sys
 import threading
 import time
@@ -172,8 +182,9 @@ class Overlay:
     space: str = "edge"           # edge (320x180 maps, 2/s) | pic (224x224 picture, 1/s)
     origin: str = "catalogue"     # catalogue | live
     status: str = "active"        # active | pending (not yet seen against breaks) | rejected
-    channels: list = field(default_factory=list)
+    channels: list = field(default_factory=list)   # where it has been watched
     strikes: int = 0              # sessions it was seen up where it should not be
+    home: list = field(default_factory=list)       # where it counts at once (proved itself); none: everywhere
     note: str = ""
     stats: dict = field(default_factory=dict)
 
@@ -224,6 +235,7 @@ class Overlay:
                 "on": _pack(self.on), "off": _pack(self.off), "thresh": round(float(self.thresh), 3),
                 **({"strong": round(float(self.strong), 3)} if self.strong is not None else {}),
                 "origin": self.origin, "status": self.status, "channels": list(self.channels),
+                **({"home": list(self.home)} if self.home else {}),
                 "strikes": self.strikes, "note": self.note, "stats": self.stats}
 
     @classmethod
@@ -234,7 +246,30 @@ class Overlay:
                    on=_unpack(d["on"], shape), off=_unpack(d["off"], shape), thresh=float(d.get("thresh", 0.45)),
                    strong=float(d["strong"]) if d.get("strong") is not None else None, space=d.get("space", "edge"), origin=d.get("origin", "catalogue"),
                    status=d.get("status", "active"), channels=list(d.get("channels") or []),
-                   strikes=int(d.get("strikes", 0)), note=d.get("note", ""), stats=dict(d.get("stats") or {}))
+                   strikes=int(d.get("strikes", 0)), note=d.get("note", ""), stats=dict(d.get("stats") or {}),
+                   home=list(d.get("home") or _home_of(d)))
+
+
+def _slug(channel: str) -> str:
+    return channel.lower().replace(" ", "")
+
+
+def at_home(channel: str | None, home: list) -> bool:
+    """Whether ``channel`` is one of ``home``: the same id, or a catalogue's call sign as a
+    word of it (WTTG: wttg_dt_5_1 over the antenna; FOX: YouTube TV's FOX)."""
+    if not channel or not home:
+        return True
+    words = set(re.split(r"[^a-z0-9]+", channel.lower()))
+    return any(h == channel or _slug(h) == _slug(channel) or h.lower() in words for h in home)
+
+
+def _home_of(d: dict) -> list:
+    """Where an overlay saved before ``home`` proved itself: a live one, the channel in its
+    id (it was learnt there); a catalogue one, its channels (the catalogue's own)."""
+    channels = list(d.get("channels") or [])
+    if d.get("origin") == "live":
+        return [c for c in channels if d["id"].startswith(f"live-{_slug(c)}-")][:1]
+    return channels
 
 
 # ---------------------------------------------------------------- learning
@@ -415,6 +450,7 @@ class Library:
                     ov.strikes = int(d.get("strikes", ov.strikes))
                     ov.note = d.get("note", ov.note)
                     ov.channels = list(d.get("channels") or ov.channels)
+                    ov.home = list(dict.fromkeys(ov.home + list(d.get("home") or [])))
                     ov.stats = {**ov.stats, **(d.get("stats") or {})}
 
     def watched(self) -> list[Overlay]:
@@ -473,7 +509,7 @@ class Library:
         with self.lock:
             out = [ov.to_json() if ov.origin == "live" else
                    {"id": ov.id, "origin": ov.origin, "status": ov.status, "strikes": ov.strikes,
-                    "note": ov.note, "channels": ov.channels, "stats": ov.stats}
+                    "note": ov.note, "channels": ov.channels, "home": ov.home, "stats": ov.stats}
                    for ov in self.items.values()]
             self.dirty = False
         tmp = self.path + ".tmp"
@@ -506,6 +542,7 @@ class Tracker:
         self.count: dict[str, dict] = {}
         self.trusted: set[str] = set()
         self.distrusted: dict[str, str] = {}
+        self.foreign: set[str] = set()         # programme overlays from other channels, checking here
         self.n = {"edge": 0, "pic": 0}           # samples seen, per space
         self.maps = collections.deque()          # (index, packed) in the learning window
         self.settled = collections.deque()       # (index, label, packed): settled maps in the window
@@ -519,7 +556,12 @@ class Tracker:
         self.rejected_boxes = [ov.box for ov in self.lib.rejected()
                                if ov.space == "edge" and (not ov.channels or channel in ov.channels)]
         for ov in self.lib.watched():
-            self._watch(ov, trusted=ov.status == "active")
+            if ov.side == "show" and not self._at_home(ov):
+                self.foreign.add(ov.id)
+            self._watch(ov, trusted=ov.status == "active" and ov.id not in self.foreign)
+
+    def _at_home(self, ov: Overlay) -> bool:
+        return at_home(self.channel, ov.home)
 
     def _watch(self, ov: Overlay, trusted: bool):
         self.watch[ov.id] = ov
@@ -665,6 +707,15 @@ class Tracker:
         if oid in self.trusted or oid in self.distrusted or ov.side != "show":
             return
         (ns, us), (na, ua), (nc, kc) = c["show"], c["ad"], c["cuts"]
+        if oid in self.foreign:              # another channel's: the same test, its verdict only here
+            if na >= MIN_AD_MAPS and ua > REJECT_AD * na:
+                self.distrusted[oid] = f"not this channel's: up in {100 * ua / na:.0f}% of its breaks"
+            elif nc >= CUT_MIN and kc < CUT_KEPT * nc:
+                self.distrusted[oid] = f"not this channel's: went with the shot at {nc - kc} of {nc} cuts"
+            elif (ns >= MIN_SHOW_MAPS and na >= MIN_AD_MAPS and nc >= CUT_MIN
+                  and us >= PROMOTE_SHOW * ns and ua <= PROMOTE_AD * na):
+                self._promote(oid, us / ns, ua / na)
+            return
         if na >= MIN_AD_MAPS and ua > REJECT_AD * na:
             self._reject(oid, f"up in {100 * ua / na:.0f}% of breaks")
         elif nc >= CUT_MIN and kc < CUT_KEPT * nc:
@@ -679,6 +730,8 @@ class Tracker:
         ov.stats = {**ov.stats, "show": round(show, 3), "ad": round(ad, 3), "last": round(time.time())}
         if self.channel and self.channel not in ov.channels:
             ov.channels.append(self.channel)
+        if self.channel and self.channel not in ov.home:
+            ov.home.append(self.channel)
         self.lib.add(ov)
         self.trusted.add(oid)
         self.events.append({"t": time.time(), "what": "learnt", "id": oid, "name": ov.name})
@@ -702,7 +755,7 @@ class Tracker:
         ov = self.watch[oid]
         if ov.space != "edge":
             return False
-        if self.channel and self.channel in ov.channels:
+        if self.channel and ov.home and at_home(self.channel, ov.home):
             return True
         n, up = self.count[oid]["show"]
         return n >= MIN_AD_MAPS and up >= 0.1 * n
@@ -737,7 +790,7 @@ class Tracker:
             ov = Overlay(id=f"live-{(self.channel or 'x').lower().replace(' ', '')}-{x0}-{y0}-{int(time.time()) % 100000}",
                          name=f"{chan} · {where(box)} {'score bug' if kind == 'score' else 'logo'}", kind=kind,
                          box=box, on=on, off=off, origin="live", status="pending",
-                         channels=[self.channel] if self.channel else [])
+                         channels=[self.channel] if self.channel else [], home=[self.channel] if self.channel else [])
             s = ov.scores(crops)
             ov.thresh = threshold(s[lab == 0][up], s[lab == 1] if (lab == 1).sum() >= MIN_AD_MAPS else None)
             known.append(box)
