@@ -477,7 +477,7 @@ class Session:
              "txt_show_vocab": "not the programme's words", "txt_ad_vocab": "ads' words", "txt_you": "talks to you",
              "fp_known": "a known ad", "fp_repeat": "repeats an earlier ad", "fp_show": "show sound",
              "ov_score": "score bug on screen", "ov_logo": "network logo on screen", "ov_ad": "an ad label on screen",
-             "img_zeroshot2": "looks like an ad", "img_split": "split-screen"}
+             "img_zeroshot3": "looks like an ad", "img_split": "split-screen"}
 
     def why(self, span=None) -> list:
         """[headline, detail] for the moment about to air: how sure, and what says so."""

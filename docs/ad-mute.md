@@ -129,8 +129,9 @@ once):
 - **New:** `admute/model_new.json`. It uses the same evidence plus two picture scores
   from CLIP ViT-B/32 (`admute/clip.py`, int8 ONNX, once a second on the tap's colour
   frame):
-  - `img_zeroshot2`: how much the frame looks like an ad rather than a programme
-    (sports, studio and game-show descriptions)
+  - `img_zeroshot3`: how much the frame looks like an ad rather than a programme
+    (sports, studio, game-show, news and talk-show descriptions; without the last two,
+    the noon news, its teases and its weather read as ads)
   - `img_split`: a split-screen, a sponsor panel beside the game in a box, counts as the
     programme
   - The descriptions are fixed, so it knows ads it has never seen.
