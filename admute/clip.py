@@ -9,7 +9,8 @@ Once a second, the tap's 224x224 colour frame is compared with fixed description
                  in a box) minus the closest ad one: a split-screen counts as the show
 
 Nothing is learnt on the box: the descriptions are fixed, so it works on ads it has never
-seen. CPU only, one thread; about 25 ms a frame on an M1, several times that on the box.
+seen. CPU only, one thread, int8 (89 MB, lab.export_clip then onnxruntime's dynamic
+quantisation): about 50 ms a frame on an M1; the Ad mute page shows the box's time.
 """
 from __future__ import annotations
 
@@ -17,8 +18,9 @@ import os
 
 import numpy as np
 
-MODEL = os.environ.get("ADMUTE_CLIP", os.path.expanduser("~/scratch/ad_detection/models/clip-vit-b32-laion2b.onnx"))
-PROMPTS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "clip_prompts.npz")
+HERE = os.path.dirname(os.path.abspath(__file__))
+MODEL = os.environ.get("ADMUTE_CLIP", os.path.join(HERE, "..", "state", "models", "clip-vit-b32-laion2b.int8.onnx"))
+PROMPTS = os.path.join(HERE, "clip_prompts.npz")
 FEATURES = ("img_zeroshot2", "img_split")
 _MEAN = np.array([0.48145466, 0.4578275, 0.40821073], np.float32)
 _STD = np.array([0.26862954, 0.26130258, 0.27577711], np.float32)

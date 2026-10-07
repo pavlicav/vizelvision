@@ -120,6 +120,36 @@ come, and the decision waits for them, but never more than 10 s behind.
 - **words and sound,** as above. The weights of known show sound and of the overlays
   are set by hand (`admute.train` keeps them).
 
+#### Classic or new detector
+
+**How it decides › Detector** on the page picks the weights (setting `detector`, saved at
+once):
+
+- **Classic:** `admute/model.json`, as above.
+- **New:** `admute/model_new.json`. It uses the same evidence plus two picture scores
+  from CLIP ViT-B/32 (`admute/clip.py`, int8 ONNX, once a second on the tap's colour
+  frame):
+  - `img_zeroshot2`: how much the frame looks like an ad rather than a programme
+    (sports, studio and game-show descriptions)
+  - `img_split`: a split-screen, a sponsor panel beside the game in a box, counts as the
+    programme
+  - The descriptions are fixed, so it knows ads it has never seen.
+  - Its own **warm-up weights** decide until the programme memory exists (recurrence
+    still unknown), nudged toward the programme.
+  - A 5 s grace after a take (`"policy"` in the model).
+  - The hand-set weights (show sound, overlays) are the classic ones.
+  - Fitted by the lab (`lab.prod_model`, on the lab branch) on 14 labelled recordings.
+- **Both** use the known-ads database, the overlays and every policy rule.
+
+On the recordings, with known ads from the other recordings and the box's own CLIP
+scores, new mutes 97.3% of ad time with 17 s of show an hour, against 95.7% and 32 s for
+the classic evidence fitted the same way.
+
+The sidecar runs the new one only if its model and CLIP
+(`state/models/clip-vit-b32-laion2b.int8.onnx`, or `ADMUTE_CLIP`) load. Otherwise it
+runs classic and the page says why. A change starts every input's analysis over, with no
+take grace.
+
 #### Overlays (`admute/overlays.py`)
 
 The graphics a broadcast keeps on screen, each where it sits. Unlike the generic bug,
