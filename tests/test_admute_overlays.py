@@ -433,8 +433,29 @@ class GateTests(unittest.TestCase):
 
     def test_the_half_in_progress_goes_quiet_after_its_last_pitch(self):
         g = self.gate([0, 20, 40])
-        self.assertEqual(g(100), "live")
+        self.assertEqual(g(80), "live")
+        self.assertIsNone(g(40 + 46), "a pitch this overdue: maybe a pitching change, and the break")
         self.assertIsNone(g(40 + 95))
+
+    def test_a_pitching_change_before_the_feed_has_it(self):
+        # 2026-10-07, bottom 1st on TBS: a mound visit, the break 72 s after the last pitch,
+        # the pitching change in the feed 9 s later. The gate had said "live" (GAP: 90 s).
+        g = self.gate([0, 22, 44, 66])
+        self.assertEqual(g(66 + 30), "live")
+        self.assertIsNone(g(66 + 72), "the break's first ads may be muted")
+
+    def test_realtime_reads_a_finished_feed_as_it_stood(self):
+        from admute import sports
+        before = [-900.0, -880.0]
+        pitches = [0, 20, 40, 260, 280]
+        halves = [tuple(before), (0, 280)]
+        full = sports.Gate(halves, [150.0], False, pitches=before + pitches)
+        now = sports.Gate(halves, [150.0], False, pitches=before + pitches, realtime=True)
+        self.assertEqual(full(125), "break", "the pitching change 25 s ahead is known")
+        self.assertIsNone(now(125), "not yet in the feed; the last pitch 85 s ago")
+        self.assertEqual(now(150), "break")
+        self.assertIsNone(full(80), "in hindsight, a 220 s pause")
+        self.assertEqual(now(80), "live", "40 s after a pitch, the next one not known yet")
 
     def test_a_stale_feed_has_no_opinion(self):
         g = self.gate([0, 20, 40], live_now=False)

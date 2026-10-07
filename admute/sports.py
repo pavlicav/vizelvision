@@ -6,8 +6,9 @@ last pitches were, and when pitchers changed. ``Gate`` turns that into
 
   'live'   -- inside a half-inning, from LIVE_AFTER s after its first pitch to its
               last pitch, away from pitching changes, while pitches are coming (no
-              more than GAP apart): muting is not allowed, and a mute still running
-              ends (the detector missed the return)
+              more than GAP apart; with no later pitch yet, the last one no more than
+              LIVE_TAIL ago): muting is not allowed, and a mute still running ends (the
+              detector missed the return)
   'break'  -- between half-innings, or around a pitching change
   None     -- before the first pitch, after the last, a pause inside a half (a gap
               between pitches over GAP), no feed, or a feed gone stale (no pitch for
@@ -16,7 +17,12 @@ last pitches were, and when pitchers changed. ``Gate`` turns that into
 
 A pause inside a half-inning is no proof of play: TBS went to a break mid-inning on
 2026-10-05 (bottom 6th) before the feed had any pitching change, and the gate, calling
-it live, ended two mutes while the ads ran.
+it live, ended two mutes while the ads ran. Live, the gap is still open: the feed only
+has the pitches so far. On 2026-10-07 (bottom 1st, TBS) the break for a pitching change
+began 72 s after the last pitch and 9 s before the feed had the change, and a gate that
+waited GAP for the next pitch held the first 14 s of ads audible. So a pitch more than
+LIVE_TAIL overdue ends "live" (95% of pitches come within 51 s of the one before).
+``realtime`` reads a finished feed as it stood at each moment, as the lab's replays should.
 
 The feed runs within about +-30 s of the broadcast, so the margins are generous.
 The gate can only stop a mute, never cause one.
@@ -33,6 +39,7 @@ import urllib.request
 LIVE_AFTER = 10.0          # the broadcast is back before the first pitch (it runs ~10 s behind the feed)
 SUB_BEFORE, SUB_AFTER = 30.0, 240.0
 GAP = 90.0                 # seconds between pitches beyond which play has paused (pitching change, review, injury)
+LIVE_TAIL = 45.0           # ... and, with no later pitch yet, since the last one
 STALE = 360.0              # no pitch for this long (the longest break is ~4-5 min): the feed is not to be believed
 FEED = "https://statsapi.mlb.com/api/v1.1/game/{pk}/feed/live"
 
@@ -94,34 +101,39 @@ def names_from_feed(feed: dict) -> list[str]:
 class Gate:
     """gate(t) for t on some clock: ``offset`` maps it to wall time (wall = t + offset)."""
 
-    def __init__(self, halves, subs, final=False, offset: float = 0.0, live_now=None, pitches=None):
+    def __init__(self, halves, subs, final=False, offset: float = 0.0, live_now=None, pitches=None,
+                 realtime: bool = False):
         self.halves, self.subs, self.final, self.offset = halves, subs, final, offset
         self.live_now = live_now            # the half in progress: its first pitch (wall), if any
         self.pitches = pitches              # every pitch (wall), sorted; None: the halves alone decide
+        self.realtime = realtime            # a finished feed read as it stood at w: nothing after w is known
         self._resumed = [p for i, p in enumerate(pitches or []) if not i or p - pitches[i - 1] > GAP]
 
     def _playing(self, w: float) -> bool:
-        """Pitches are coming at w: the pitches either side of it are at most GAP apart (the
-        last one at most GAP before it), and since play resumed after a pause, LIVE_AFTER
-        has passed (as at a half's first pitch, the broadcast is back before it)."""
+        """Pitches are coming at w: the pitches either side of it are at most GAP apart (with
+        no later pitch yet, the last one at most LIVE_TAIL before it), and since play resumed
+        after a pause, LIVE_AFTER has passed (as at a half's first pitch, the broadcast is
+        back before it)."""
         if self.pitches is None:
             return True
         j = bisect.bisect_right(self.pitches, w)
         if not j:
             return False
         before = self.pitches[j - 1]
-        after = self.pitches[j] if j < len(self.pitches) else w
-        if after - before > GAP:
+        if j < len(self.pitches) and not self.realtime:
+            if self.pitches[j] - before > GAP:
+                return False
+        elif w - before > LIVE_TAIL:
             return False
         k = bisect.bisect_right(self._resumed, before)
         return w >= self._resumed[k - 1] + LIVE_AFTER
 
     def __call__(self, t: float):
         w = t + self.offset
-        if self.pitches and not self.final and w - self.pitches[-1] > STALE:
+        if self.pitches and not self.final and w - self._last_pitch(w) > STALE:
             return None                     # stuck, or another game's: fail towards the detector alone
         i = bisect.bisect_left(self.subs, w - SUB_AFTER)
-        if i < len(self.subs) and self.subs[i] <= w + SUB_BEFORE:
+        if i < len(self.subs) and self.subs[i] <= w + (0.0 if self.realtime else SUB_BEFORE):
             return "break"
         if not self.halves:
             return None
@@ -136,8 +148,14 @@ class Gate:
             return None
         return "break"
 
+    def _last_pitch(self, w: float) -> float:
+        if not self.realtime:
+            return self.pitches[-1]
+        j = bisect.bisect_right(self.pitches, w)
+        return self.pitches[j - 1] if j else -float("inf")
+
     @classmethod
-    def from_feed(cls, feed: dict, offset: float = 0.0) -> "Gate":
+    def from_feed(cls, feed: dict, offset: float = 0.0, realtime: bool = False) -> "Gate":
         halves, subs, final = halves_from_feed(feed)
         live_now = None
         if not final and halves:
@@ -154,7 +172,7 @@ class Gate:
                     and (last.get("halfInning") or "").lower() == ls["inningState"].lower()):
                 live_now = halves[-1][0]    # the latest half is still going on
                 halves = halves[:-1]
-        return cls(halves, subs, final, offset, live_now, pitches_from_feed(feed))
+        return cls(halves, subs, final, offset, live_now, pitches_from_feed(feed), realtime)
 
 
 class LiveGate:

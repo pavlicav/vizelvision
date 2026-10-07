@@ -268,6 +268,12 @@ counted (the score bug wins).
   - Play is live only while pitches are coming (at most 90 s apart). A longer gap inside
     a half-inning (a pitching change the feed hasn't reported yet, a review, an injury)
     gives no opinion, and the detector decides.
+  - Live, the gap is still open, so a pitch 45 s overdue already ends "live" (95% of
+    pitches come within 51 s of the one before). Waiting the full 90 s held the first
+    14 s of a pitching-change break audible on 10/7 (TBS, bottom 1st): the break began
+    72 s after the last pitch, before the feed had the change. Lab replays read the feed
+    as it stood at each moment (`realtime`); they used to know the next pitch and an
+    upcoming pitching change in advance, and never saw this.
   - A half-inning is in progress only once it has a pitch. MLB's linescore turns to the
     next half ("Bottom 8, 0 outs") as soon as the last one ends; taking the finished half
     for it said "live" through the break's ads (TBS, 10/5 22:56).

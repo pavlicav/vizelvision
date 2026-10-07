@@ -189,7 +189,9 @@ FEEDS = os.path.join(ROOT, "state", "admute", "feeds")
 
 
 def gate_for(truth: dict | None):
-    """The sports gate for a tape whose truth names its game (feed cached on disk)."""
+    """The sports gate for a tape whose truth names its game (feed cached on disk), read as
+    the feed stood at each moment (live, the next pitch and a pitching change about to be
+    made are not known yet)."""
     if not truth or not truth.get("feed"):
         return None
     from . import sports
@@ -202,7 +204,7 @@ def gate_for(truth: dict | None):
             open(path, "wb").write(r.read())
     with open(path) as f:
         feed = json.load(f)
-    return sports.Gate.from_feed(feed, offset=sports._ts(info["tape_start"]))
+    return sports.Gate.from_feed(feed, offset=sports._ts(info["tape_start"]), realtime=True)
 
 
 def find_tape(name: str) -> str:
