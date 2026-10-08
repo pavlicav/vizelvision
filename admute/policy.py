@@ -6,7 +6,8 @@ that gets through.
   * Mute (provisionally) when P(ad) >= t_provisional with enough evidence behind
     the moment about to air, never during the grace after a take, never while
     the sports feed says play is live, and only at a seam (a black frame or a hard
-    cut) after a retraction.
+    cut) after a retraction. Where a mute may start only at a seam (outside games), up
+    to seam_window seconds after a black frame also counts: Haiku hears a new spot ~10 s late.
   * Confirm when P(ad) reaches t_confirm within confirm_window; otherwise unmute
     and record a *retracted* mute.
   * Unmute as soon as P(ad) < t_unmute, at the cap, or when the sports feed says
@@ -17,7 +18,7 @@ that gets through.
     a stretch of show has passed.
   * "It's an ad" holds for at least min_hold whatever the detector says, then until
     a black frame or digital silence into show (one seen during the lock counts if it is
-    still the show), a trusted score bug back, or the cap. Not at a cut: the operator
+    still the show; the seconds seen beyond it must agree), a trusted score bug back, or the cap. Not at a cut: the operator
     pressed it because the detector said "show", and ads cut every few seconds (on
     2026-10-07 five presses each held 10 s, to the next cut, in WJLA's news breaks).
   * Never while a score bug the detector trusts is up (admute/overlays.py): the break
@@ -72,6 +73,12 @@ class PolicyConfig:
     # frame or a hard cut), or only at a "black" seam. A clearly known ad (audio fingerprint)
     # may start one anywhere.
     open_at: str = "any"
+    # ... or this long after a black frame (not a cut: a talk show cuts every few seconds,
+    # and the detector is briefly sure in it now and then). A spot it hasn't heard before is a toss-up
+    # at its black frame: Haiku's answer comes ~10 s after the words (the transcript lags).
+    # On 2026-10-08 (WRC's 6 pm news) the black frames of a 2 min break came at P(ad)
+    # 0.06-0.14, 100% a second later, and nothing was muted.
+    seam_window: float = 10.0
     # For this long after MLB's feed says the inning ended, a mute ends only at a seam
     # into clearly the programme (the seconds after it this show-like, per-second logit):
     # a dip mid-shot, or a seam into a spot that merely looks a bit like the game, is the
@@ -131,6 +138,7 @@ class Policy:
     break_since: float | None = None  # when the feed's current between-innings window began
     unmuted_at: float | None = None
     live_since: float | None = None   # since when the feed has said play is live
+    black_at: float | None = None     # the last black frame (cfg.seam_window)
 
     @property
     def muted(self) -> bool:
@@ -179,6 +187,8 @@ class Policy:
             else:
                 self.show_since = None
             labelled = getattr(seg, "ad_overlay", None)
+            if seg.seam == "black":
+                self.black_at = t
             if self.current:
                 span = self.current
                 span.peak = max(span.peak, p)
@@ -187,7 +197,9 @@ class Policy:
                 if self.held == "mute":
                     if p >= c.t_unmute:
                         self.held_seam = False
-                    elif seg.seam in c.held_seams or getattr(seg, "overlay", None):
+                    elif ((seg.seam in c.held_seams or getattr(seg, "overlay", None))
+                          and all(r < c.t_unmute for r in near)):
+                        # (not the dip at a black frame between two spots: 10/8 18:10:31)
                         self.held_seam = True
                     locked = t - self.held_at < c.min_hold
                     if not locked and (self.held_seam or t - span.start >= max(c.max_mute, c.max_mute_gated)):
@@ -216,10 +228,13 @@ class Policy:
                 continue
             known = getattr(seg, "known", False)
             clear_cut = seg.seam == "cut" and seg.post_z is not None and seg.post_z >= c.cut_z
-            where = (c.open_at == "any" or known or labelled or seg.seam == "black"
+            # a black frame a moment ago, since the sound came back
+            black = (self.black_at is not None and t - self.black_at <= c.seam_window
+                     and self.black_at > (self.unmuted_at or -1e9))
+            where = (c.open_at == "any" or known or labelled or seg.seam == "black" or black
                      or (c.open_at == "seam" and clear_cut))
-            rearmed = seg.seam == "black" or labelled or (seg.seam == "cut" and "cut" in c.rearm and clear_cut
-                                                          and t - (self.unmuted_at or -1e9) >= c.rearm_gap)
+            rearmed = seg.seam == "black" or black or labelled or (
+                seg.seam == "cut" and "cut" in c.rearm and clear_cut and t - (self.unmuted_at or -1e9) >= c.rearm_gap)
             over = c.overlay_veto and getattr(seg, "overlay", None) and not labelled
             if ((p >= c.t_provisional or labelled) and not self.suppressed and (gate != "live" or labelled) and not over
                     and t >= self.start + c.grace and edge - t >= c.min_evidence and where

@@ -305,6 +305,30 @@ class PolicyTests(unittest.TestCase):
         self.assertEqual(run(Policy(PolicyConfig(open_at='seam')), segs).spans, [],
                          'nor at a camera cut that is only a bit ad-like after it')
 
+    def test_a_new_spot_mutes_moments_after_its_black_frame(self):
+        # 2026-10-08, WRC's 6 pm news: each black frame of a 2 min break came at P(ad) 0.06-0.14
+        # (Haiku hears a new spot ~10 s late) and 100% a second later, and nothing was muted.
+        cfg = lambda: PolicyConfig(open_at='seam')    # noqa: E731
+        late = secs(90, 100, .02) + [Seg(100, 101, .1, 'black')] + secs(101, 103, .3) + secs(103, 130, 1.0)
+        self.assertEqual(run_seen(Policy(cfg()), late).current.start, 103)
+        too_late = secs(90, 100, .02) + [Seg(100, 101, .1, 'black')] + secs(101, 115, .3) + secs(115, 130, 1.0)
+        self.assertFalse(run_seen(Policy(cfg()), too_late).muted, 'not long after it')
+        cut = secs(90, 100, .02) + [Seg(100, 101, .1, 'cut', post_z=3.0)] + secs(101, 103, .3) + secs(103, 130, 1.0)
+        self.assertFalse(run_seen(Policy(cfg()), cut).muted, 'not after a cut: a talk show cuts every few seconds')
+        # A black frame before the sound came back doesn't re-arm it.
+        segs = [Seg(100, 101, .999, 'black'), Seg(101, 102, .1)] + secs(102, 110, .999)
+        self.assertIsNone(run(Policy(cfg()), segs).current)
+
+    def test_its_an_ad_holds_through_the_dip_between_two_spots(self):
+        # 2026-10-08 18:10:31: the press held to the black frame between two new spots (P(ad)
+        # 0.05 there, 0.84 a second later) and the sound came back mid-break.
+        p = Policy(PolicyConfig())
+        p.override_mute(300)
+        run_seen(p, secs(300, 340, .999) + [Seg(340, 341, .05, 'black')] + secs(341, 360, .9))
+        self.assertTrue(p.muted)
+        run_seen(p, [Seg(360, 361, .05, 'black')] + secs(361, 370, .02))
+        self.assertEqual((p.spans[-1].end, p.spans[-1].end_reason), (360, 'show'))
+
     def test_after_an_unmute_a_cut_rearms_it(self):
         # The 14:48 TBS break: the sound came back mid-break, and the next ads began without black.
         segs = [Seg(100, 101, .999, 'black'), Seg(101, 102, .2), Seg(102, 103, .999), Seg(103, 104, .999, 'cut', post_z=3.0),
