@@ -151,6 +151,31 @@ The sidecar runs the new one only if its model and CLIP
 runs classic and the page says why. A change starts every input's analysis over, with no
 take grace.
 
+#### The transcript judge (new detector)
+
+Claude Haiku 5.5 reads what is said and calls each new piece an ad or the programme
+(`admute/judge.py`, the feature `llm_judge`):
+
+- **What it sees:** each chunk Whisper finishes, with the last 32 s of transcript, the
+  newest piece marked, and what is on (an MLB or NFL game, or the programme's title).
+  The prompt is the lab's (`lab.judge`, v3): a sponsor read by the programme's own
+  commentators counts as the programme.
+- **How:** Anthropic's Messages API, `claude-haiku-5-5` with adaptive thinking at medium
+  effort, on three threads of its own. The answer (0-100) becomes the logit of P(ad) for
+  the chunk's seconds. It is late evidence, like the words: seconds not yet frozen are
+  scored again when it comes, and the detector waits for it at most 10 s.
+- **Lab (10/7):** on 1200 balanced chunks of the 14 recordings, AUC 0.978 against
+  0.953-0.958 for Luna (gpt-6-luna), 1.3 s typical, 2.5 s at p95. About 660 calls and 6
+  cents an hour of TV.
+- **Settings (How it decides):** `judge` (on/off) and `judge_budget`, dollars a day
+  (default 1): the calls stop for the rest of the day once it is spent. The day's spend is
+  kept in `admute-judge.json`. The page shows calls, cost and speed, or why it is not
+  asking.
+- **Key:** `ANTHROPIC_API_KEY` from the environment, else from the keys file
+  (`admute.keys_file` in the config, or continuity's). It is never logged.
+- **Only the new detector asks:** the classic model has no weight for it. A failed or
+  slow call costs only that evidence.
+
 #### Overlays (`admute/overlays.py`)
 
 The graphics a broadcast keeps on screen, each where it sits. Unlike the generic bug,

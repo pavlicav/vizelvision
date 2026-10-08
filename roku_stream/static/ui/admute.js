@@ -44,6 +44,7 @@
     const s = view.settings, w = view.worker || {}, d = view.detector, live = input();
     document.querySelectorAll('#mode [data-mode]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.mode === s.mode)));
     detectorChoice(s, d);
+    judgeNote(s, d);
     const mode = s.mode;
     const detectorUp = d && !view.detector_stale;
     $('detector-chip').textContent = !detectorUp ? 'detector offline' : w.connected ? 'detector linked' : 'detector up · master not linked';
@@ -297,6 +298,22 @@
       : 'Classic: the detector as it has been. New adds a picture score that knows ads it has never seen and settles faster after a source starts; switching starts each input over.';
   }
 
+  // The transcript judge (admute/judge.py): what it costs today and why it is not asking.
+  function judgeNote(s, d) {
+    const j = d?.judge, row = $('judge-row');
+    row.hidden = !('judge' in s);
+    if (row.hidden) return;
+    const usd = n => '$' + (+n).toFixed(2);
+    $('judge-note').textContent = !j ? 'The detector sidecar predates the judge: restart vizelvision-admute to use it.'
+      : !s.judge ? 'Off: the new detector goes without it.'
+      : j.why_not ? `Not asking: ${j.why_not}.`
+      : !j.used ? 'Ready, but the detector running has no weight for it (the classic one never asks).'
+      : [`Claude Haiku reads what is said and calls it ad or programme`,
+         `${j.calls_today} calls today, ${usd(j.usd_today)} of ${usd(j.budget)}`,
+         j.ms_p50 != null ? `${(j.ms_p50 / 1000).toFixed(1)} s typical, ${(j.ms_p95 / 1000).toFixed(1)} s slow` : null,
+         j.failed ? `${j.failed} failed${j.error ? ' (' + j.error + ')' : ''}` : null].filter(Boolean).join(' · ') + '.';
+  }
+
   function fill(s) {
     $('src-tv').checked = s.sources.tv_thing; $('src-roku').checked = s.sources.roku; $('gate').checked = s.sports_gate;
     $('exceptions').value = s.exceptions.join('\n'); $('sensitivity').value = s.sensitivity; $('max-mute').value = s.max_mute;
@@ -307,6 +324,7 @@
     for (const [id, key] of [['learn-ads', 'learn_ads'], ['learn-games', 'learn_games']]) { $(id).checked = s[key] !== false; $(id).disabled = !(key in s); }
     $('diagnostic').checked = s.diagnostic === true; $('diagnostic').disabled = !('diagnostic' in s);
     $('record-games').checked = s.record_games !== false; $('record-games').disabled = !('record_games' in s);
+    $('judge').checked = s.judge !== false; $('judge-budget').value = s.judge_budget ?? 1;
     labels();
   }
   function labels() {
@@ -326,7 +344,8 @@
       ...('learn_ads' in (view?.settings || {}) ? {learn_ads: $('learn-ads').checked} : {}),
       ...('learn_games' in (view?.settings || {}) ? {learn_games: $('learn-games').checked} : {}),
       ...('diagnostic' in (view?.settings || {}) ? {diagnostic: $('diagnostic').checked} : {}),
-      ...('record_games' in (view?.settings || {}) ? {record_games: $('record-games').checked} : {})};
+      ...('record_games' in (view?.settings || {}) ? {record_games: $('record-games').checked} : {}),
+      ...('judge' in (view?.settings || {}) ? {judge: $('judge').checked, judge_budget: +$('judge-budget').value} : {})};
   }
 
   async function post(path, body, ok) {

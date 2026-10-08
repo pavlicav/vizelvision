@@ -58,7 +58,7 @@ from roku_stream.admute_settings import AdMuteSettings, paused  # noqa: E402
 from roku_stream.caption_settings import CaptionSettings  # noqa: E402
 from roku_stream.captions import LOOKAHEAD_SECONDS as CAPTION_DELAY  # noqa: E402
 
-from . import clip, detector as D, features, fingerprint as FP, overlays as OV, speech as W, sports, text as T  # noqa: E402
+from . import clip, detector as D, features, fingerprint as FP, judge as J, overlays as OV, speech as W, sports, text as T  # noqa: E402
 from .frames import FrameStore  # noqa: E402
 from .policy import Policy, PolicyConfig  # noqa: E402
 
@@ -131,11 +131,24 @@ class Source:
             return np.array(maps, np.uint8).reshape(len(maps), -1)
 
     def image(self, name, s, edge=math.inf):
-        """A picture score (admute/clip.py) of second s, or NaN where none was scored."""
+        """A picture score (admute/clip.py) of second s, or NaN where none was scored; for
+        llm_judge, the transcript judge's answer (admute/judge.py), once it has come."""
+        if name == J.FEATURE:
+            return self.session.judged.get(s, math.nan) if self.session is not None else math.nan
         sig = self.sig
         with sig.lock:
             vals, i = sig.img.get(name), s - sig.seconds_since
             return float(vals[i]) if vals is not None and 0 <= i < len(vals) else math.nan
+
+    def late_extras(self):
+        return self.session is not None
+
+    def extras_pending(self, names, edge):
+        """The first second whose judge answer is still on its way (inf: none)."""
+        if J.FEATURE not in names or self.session is None:
+            return math.inf
+        with self.session.lock:
+            return min(self.session.judging.values(), default=math.inf)
 
     def seconds(self, a, b):
         s = self.sig
@@ -186,6 +199,8 @@ class Session:
                                     scorer=self.service.score if self.engine == "new" else None)
         self.gen += 1                # Whisper results for an earlier timeline are dropped
         self.speech = []             # [(t0, t1, words)] transcribed, in order
+        self.judged = {}             # second -> llm_judge (the judge's logit), as answers come
+        self.judging = {}            # chunk index -> its first second, while the judge is asked
         self.windows = W.Windower()  # the sound, cut into Whisper's windows
         self.words_sent = 0          # chunks of self.speech whose words went to master (live captions)
         self.landmarks = []          # [(t, hash)] from the fingerprinter, in order
@@ -305,9 +320,40 @@ class Session:
             self.service.speech.submit(self, gen, t0, audio, upto)
 
     def heard(self, gen, t0, t1, words):
+        job = None
         with self.lock:
             if gen == self.gen:
                 self.speech.append((t0, t1, words))
+                if words and J.FEATURE in self.det.image_features:
+                    i = len(self.speech) - 1
+                    recent = [c for c in self.speech[-40:] if c[1] > t1 - J.CONTEXT]
+                    job = (recent, len(recent) - 1, J.show(self.game, self.title), i, t0)
+        if job is not None:
+            self._ask_judge(gen, *job)
+
+    def _ask_judge(self, gen, chunks, at, what, i, t0):
+        """Send chunk i to the transcript judge (admute/judge.py), if it may be asked."""
+        svc = self.service
+        if not svc.settings.get("judge", True) or svc.judge.why_not(float(svc.settings.get("judge_budget", 1.0))):
+            return
+        with self.lock:
+            if gen != self.gen:
+                return
+            self.judging[i] = int(math.floor(t0))
+        t1 = chunks[at][1]
+        svc.judge.submit(lambda p: self._judged(gen, i, t0, t1, p), chunks, at, what)
+
+    def _judged(self, gen, i, t0, t1, p):
+        with self.lock:
+            if gen != self.gen:
+                return
+            self.judging.pop(i, None)
+            if not math.isnan(p):
+                v = J.logit(p)
+                for s in range(int(math.floor(t0)), int(math.ceil(t1))):
+                    self.judged[s] = v
+                for s in [s for s in self.judged if s < t0 - 900]:
+                    del self.judged[s]
 
     def hint(self):
         """Whisper's prompt: the programme's title and, for an MLB game, its teams and players."""
@@ -634,6 +680,8 @@ class Service:
         self.captions = CaptionSettings(sock)
         self.captions_on = False
         self.speech = Speech(self)
+        keys = (cfg.get("admute") or {}).get("keys_file") or (cfg.get("continuity") or {}).get("keys_file")
+        self.judge = J.Judge(keys_file=keys, ledger=sock.with_name("admute-judge.json"))
         self.library = T.AdLibrary(path=str(sock.with_name("admute-adtext.json")))
         self.prints = FP.PrintDB(path=str(sock.with_name("admute-prints.npz")))
         self.overlays = OV.Library(path=str(sock.with_name("admute-overlays.json")))
@@ -970,6 +1018,8 @@ class Service:
         server.listen(2)
         for target in (self._ticker, self._housekeeping) + (self.speech.run,) * SPEECH_WORKERS:
             threading.Thread(target=target, daemon=True).start()
+        for _ in range(J.THREADS):
+            threading.Thread(target=self.judge.run, args=(self.stopping,), daemon=True).start()
         log.info("ad-mute detector listening on %s", self.path)
         while not self.stopping.is_set():
             conn, _ = server.accept()
@@ -1170,6 +1220,9 @@ class Service:
                               "error": self.engine_error, "available": sorted(self.models),
                               "clip_ms": round(1000 * took[len(took) // 2]) if took and self.engine == "new" else None},
                  "speech": self.speech.status(),
+                 "judge": {**self.judge.status(float(self.settings.get("judge_budget", 1.0))),
+                           "on": bool(self.settings.get("judge", True)),
+                           "used": J.FEATURE in self.models[self.engine].get("features", [])},
                  "prints": self.prints.summary(), "prints_log": list(self.prints_log)[-30:],
                  "overlays": self.overlays.summary(),
                  "library": {"seed": len(self.library.seed), "learnt": len(self.library.learnt),

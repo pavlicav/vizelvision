@@ -34,6 +34,11 @@ DEFAULTS = {
     # (admute/clip.py) and memoryless warm-up weights for the first minutes after a take.
     # Both use the known-ads database. A change starts each input's analysis over.
     'detector': 'classic',
+    # The new detector's transcript judge: Claude Haiku calls each piece of what is said an
+    # ad or the programme (admute/judge.py; needs ANTHROPIC_API_KEY). Its calls stop for the
+    # day once they have cost judge_budget dollars (about 6 cents an hour of TV).
+    'judge': True,
+    'judge_budget': 1.0,
     # 0 = cautious (mutes only when sure), 1 = eager.
     'sensitivity': 0.5,
     'max_mute': 300,
@@ -67,7 +72,8 @@ DEFAULTS = {
     'paused_until': None,
     'paused_input': None,
 }
-LIMITS = {'lookahead': (1.0, 8.0), 'sensitivity': (0.0, 1.0), 'max_mute': (60, 600), 'radio_db': (-30.0, 6.0)}
+LIMITS = {'lookahead': (1.0, 8.0), 'sensitivity': (0.0, 1.0), 'max_mute': (60, 600), 'radio_db': (-30.0, 6.0),
+          'judge_budget': (0.0, 20.0)}
 EXCEPTIONS_LIMIT = 50
 
 
@@ -92,7 +98,8 @@ def validate(value, *, lenient=False):
         v = result[key]
         if isinstance(v, bool) or not isinstance(v, (int, float)) or not lo <= v <= hi:
             raise ConfigError(f'{key} must be a number from {lo} to {hi}')
-    for key in ('sports_gate', 'learn', 'speech', 'known_ads', 'learn_ads', 'learn_games', 'diagnostic', 'record_games'):
+    for key in ('sports_gate', 'learn', 'speech', 'known_ads', 'learn_ads', 'learn_games', 'diagnostic', 'record_games',
+                'judge'):
         if not isinstance(result[key], bool):
             raise ConfigError(f'{key} must be true or false')
     ex = result['exceptions']

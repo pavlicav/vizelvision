@@ -203,6 +203,32 @@ run(async browser => {
   await t.page.waitForTimeout(800);
   assert.equal(await t.page.locator('#detector [data-detector=new]').isDisabled(), true);
   assert.match(await t.page.locator('#detector-note').textContent(), /predates/);
+  assert.equal(await t.page.locator('#judge-row').isHidden(), true, 'nor the judge');
+  await t.ctx.close();
+
+  // The transcript judge: saved with the settings; the page says what it costs, or why it is not asking.
+  const judge = {model: 'claude-haiku-5-5', effort: 'medium', calls_today: 412, usd_today: 0.0371, budget: 1, queued: 0,
+                 dropped: 0, failed: 0, error: null, ms_p50: 1300, ms_p95: 2500, why_not: null, on: true, used: true};
+  const judging = extra => F => {
+    Object.assign(F.admute.settings, {detector: 'new', judge: true, judge_budget: 1});
+    F.admute.detector.detector = {selected: 'new', running: 'new', error: null, available: ['classic', 'new'], clip_ms: 160};
+    F.admute.detector.judge = {...judge, ...extra};
+  };
+  t = await open(browser, '/ads#admute', {edit: judging({}), api: {'POST /v1/admute': (body, F) => (F.admute = view(F, body))}});
+  await t.page.waitForTimeout(800);
+  assert.equal(await t.page.locator('#judge').isChecked(), true);
+  assert.equal(await t.page.locator('#judge-budget').inputValue(), '1');
+  assert.match(await t.page.locator('#judge-note').textContent(), /412 calls today, \$0\.04 of \$1\.00 · 1\.3 s typical, 2\.5 s slow\.$/);
+  await t.page.locator('#judge').uncheck();
+  await t.page.locator('#judge-budget').fill('2.5');
+  await t.page.locator('#save').click();
+  await t.page.waitForTimeout(300);
+  assert.deepEqual([t.posts.at(-1).body.judge, t.posts.at(-1).body.judge_budget], [false, 2.5]);
+  assert.match(await t.page.locator('#judge-note').textContent(), /^Off/);
+  await t.ctx.close();
+  t = await open(browser, '/ads#admute', {edit: judging({why_not: 'no ANTHROPIC_API_KEY (environment or keys file)'})});
+  await t.page.waitForTimeout(800);
+  assert.match(await t.page.locator('#judge-note').textContent(), /^Not asking: no ANTHROPIC_API_KEY/);
   await t.ctx.close();
 
   // With the detector down, the page says nothing is muted.
