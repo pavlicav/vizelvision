@@ -396,6 +396,7 @@ class Session:
             if not (self.service.settings.get("speech", True) and self.service.speech.usable):
                 self.det.text.known = None       # no words coming: nothing waits for them
             self.det.judge_off = not self.service.judge_ok
+            self.det.overlays.game = bool(self.game)
             self.det.update(self.src, edge)
             self.sig.trim(edge - 20)
             self.sig.trim_seconds(edge - 10)

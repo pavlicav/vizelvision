@@ -177,6 +177,17 @@ class TrackerTests(unittest.TestCase):
         self.assertTrue(math.isnan(tr.features(2)["ov_logo"]))
         self.assertEqual(tr.showing(2, "score"), "Score bug")
 
+    def test_with_no_game_on_a_score_bug_is_a_logo(self):
+        # 2026-10-08: a WJLA "score bug" (a news graphic) matched an ad's fine print on The View.
+        tr = OV.Tracker(self.lib)
+        tr.game = False
+        self.feed(tr, 5, up=True)
+        self.assertTrue(math.isnan(tr.features(2)["ov_score"]))
+        self.assertEqual(tr.features(2)["ov_logo"], 1.0)
+        self.assertIsNone(tr.showing(2, "score"), "no mute is barred")
+        tr.game = True
+        self.assertEqual(tr.features(2)["ov_score"], 1.0)
+
     def test_a_flash_is_not_up(self):
         tr = OV.Tracker(self.lib)
         self.feed(tr, 2, up=False)

@@ -543,6 +543,7 @@ class Tracker:
         self.trusted: set[str] = set()
         self.distrusted: dict[str, str] = {}
         self.foreign: set[str] = set()         # programme overlays from other channels, checking here
+        self.game = True                       # a game is on (the session says): only then is a score bug one
         self.n = {"edge": 0, "pic": 0}           # samples seen, per space
         self.maps = collections.deque()          # (index, packed) in the learning window
         self.settled = collections.deque()       # (index, label, packed): settled maps in the window
@@ -621,12 +622,16 @@ class Tracker:
 
     def _showing(self, s: int) -> dict:
         """{kind: name} of the trusted overlays up in second s. An ad label up with a
-        programme score bug is not counted (the score bug wins: the sound stays)."""
+        programme score bug is not counted (the score bug wins: the sound stays). With no game
+        on, a "score bug" is a station graphic (live overlays are called score bugs by size):
+        it counts as a logo, and bars no mute. On 2026-10-08 a WJLA one, learnt from the noon
+        news, matched a Zepbound ad's fine print on The View and held 11 s of it audible."""
         out = {}
         for oid in sorted(self.trusted):
             ov = self.watch[oid]
-            if oid not in self.distrusted and ov.kind not in out and self.up_in(oid, s):
-                out[ov.kind] = ov.name
+            kind = "logo" if ov.kind == "score" and not self.game else ov.kind
+            if oid not in self.distrusted and kind not in out and self.up_in(oid, s):
+                out[kind] = ov.name
         if "score" in out:
             out.pop("ad", None)
         return out
