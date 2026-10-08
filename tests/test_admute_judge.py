@@ -155,7 +155,7 @@ class WeightsTests(unittest.TestCase):
         self.assertNotIn(J.FEATURE, m["nojudge"]["warm"]["features"])
         classic = D.load_model()
         for part in (m, m["warm"], m["nojudge"], m["nojudge"]["warm"]):
-            for k in ("fp_show", "ov_score", "ov_logo", "ov_ad"):
+            for k in ("fp_show", "txt_known_ad", "ov_score", "ov_logo", "ov_ad"):
                 i, j = part["features"].index(k), classic["features"].index(k)
                 self.assertEqual((part["mean"][i], part["scale"][i], part["coef"][i]),
                                  (classic["mean"][j], classic["scale"][j], classic["coef"][j]), k)
