@@ -201,6 +201,21 @@ class SessionTests(unittest.TestCase):
         self.assertEqual(s.src.extras_pending((J.FEATURE,), 30.0), math.inf)
         self.assertTrue(math.isnan(s.src.image(J.FEATURE, 12)))
 
+    def test_the_detectors_update_runs_under_the_sessions_lock(self):
+        # 2026-10-07 20:26: extras_pending took the session's lock again inside tick() and the
+        # sidecar hung on its first second.
+        s, asked = self.session()
+        s.heard(s.gen, 10.0, 14.0, words("buy now", 10.0))
+        done = threading.Event()
+
+        def update():
+            with s.lock:
+                s.src.extras_pending((J.FEATURE,), 30.0)
+                s.src.image(J.FEATURE, 12)
+            done.set()
+        threading.Thread(target=update, daemon=True).start()
+        self.assertTrue(done.wait(2), "deadlocked")
+
     def test_an_answer_for_an_earlier_timeline_is_dropped(self):
         s, asked = self.session()
         s.heard(s.gen, 10.0, 14.0, words("buy now", 10.0))

@@ -144,11 +144,12 @@ class Source:
         return self.session is not None
 
     def extras_pending(self, names, edge):
-        """The first second whose judge answer is still on its way (inf: none)."""
+        """The first second whose judge answer is still on its way (inf: none). Called from
+        the detector's update, which runs under the session's lock: answers cannot land
+        meanwhile, and taking the lock again would deadlock (it did, 2026-10-07 20:26)."""
         if J.FEATURE not in names or self.session is None:
             return math.inf
-        with self.session.lock:
-            return min(self.session.judging.values(), default=math.inf)
+        return min(list(self.session.judging.values()), default=math.inf)
 
     def seconds(self, a, b):
         s = self.sig
