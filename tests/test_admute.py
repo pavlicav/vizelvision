@@ -262,9 +262,10 @@ class PolicyTests(unittest.TestCase):
     def test_long_sports_break_returns_at_an_ambiguous_seam(self):
         gate = lambda t: 'break'
         segs = [Seg(100, 101, .999, 'black'), Seg(205, 206, 1.0, 'black', post_z=8.0),
-                Seg(221, 222, 1.0, 'black', post_z=1.5)]
+                Seg(221, 222, 1.0, 'black', post_z=1.5),     # 121 s in: a promo (FS1's breaks run 121-135 s)
+                Seg(241, 242, 1.0, 'black', post_z=1.5)]
         p = run(Policy(PolicyConfig(), gate=gate), segs)
-        self.assertEqual((p.spans[0].start, p.spans[0].end), (100, 221))
+        self.assertEqual((p.spans[0].start, p.spans[0].end), (100, 241))
 
     def test_a_dip_the_lookahead_disagrees_with_keeps_the_mute(self):
         segs = [Seg(100, 101, .999, 'black')] + secs(101, 104, .999) + [Seg(104, 105, .3)] + secs(105, 110, .99) + secs(110, 115, .1)

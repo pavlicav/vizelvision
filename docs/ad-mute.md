@@ -286,8 +286,9 @@ counted (the score bug wins).
     mute. Those were most of the cut-outs.
   - On the 10/1 tape the game came back 124–167 s after the feed's end of inning.
   - After that, the detector is trusted as usual.
-  - After 100 s of mute in a game, a seam brings the sound back unless what follows is
-    clearly an ad.
+  - After 130 s of mute in a game, a seam brings the sound back unless what follows is
+    clearly an ad. (100 s until 10/7: TBS's breaks ran 137-162 s and FS1's 121-135 s, and
+    dark frames 105-119 s in let an HBO Max promo, MLB's PSA and a Fox News promo through.)
 - **After any unmute,** only a new black frame, or a hard cut into something clearly an
   ad, can mute again (black only until 10/3: that left TBS audible for the rest of a
   break).

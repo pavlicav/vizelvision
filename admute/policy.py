@@ -61,7 +61,9 @@ class PolicyConfig:
     # Sports breaks run to a clock (MLB: 2:00 between half-innings). Once a mute has run
     # this long with a sports feed, any seam brings the sound back unless what follows it
     # is clearly an ad (P(ad) saturates in a long break, so the evidence after the seam decides).
-    typical_break: float = 100.0
+    # 100 s until 10/7: TBS's breaks ran 137-162 s and FS1's 121-135 s, and a dark frame
+    # 105-119 s in let an HBO Max promo, MLB's PSA and a Fox News promo through (10-15 s each).
+    typical_break: float = 130.0
     z_hold: float = 4.0               # ... unless what follows the seam is this clearly an ad
     # Where a mute may start: "any" piece the detector is sure of, only at a "seam" (a black
     # frame or a hard cut), or only at a "black" seam. A clearly known ad (audio fingerprint)

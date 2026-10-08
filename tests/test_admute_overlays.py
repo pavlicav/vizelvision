@@ -414,6 +414,18 @@ def segment(t, p, seam=None, **kw):
 
 
 class PolicyTests(unittest.TestCase):
+    def test_a_dark_frame_mid_break_ends_a_game_mute_only_after_a_typical_break(self):
+        # 2026-10-07: TBS and FS1 breaks ran 121-162 s; at 100 s, dark frames 105-119 s in let
+        # three promos through. A seam into what is only moderately ad-like ends it from 130 s.
+        def at(t):
+            pol = Policy(PolicyConfig(grace=0), gate=lambda w: "break")
+            pol._open(0.0)
+            pol.current.confirmed = True
+            pol.step([segment(t, 1.0, "black", post_z=1.0)], t + 8)
+            return pol.muted
+        self.assertTrue(at(110.0), "a Fox News promo 110 s in stays muted")
+        self.assertFalse(at(131.0), "past a typical break, the dark frame may be the return")
+
     def test_no_mute_starts_under_a_score_bug(self):
         pol = Policy(PolicyConfig(grace=0, open_at="any"))
         for t in range(10):
