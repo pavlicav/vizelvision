@@ -493,6 +493,28 @@ class GameReturnTests(unittest.TestCase):
     def test_the_feed_still_ends_it(self):
         self.assertEqual(self.run_break(bug_back_at=1000, gate=lambda t: "live" if t >= 40 else "break"), 40)
 
+    def run_live(self, p_until, label_start=False):
+        """A mute from 10 s; the feed says live from 40 s; the detector sure of an ad until p_until."""
+        pol = Policy(PolicyConfig(grace=0, open_at="any"), gate=lambda t: "live" if t >= 40 else "break")
+        pol.step([segment(10, 0.999, "black", ad_overlay="YouTube TV ad label" if label_start else None)], 15,
+                 ahead=[segment(11, 0.999)])
+        self.assertTrue(pol.muted)
+        for t in range(11, 200):
+            p = 1.0 if t < p_until else 0.1
+            pol.step([segment(t, p)], t + 5, ahead=[segment(t + k, 1.0 if t + k < p_until else 0.1) for k in (1, 2, 3)])
+            if not pol.muted:
+                return t, pol.spans[-1].end_reason
+        return None
+
+    def test_a_sure_detector_holds_the_feeds_live_until_it_sees_the_return(self):
+        # 2026-10-07: "live" came 4-15 s before YouTube TV's return, six times, at P(ad) 1.00.
+        self.assertEqual(self.run_live(p_until=53)[0], 51, "its look ahead sees the return coming")
+        self.assertEqual(self.run_live(p_until=1000), (60, "gated"), "at most gate_hold")
+        self.assertEqual(self.run_live(p_until=0), (40, "gated"), "not sure: the feed's word at once")
+
+    def test_a_mute_the_label_began_does_not_hold_the_feed(self):
+        self.assertEqual(self.run_live(p_until=1000, label_start=True), (40, "gated"))
+
     def test_an_ad_label_beats_the_feed(self):
         self.assertEqual(self.run_break(bug_back_at=1000, gate=lambda t: "live" if t >= 40 else "break",
                                         labelled_until=55), 55)

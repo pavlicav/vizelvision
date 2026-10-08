@@ -298,6 +298,12 @@ counted (the score bug wins).
   - It reads the feed as it comes. (YouTube TV runs 12–20 s behind the feed, so "live"
     can end a mute a few seconds before a break's last ad does; reading the feed that far
     behind, tried on 10/5, held a TBS mute 15 s into the game instead. Returns win.)
+  - So "live" waits for a detector still sure of an ad (P(ad) at the confirm level, now
+    and in the seconds it has seen ahead), at most 20 s (`gate_hold`), and never for a
+    mute YouTube TV's ad label began (the label lingers over the programme's first
+    seconds). On 10/7 "live" came 4–15 s early six times, every time at P(ad) 1.00; the
+    detector saw the return itself 4–18 s later (23 s once, which the 20 s cap cuts to
+    about 5 s of game).
   - Play is live only while pitches are coming (at most 90 s apart). A longer gap inside
     a half-inning (a pitching change the feed hasn't reported yet, a review, an injury)
     gives no opinion, and the detector decides.

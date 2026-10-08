@@ -10,7 +10,10 @@ that gets through.
   * Confirm when P(ad) reaches t_confirm within confirm_window; otherwise unmute
     and record a *retracted* mute.
   * Unmute as soon as P(ad) < t_unmute, at the cap, or when the sports feed says
-    play resumed. After the cap or an "it's the show" override, stay audible until
+    play resumed. YouTube TV runs 12-20 s behind the feed, so while the detector is still
+    sure of an ad there (P(ad) >= t_confirm, now and in what it has seen ahead), the
+    feed's word waits for it, at most gate_hold seconds (not for a mute the ad label
+    began: the label lingers over the programme's first seconds). After the cap or an "it's the show" override, stay audible until
     a stretch of show has passed.
   * "It's an ad" holds for at least min_hold whatever the detector says, then until
     a black frame or digital silence into show (one seen during the lock counts if it is
@@ -79,6 +82,9 @@ class PolicyConfig:
     held_seams: tuple = ("black", "silence")   # where an operator's mute may end after min_hold
     agree: float = 3.0                # a mute ends when the next this-many seconds seen ahead agree it's the programme
                                       # (all of the look-ahead, 8 s, until 10/5: returns came back late)
+    # On 2026-10-07 the feed's "live" ended mutes 4-15 s before YouTube TV's return, six times,
+    # each at P(ad) 1.00; the detector saw the return itself 4-18 s later (and 23 s once).
+    gate_hold: float = 20.0           # seconds a sure detector may hold a mute after the feed says live
     overlay_veto: bool = True         # no mute starts while a trusted score bug is up
     bug_return: bool = False          # the detector ends a mute only where the score bug is back (too late: off)
 
@@ -103,6 +109,7 @@ class Span:
     peak: float = 0.0
     seam: str | None = None
     why: list | None = None           # [headline, detail]: the confidence and the evidence, when it began
+    by_label: bool = False            # an ad label began it (YouTube TV's "Sponsored")
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -123,6 +130,7 @@ class Policy:
     held_seam: bool = False           # a seam into show seen since, with nothing ad-like after it
     break_since: float | None = None  # when the feed's current between-innings window began
     unmuted_at: float | None = None
+    live_since: float | None = None   # since when the feed has said play is live
 
     @property
     def muted(self) -> bool:
@@ -158,6 +166,10 @@ class Policy:
                 self.break_since = None
             elif self.break_since is None:
                 self.break_since = t
+            if gate != "live":
+                self.live_since = None
+            elif self.live_since is None:
+                self.live_since = t
             if p < 0.5:
                 self.show_since = t if self.show_since is None else self.show_since
                 if self.suppressed and seg.end - self.show_since >= c.show_reset:
@@ -186,7 +198,10 @@ class Policy:
                 if labelled and t - span.start < (c.max_mute_gated if gate else c.max_mute):
                     pass                                  # an ad player's label: an ad, for sure
                 elif gate == "live":
-                    self._close(t, "gated")
+                    sure = (not span.by_label and p >= c.t_confirm and all(r >= c.t_confirm for r in near)
+                            and t - self.live_since < c.gate_hold)
+                    if not sure:
+                        self._close(t, "gated")
                 elif (gate and back and seg.seam in ("black", "silence") and t - span.start >= c.typical_break
                       and (seg.post_z is None or seg.post_z < c.z_hold)):     # (not a cut: ads cut every few seconds)
                     self._close(t, "show")
@@ -212,6 +227,7 @@ class Policy:
                     and (labelled or all(r >= 0.5 for r in rest))):     # not a flash: what follows stays ad-like
                 self.need_seam = False
                 self._open(t, seam=seg.seam, p=p)
+                self.current.by_label = bool(labelled)
                 if p >= c.t_confirm or labelled:
                     self.current.confirmed = True
 

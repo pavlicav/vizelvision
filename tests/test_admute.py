@@ -254,8 +254,11 @@ class PolicyTests(unittest.TestCase):
 
     def test_sports_feed_vetoes_and_ends_mutes(self):
         live = lambda t: 'live' if t >= 110 else 'break'
-        p = run(Policy(PolicyConfig(), gate=live), [Seg(100, 101, .999, 'black'), Seg(110, 111, .999)])
-        self.assertEqual(p.spans[0].end_reason, 'gated')
+        # A detector still sure of an ad holds the feed's word (YouTube TV runs behind it), at most gate_hold.
+        p = run(Policy(PolicyConfig(), gate=live), [Seg(100, 101, .999, 'black'), Seg(110, 111, .999), Seg(115, 116, .5)])
+        self.assertEqual((p.spans[0].end, p.spans[0].end_reason), (115, 'gated'))
+        p = run(Policy(PolicyConfig(), gate=live), [Seg(100, 101, .999, 'black')] + secs(110, 140, .999))
+        self.assertEqual((p.spans[0].end, p.spans[0].end_reason), (130, 'gated'))
         p = run(Policy(PolicyConfig(), gate=lambda t: 'live'), [Seg(100, 101, .999, 'black')])
         self.assertFalse(p.spans or p.current)
 
