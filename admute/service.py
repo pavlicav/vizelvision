@@ -521,14 +521,14 @@ class Session:
 
     # ------------------------------------------------------------------ diagnostics
     GROUPS = {"picture": ("bug", "cut_rate", "recurrence", "colour", "ad_match") + D.OVERLAY_FEATURES + clip.FEATURES,
-              "words": D.TEXT_FEATURES, "sound": ("fp_known", "fp_repeat", "fp_show")}
+              "words": D.TEXT_FEATURES + (J.FEATURE,), "sound": ("fp_known", "fp_repeat", "fp_show")}
     PLAIN = {"bug": "no station or score bug", "cut_rate": "fast cutting", "recurrence": "unlike the programme",
              "colour": "unlike the programme's colours", "ad_match": "looks like earlier ads",
              "txt_lexicon": "ad words", "txt_known_ad": "ad wording heard before", "txt_repeat": "repeated words",
              "txt_show_vocab": "not the programme's words", "txt_ad_vocab": "ads' words", "txt_you": "talks to you",
              "fp_known": "a known ad", "fp_repeat": "repeats an earlier ad", "fp_show": "show sound",
              "ov_score": "score bug on screen", "ov_logo": "network logo on screen", "ov_ad": "an ad label on screen",
-             "img_zeroshot3": "looks like an ad", "img_split": "split-screen"}
+             "img_zeroshot3": "looks like an ad", "img_split": "split-screen", J.FEATURE: "Haiku hears an ad"}
 
     def why(self, span=None) -> list:
         """[headline, detail] for the moment about to air: how sure, and what says so."""
