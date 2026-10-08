@@ -249,6 +249,7 @@ class Detector:
         self.bug_scores: list[float] = []       # per edge map, with the mask of its time
         # per-second evidence
         self.image_features = tuple(k for k in self.m["features"] if k.startswith(EXTRA_PREFIXES))
+        self.judge_off = False        # the transcript judge cannot be asked: score without it (weights())
         self.feats: dict[str, list[float]] = {k: [] for k in ("bug", "cut_rate", "recurrence", "colour", "ad_match")
                                               + TEXT_FEATURES + PRINT_FEATURES + OVERLAY_FEATURES + self.image_features}
         self.src = None
@@ -454,12 +455,21 @@ class Detector:
         self.cum_ad.append(self.cum_ad[-1] + lp_ad)
         self.cum_show.append(self.cum_show[-1] + lp_show)
 
-    def _score(self, s: int) -> tuple[float, float]:
+    def weights(self, s: int) -> dict:
+        """The weights deciding second s. While the transcript judge cannot be asked (no key,
+        the day's budget spent, switched off: ``judge_off``), the model's own fit without it,
+        since the judge took weight from the rest. Warm-up: until the programme memory exists
+        (recurrence still unknown), weights fitted without the memory features, so the
+        evidence that is there carries its full weight."""
         m = self.m
-        # Warm-up: until the programme memory exists (recurrence still unknown), weights fitted
-        # without the memory features, so the evidence that is there carries its full weight.
+        if self.judge_off and m.get("nojudge"):
+            m = m["nojudge"]
         if m.get("warm") and math.isnan(self.feats["recurrence"][s]):
             m = m["warm"]
+        return m
+
+    def _score(self, s: int) -> tuple[float, float]:
+        m = self.weights(s)
         z = m["intercept"]
         for name, mean, scale, coef in zip(m["features"], m["mean"], m["scale"], m["coef"]):
             v = self.feats[name][s]
@@ -471,9 +481,7 @@ class Detector:
 
     def evidence(self, s: int) -> dict:
         """Second s's logit term by term, under the weights deciding it ("bias": the intercept)."""
-        m = self.m
-        if m.get("warm") and math.isnan(self.feats["recurrence"][s]):
-            m = m["warm"]
+        m = self.weights(s)
         out = {"bias": m["intercept"]}
         for name, mean, scale, coef in zip(m["features"], m["mean"], m["scale"], m["coef"]):
             v = self.feats[name][s] if s < len(self.feats[name]) else math.nan

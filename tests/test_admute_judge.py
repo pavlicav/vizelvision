@@ -134,6 +134,33 @@ class JudgeTests(unittest.TestCase):
         self.assertTrue(all(math.isnan(p) for _, p in got))
 
 
+class WeightsTests(unittest.TestCase):
+    def test_without_the_judge_its_own_weights_decide(self):
+        part = lambda c, b: {"features": ["bug", J.FEATURE][:2 if c else 1], "mean": [0.0, 0.0][:2 if c else 1],  # noqa: E731
+                             "scale": [1.0, 1.0][:2 if c else 1], "coef": [-1.0, c][:2 if c else 1], "intercept": b}
+        model = {**D.DEFAULT_MODEL, **part(2.0, -1.0), "warm": part(2.5, -0.5), "nojudge": {**part(0, -2.0), "warm": part(0, -1.5)}}
+        det = D.Detector(model, overlays=OV.Library(catalogue=None))
+        det.feats = {"bug": [1.0, 1.0], J.FEATURE: [3.0, 3.0], "recurrence": [math.nan, 0.5]}
+        self.assertEqual(det.evidence(1), {"bias": -1.0, "bug": -1.0, J.FEATURE: 6.0})
+        self.assertEqual(det.evidence(0)["bias"], -0.5, "warming up")
+        det.judge_off = True
+        self.assertEqual(det.evidence(1), {"bias": -2.0, "bug": -1.0})
+        self.assertEqual(det.evidence(0)["bias"], -1.5, "warming up, without the judge")
+
+    def test_the_shipped_model_has_both(self):
+        m = D.load_model(os.path.join(os.path.dirname(D.MODEL_JSON), "model_new.json"))
+        self.assertIn(J.FEATURE, m["features"])
+        self.assertIn(J.FEATURE, m["warm"]["features"])
+        self.assertNotIn(J.FEATURE, m["nojudge"]["features"])
+        self.assertNotIn(J.FEATURE, m["nojudge"]["warm"]["features"])
+        classic = D.load_model()
+        for part in (m, m["warm"], m["nojudge"], m["nojudge"]["warm"]):
+            for k in ("fp_show", "ov_score", "ov_logo", "ov_ad"):
+                i, j = part["features"].index(k), classic["features"].index(k)
+                self.assertEqual((part["mean"][i], part["scale"][i], part["coef"][i]),
+                                 (classic["mean"][j], classic["scale"][j], classic["coef"][j]), k)
+
+
 class SessionTests(unittest.TestCase):
     def session(self, with_judge=True, on=True):
         from admute import text as T
@@ -146,7 +173,7 @@ class SessionTests(unittest.TestCase):
         judge = SimpleNamespace(why_not=lambda budget: None,
                                 submit=lambda done, chunks, i, what: asked.append((done, chunks, i, what)))
         svc = SimpleNamespace(embed=None, model=model, models={"classic": model}, engine="classic",
-                              overlays=OV.Library(catalogue=None), prints=None, judge=judge,
+                              overlays=OV.Library(catalogue=None), prints=None, judge=judge, judge_ok=on,
                               library=T.AdLibrary(), settings={"sensitivity": .5, "max_mute": 300, "judge": on},
                               speech=SimpleNamespace(usable=False), frames=SimpleNamespace(save=lambda *a: None),
                               quiet=lambda *a: False, resumed=set())

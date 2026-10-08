@@ -89,7 +89,9 @@ class TraceTests(unittest.TestCase):
              "coef": [-2.0, -1.5, 1.2], "intercept": -0.4,
              "warm": {"features": ["bug", "img_zeroshot3"], "mean": [0.1, 0.0], "scale": [0.2, 0.05],
                       "coef": [-2.5, 1.6], "intercept": -0.9}}
-        det = SimpleNamespace(m=m, feats={"bug": [0.3, 0.3], "recurrence": [math.nan, 0.2], "img_zeroshot3": [0.06, math.nan]})
+        det = SimpleNamespace(m=m, judge_off=False,
+                              feats={"bug": [0.3, 0.3], "recurrence": [math.nan, 0.2], "img_zeroshot3": [0.06, math.nan]})
+        det.weights = lambda s: D.Detector.weights(det, s)
         for s in (0, 1):
             terms = D.Detector.evidence(det, s)
             lp_ad, _ = D.Detector._score(det, s)

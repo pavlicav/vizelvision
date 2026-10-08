@@ -306,7 +306,7 @@
     const usd = n => '$' + (+n).toFixed(2);
     $('judge-note').textContent = !j ? 'The detector sidecar predates the judge: restart vizelvision-admute to use it.'
       : !s.judge ? 'Off: the new detector goes without it.'
-      : j.why_not ? `Not asking: ${j.why_not}.`
+      : j.why_not ? `Not asking: ${j.why_not}. The new detector uses its weights without the judge.`
       : !j.used ? 'Ready, but the detector running has no weight for it (the classic one never asks).'
       : [`Claude Haiku reads what is said and calls it ad or programme`,
          `${j.calls_today} calls today, ${usd(j.usd_today)} of ${usd(j.budget)}`,

@@ -334,7 +334,7 @@ class Session:
     def _ask_judge(self, gen, chunks, at, what, i, t0):
         """Send chunk i to the transcript judge (admute/judge.py), if it may be asked."""
         svc = self.service
-        if not svc.settings.get("judge", True) or svc.judge.why_not(float(svc.settings.get("judge_budget", 1.0))):
+        if not svc.judge_ok:
             return
         with self.lock:
             if gen != self.gen:
@@ -394,6 +394,7 @@ class Session:
             self.edge, self.edge_wall = edge, time.time()
             if not (self.service.settings.get("speech", True) and self.service.speech.usable):
                 self.det.text.known = None       # no words coming: nothing waits for them
+            self.det.judge_off = not self.service.judge_ok
             self.det.update(self.src, edge)
             self.sig.trim(edge - 20)
             self.sig.trim_seconds(edge - 10)
@@ -538,8 +539,7 @@ class Session:
             return ["YOU · it's an ad", f"detector: {pct} ad"]
         if s < 0:
             return [pct, ""]
-        if m.get("warm") and math.isnan(det.feats["recurrence"][s]):
-            m = m["warm"]                                 # warming up: these weights are the ones deciding
+        m = det.weights(s)                                # warming up, or without the judge: these decide
         contrib = {}
         for k in range(max(0, s - 2), s + 1):             # the last three seconds, together
             for name, mean, scale, coef in zip(m["features"], m["mean"], m["scale"], m["coef"]):
@@ -682,6 +682,7 @@ class Service:
         self.speech = Speech(self)
         keys = (cfg.get("admute") or {}).get("keys_file") or (cfg.get("continuity") or {}).get("keys_file")
         self.judge = J.Judge(keys_file=keys, ledger=sock.with_name("admute-judge.json"))
+        self.judge_ok = False        # the judge may be asked now (setting on, a key, budget left)
         self.library = T.AdLibrary(path=str(sock.with_name("admute-adtext.json")))
         self.prints = FP.PrintDB(path=str(sock.with_name("admute-prints.npz")))
         self.overlays = OV.Library(path=str(sock.with_name("admute-overlays.json")))
@@ -1124,6 +1125,8 @@ class Service:
             except Exception as exc:
                 log.warning("cannot read ad-mute settings: %s", exc)
             self.choose_engine()
+            self.judge_ok = bool(self.settings.get("judge", True)) and \
+                self.judge.why_not(float(self.settings.get("judge_budget", 1.0))) is None
             try:
                 self.captions_on = bool(self.captions.read()["enabled"])
             except Exception as exc:
@@ -1221,7 +1224,7 @@ class Service:
                               "clip_ms": round(1000 * took[len(took) // 2]) if took and self.engine == "new" else None},
                  "speech": self.speech.status(),
                  "judge": {**self.judge.status(float(self.settings.get("judge_budget", 1.0))),
-                           "on": bool(self.settings.get("judge", True)),
+                           "on": bool(self.settings.get("judge", True)), "ok": self.judge_ok,
                            "used": J.FEATURE in self.models[self.engine].get("features", [])},
                  "prints": self.prints.summary(), "prints_log": list(self.prints_log)[-30:],
                  "overlays": self.overlays.summary(),
