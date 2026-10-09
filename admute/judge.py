@@ -12,6 +12,15 @@ Lab (2026-10-07, lab.judge on the 14 labelled tapes, 1200 balanced chunks, this 
 Haiku 5.5 at medium effort AUC 0.978, low 0.965, no thinking 0.962; Luna (gpt-6-luna)
 0.953-0.958. 1.3 s typical, 2.5 s at p95; about 660 calls and 6 cents an hour of TV.
 
+Pictures (``llm_picture``): where the detector is unsure of the newest second (its
+per-second logit within UNSURE) or a black frame went by in the last AFTER_BLACK seconds,
+Haiku also gets the last three of the page's pictures (256x144, 2 s apart) and calls the
+newest one an ad or the programme, at most once every PICTURE_EVERY seconds per input. A
+new spot has no words for ~10 s after its black frame; its pictures are there at once.
+On 32 frames from 2026-10-08 (TBS and NBC, labelled by eye) it got 26 of the 27 clear
+ones right at low effort (medium no better): $0.00012 a call, 1.3 s typical, 2.4 s at p90.
+The traces put the detector unsure in 5-24% of seconds: ~2-5 cents an hour.
+
 It runs only when admute.json's ``judge`` is on, the running model has llm_judge (the
 new one), and a key is found: ANTHROPIC_API_KEY in the environment, else in the keys
 file (continuity's). Spending stops for the day at ``judge_budget`` dollars. The key is
@@ -19,6 +28,7 @@ never logged.
 """
 from __future__ import annotations
 
+import base64
 import collections
 import datetime as dt
 import json
@@ -53,6 +63,19 @@ SYSTEM = ("You watch a live US TV channel through its speech transcript (automat
           "you by...\", \"presented by...\", \"stick around for...\") counts as the programme. "
           "Reply with only an integer from 0 to 100, where 0 means the newest piece is certainly the programme "
           "and 100 means it is certainly an advertisement.")
+PICTURE = "llm_picture"
+PICTURE_EFFORT = "low"
+PICTURE_EVERY = 2           # seconds between asks, per input
+UNSURE = 2.2                # |per-second logit| below this: unsure (P(ad) 0.1-0.9)
+AFTER_BLACK = 10.0          # ... or this soon after a black frame (a new spot, not yet heard)
+PICTURE_SYSTEM = ("You watch a live US TV channel through a few low-resolution frames, oldest first. Decide "
+                  "whether the newest frame belongs to an advertisement - a commercial, a promo for another show "
+                  "or the network, a station or news promo, a political ad - or to the programme itself (its live "
+                  "action, studio, hosts, replays, in-show graphics and segments). A split screen that still shows "
+                  "the programme, a sponsor's logo or \"presented by\" graphic over the programme's own pictures, and "
+                  "a news tease from the programme's own anchors count as the programme. Reply with only an integer "
+                  "from 0 to 100, where 0 means the newest frame is certainly the programme and 100 means it is "
+                  "certainly an advertisement.")
 SHOWS = {"mlb": "a live Major League Baseball game broadcast", "nfl": "a live NFL football broadcast"}
 
 
@@ -76,6 +99,14 @@ def prompt(chunks: list, i: int, what: str) -> str:
         mark = ">>> NEWEST: " if t0 == chunks[i][0] else ""
         lines.append(f"[{t0 - t_end:+.0f}s] {mark}{text}")
     return f"Programme: {what}.\nTranscript, oldest first:\n" + "\n".join(lines)
+
+
+def picture_content(jpegs: list, what: str) -> list:
+    """The user message for pictures (JPEG bytes, oldest first, PICTURE_EVERY s apart)."""
+    blocks = [{"type": "image", "source": {"type": "base64", "media_type": "image/jpeg",
+                                           "data": base64.b64encode(j).decode()}} for j in jpegs]
+    return blocks + [{"type": "text", "text": f"Programme: {what}.\nFrames {PICTURE_EVERY} s apart, oldest first; "
+                                              "the last is now."}]
 
 
 def parse(text: str) -> float:
@@ -113,12 +144,13 @@ class Judge:
         self.took = collections.deque(maxlen=200)
         self.error = None
         self.dropped = self.failed = 0
-        self.day, self.usd, self.calls = self._today(), 0.0, 0
+        self.day, self.usd, self.calls, self.pictures = self._today(), 0.0, 0, 0
         if self.ledger and self.ledger.exists():
             try:
                 d = json.loads(self.ledger.read_text())
                 if d.get("day") == self.day:
                     self.usd, self.calls = float(d.get("usd", 0.0)), int(d.get("calls", 0))
+                    self.pictures = int(d.get("pictures", 0))
             except (OSError, ValueError):
                 pass
 
@@ -128,7 +160,7 @@ class Judge:
 
     def _roll(self):
         if self._today() != self.day:
-            self.day, self.usd, self.calls = self._today(), 0.0, 0
+            self.day, self.usd, self.calls, self.pictures = self._today(), 0.0, 0, 0
 
     def why_not(self, budget: float) -> str | None:
         """Why no call can be made now (None: they can)."""
@@ -142,8 +174,15 @@ class Judge:
 
     def submit(self, done, chunks: list, i: int, what: str):
         """Judge chunk i of ``chunks`` (a copy); ``done(p)`` gets P(ad), or NaN on failure."""
+        self._queue(done, SYSTEM, prompt(chunks, i, what), EFFORT)
+
+    def submit_picture(self, done, jpegs: list, what: str):
+        """Judge the newest of these pictures (JPEG bytes, oldest first)."""
+        self._queue(done, PICTURE_SYSTEM, picture_content(jpegs, what), PICTURE_EFFORT)
+
+    def _queue(self, done, system, content, effort):
         with self.cond:
-            self.jobs.append((time.monotonic(), done, chunks, i, what))
+            self.jobs.append((time.monotonic(), done, system, content, effort))
             while len(self.jobs) > BACKLOG:
                 self.jobs.popleft()[1](math.nan)
                 self.dropped += 1
@@ -155,14 +194,14 @@ class Judge:
                 if not self.jobs:
                     self.cond.wait(1)
                     continue
-                queued, done, chunks, i, what = self.jobs.popleft()
+                queued, done, system, content, effort = self.jobs.popleft()
             p = math.nan
             try:
                 if time.monotonic() - queued > STALE:
                     with self.cond:
                         self.dropped += 1
                 else:
-                    p = self.ask(prompt(chunks, i, what))
+                    p = self.ask(content, system, effort)
             except Exception as exc:          # a failed call costs the evidence, nothing else
                 with self.cond:
                     self.failed += 1
@@ -171,13 +210,13 @@ class Judge:
             finally:
                 done(p)
 
-    def ask(self, user: str) -> float:
+    def ask(self, user, system: str = SYSTEM, effort: str = EFFORT) -> float:
         key = read_key(self.keys_file)
         if key is None:
             raise RuntimeError("no key")
-        body = {"model": MODEL, "max_tokens": MAX_TOKENS, "system": SYSTEM,
+        body = {"model": MODEL, "max_tokens": MAX_TOKENS, "system": system,
                 "messages": [{"role": "user", "content": user}],
-                "thinking": {"type": "adaptive"}, "output_config": {"effort": EFFORT}}
+                "thinking": {"type": "adaptive"}, "output_config": {"effort": effort}}
         req = urllib.request.Request(URL, json.dumps(body).encode(),
                                      {"Content-Type": "application/json", "x-api-key": key,
                                       "anthropic-version": "2023-06-01"})
@@ -195,13 +234,14 @@ class Judge:
             self._roll()
             self.usd += usd
             self.calls += 1
+            self.pictures += system == PICTURE_SYSTEM
             self.took.append(took)
             self.error = None
-            day, spent, calls = self.day, self.usd, self.calls
+            day, spent, calls, pictures = self.day, self.usd, self.calls, self.pictures
         if self.ledger:
             try:
                 tmp = self.ledger.with_name("." + self.ledger.name + ".tmp")
-                tmp.write_text(json.dumps({"day": day, "usd": round(spent, 6), "calls": calls}))
+                tmp.write_text(json.dumps({"day": day, "usd": round(spent, 6), "calls": calls, "pictures": pictures}))
                 os.replace(tmp, self.ledger)
             except OSError as exc:
                 log.warning("cannot keep the judge's spend: %s", exc)
@@ -211,7 +251,7 @@ class Judge:
         with self.cond:
             self._roll()
             took = sorted(self.took)
-            out = {"model": MODEL, "effort": EFFORT, "calls_today": self.calls, "usd_today": round(self.usd, 6),
+            out = {"model": MODEL, "effort": EFFORT, "calls_today": self.calls, "pictures_today": self.pictures, "usd_today": round(self.usd, 6),
                    "budget": budget, "queued": len(self.jobs), "dropped": self.dropped, "failed": self.failed,
                    "error": self.error,
                    "ms_p50": round(1000 * took[len(took) // 2]) if took else None,

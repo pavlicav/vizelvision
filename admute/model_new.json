@@ -17,6 +17,7 @@
   "img_zeroshot3",
   "img_split",
   "llm_judge",
+  "llm_picture",
   "ov_score",
   "ov_logo",
   "ov_ad"
@@ -41,6 +42,7 @@
   -1.8891,
   0.0,
   0.0,
+  0.0,
   0.0
  ],
  "scale": [
@@ -63,6 +65,7 @@
   2.7628,
   1.0,
   1.0,
+  1.0,
   1.0
  ],
  "coef": [
@@ -83,6 +86,7 @@
   1.3012,
   -0.471,
   2.0222,
+  0.85,
   -4.0,
   -1.5,
   6.0
@@ -99,6 +103,7 @@
    "img_zeroshot3",
    "img_split",
    "llm_judge",
+   "llm_picture",
    "ov_score",
    "ov_logo",
    "ov_ad"
@@ -115,6 +120,7 @@
    -1.8891,
    0.0,
    0.0,
+   0.0,
    0.0
   ],
   "scale": [
@@ -129,6 +135,7 @@
    2.7628,
    1.0,
    1.0,
+   1.0,
    1.0
   ],
   "coef": [
@@ -141,6 +148,7 @@
    2.6211,
    -0.0878,
    2.4645,
+   0.85,
    -4.0,
    -1.5,
    6.0
@@ -8187,6 +8195,7 @@
   "ov_score": "set by hand 2026-10-05 (not learnt; admute.train keeps it): 1 while a trusted score bug is up, else nothing. Never up in an ad on the NBC/FOX MLB tapes (0.00%); -4 nats a second, so a break is called once the bug has gone",
   "ov_logo": "set by hand 2026-10-05: a network/station logo. Weaker than a score bug: NBC put its peacock on a 43 s promo inside the 10/1 game's first break",
   "ov_ad": "set by hand 2026-10-05: YouTube TV's ad label ('Sponsored'). Up in all six of 10/5's TBS ad pods, never in ~3 h of the programme; +6 nats a second, and admute.policy mutes at once",
-  "new": "lab.prod_model: 14 tapes, 105856 seconds (27% ad), picture scores as the box computes them (int8 CLIP, tap-int8-v2); warm-up weights nudged -0.5; grace 5 s after a take; rows both; llm_judge = lab.judge llm_haiku55m (Claude Haiku 5.5, medium, prompt v3)"
+  "new": "lab.prod_model: 14 tapes, 105856 seconds (27% ad), picture scores as the box computes them (int8 CLIP, tap-int8-v2); warm-up weights nudged -0.5; grace 5 s after a take; rows both; llm_judge = lab.judge llm_haiku55m (Claude Haiku 5.5, medium, prompt v3)",
+  "llm_picture": "set by hand 2026-10-08, not learnt: Haiku's call on the newest pictures (judge.PICTURE), asked only where the detector is unsure or just after a black frame. 0.85 x its logit: 95 -> +2.5, 80 -> +1.2, 50 -> 0, 5 -> -2.5 (about CLIP's img_zeroshot3 at its surest). 26 of 27 clear frames right on 10/8's TBS and NBC"
  }
 }

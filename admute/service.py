@@ -132,9 +132,11 @@ class Source:
 
     def image(self, name, s, edge=math.inf):
         """A picture score (admute/clip.py) of second s, or NaN where none was scored; for
-        llm_judge, the transcript judge's answer (admute/judge.py), once it has come."""
-        if name == J.FEATURE:
-            return self.session.judged.get(s, math.nan) if self.session is not None else math.nan
+        llm_judge and llm_picture, Haiku's answer (admute/judge.py), once it has come."""
+        if name in (J.FEATURE, J.PICTURE):
+            answers = None if self.session is None else (
+                self.session.judged if name == J.FEATURE else self.session.pictured)
+            return answers.get(s, math.nan) if answers is not None else math.nan
         sig = self.sig
         with sig.lock:
             vals, i = sig.img.get(name), s - sig.seconds_since
@@ -147,7 +149,7 @@ class Source:
         """The first second whose judge answer is still on its way (inf: none). Called from
         the detector's update, which runs under the session's lock: answers cannot land
         meanwhile, and taking the lock again would deadlock (it did, 2026-10-07 20:26)."""
-        if J.FEATURE not in names or self.session is None:
+        if not {J.FEATURE, J.PICTURE} & set(names) or self.session is None:
             return math.inf
         return min(list(self.session.judging.values()), default=math.inf)
 
@@ -201,7 +203,9 @@ class Session:
         self.gen += 1                # Whisper results for an earlier timeline are dropped
         self.speech = []             # [(t0, t1, words)] transcribed, in order
         self.judged = {}             # second -> llm_judge (the judge's logit), as answers come
-        self.judging = {}            # chunk index -> its first second, while the judge is asked
+        self.judging = {}            # chunk index (or ("picture", s)) -> its first second, while Haiku is asked
+        self.pictured = {}           # second -> llm_picture (Haiku's logit for the pictures), as answers come
+        self.picture_at = -math.inf  # the last second whose pictures were sent
         self.windows = W.Windower()  # the sound, cut into Whisper's windows
         self.words_sent = 0          # chunks of self.speech whose words went to master (live captions)
         self.landmarks = []          # [(t, hash)] from the fingerprinter, in order
@@ -356,6 +360,51 @@ class Session:
                 for s in [s for s in self.judged if s < t0 - 900]:
                     del self.judged[s]
 
+    def _picture_job(self, edge):
+        """Whether to show Haiku the newest pictures (admute/judge.py): where the detector
+        is unsure of the newest second, or a black frame just went by (a new spot it has
+        not heard yet). Under the lock; the files are read and sent outside it."""
+        det, svc = self.det, self.service
+        if J.PICTURE not in det.image_features or not svc.judge_ok or svc.quiet(self.title, self.key):
+            return None
+        s = min(int(edge), len(det.lp_ad)) - 1
+        if s < 0 or s - self.picture_at < J.PICTURE_EVERY:
+            return None
+        black = any(sm.kind == "black" and sm.t > edge - J.AFTER_BLACK for sm in det.pending + det.seams[-3:])
+        if abs(det.lp_ad[s] - det.lp_show[s]) >= J.UNSURE and not black:
+            return None
+        self.picture_at = s
+        self.judging[("picture", s)] = s
+        walls = [self.wall(s - k * J.PICTURE_EVERY) for k in (2, 1, 0)]
+        return self.gen, s, walls, J.show(self.game, self.title)
+
+    def _ask_picture(self, gen, s, walls, what):
+        jpegs = []
+        for wall in walls:
+            for near in (0, -1, 1):
+                f = self.service.frames.root / self.key / f"{int(wall) + near}.jpg"
+                try:
+                    jpegs.append(f.read_bytes())
+                    break
+                except OSError:
+                    continue
+        if not jpegs:
+            self._pictured(gen, s, math.nan)
+            return
+        self.service.judge.submit_picture(lambda p: self._pictured(gen, s, p), jpegs, what)
+
+    def _pictured(self, gen, s, p):
+        with self.lock:
+            if gen != self.gen:
+                return
+            self.judging.pop(("picture", s), None)
+            if not math.isnan(p):
+                v = J.logit(p)
+                for k in range(s, s + J.PICTURE_EVERY):
+                    self.pictured[k] = v
+                for k in [k for k in self.pictured if k < s - 900]:
+                    del self.pictured[k]
+
     def hint(self):
         """Whisper's prompt: the programme's title and, for an MLB game, its teams and players."""
         game = self.game or {}
@@ -385,6 +434,7 @@ class Session:
 
     # decisions ---------------------------------------------------------------
     def tick(self):
+        picture = None
         with self.lock:
             if self.base is None:
                 return None
@@ -398,6 +448,7 @@ class Session:
             self.det.judge_off = not self.service.judge_ok
             self.det.overlays.game = bool(self.game)
             self.det.update(self.src, edge)
+            picture = self._picture_job(edge)
             self.sig.trim(edge - 20)
             self.sig.trim_seconds(edge - 10)
             self.lookahead = self.service.lookahead(self.info)
@@ -417,6 +468,8 @@ class Session:
                     self._trace(s)
                 self.aired = a
                 self._learn()
+        if picture is not None:
+            self._ask_picture(*picture)
         try:
             self.learn_game()
         except Exception:
@@ -521,7 +574,8 @@ class Session:
                      title, len(new), sum(new), lag)
 
     # ------------------------------------------------------------------ diagnostics
-    GROUPS = {"picture": ("bug", "cut_rate", "recurrence", "colour", "ad_match") + D.OVERLAY_FEATURES + clip.FEATURES,
+    GROUPS = {"picture": ("bug", "cut_rate", "recurrence", "colour", "ad_match") + D.OVERLAY_FEATURES + clip.FEATURES
+              + (J.PICTURE,),
               "words": D.TEXT_FEATURES + (J.FEATURE,), "sound": ("fp_known", "fp_repeat", "fp_show")}
     PLAIN = {"bug": "no station or score bug", "cut_rate": "fast cutting", "recurrence": "unlike the programme",
              "colour": "unlike the programme's colours", "ad_match": "looks like earlier ads",
@@ -529,7 +583,8 @@ class Session:
              "txt_show_vocab": "not the programme's words", "txt_ad_vocab": "ads' words", "txt_you": "talks to you",
              "fp_known": "a known ad", "fp_repeat": "repeats an earlier ad", "fp_show": "show sound",
              "ov_score": "score bug on screen", "ov_logo": "network logo on screen", "ov_ad": "an ad label on screen",
-             "img_zeroshot3": "looks like an ad", "img_split": "split-screen", J.FEATURE: "Haiku hears an ad"}
+             "img_zeroshot3": "looks like an ad", "img_split": "split-screen", J.FEATURE: "Haiku hears an ad",
+             J.PICTURE: "Haiku sees an ad"}
 
     def why(self, span=None) -> list:
         """[headline, detail] for the moment about to air: how sure, and what says so."""

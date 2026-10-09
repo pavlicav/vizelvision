@@ -230,6 +230,10 @@ run(async browser => {
   await t.page.waitForTimeout(800);
   assert.match(await t.page.locator('#judge-note').textContent(), /^Not asking: no ANTHROPIC_API_KEY/);
   await t.ctx.close();
+  t = await open(browser, '/ads#admute', {edit: judging({calls_today: 600, pictures_today: 188})});
+  await t.page.waitForTimeout(800);
+  assert.match(await t.page.locator('#judge-note').textContent(), /looks at the picture when the detector is unsure.*600 calls today \(188 on pictures\), \$0\.04/);
+  await t.ctx.close();
 
   // With the detector down, the page says nothing is muted.
   t = await open(browser, '/ads#admute', {edit: F => { F.admute.detector_stale = true; }});

@@ -175,6 +175,16 @@ Claude Haiku 5.5 reads what is said and calls each new piece an ad or the progra
   (`admute.keys_file` in the config, or continuity's). It is never logged.
 - **Only the new detector asks:** the classic model has no weight for it. A failed or
   slow call costs only that evidence.
+- **Pictures (`llm_picture`):** a new spot has no words for ~10 s after its black frame
+  (the transcript lags), but its pictures are there at once. So where the detector is
+  unsure of the newest second (P(ad) 0.1-0.9 on that second alone), or a black frame went
+  by in the last 10 s, Haiku also gets the page's last three pictures of the input (2 s
+  apart) and calls the newest one ad or programme, at low effort, at most once every 2 s
+  per input. Same switch, key and budget as the transcript judge; the page counts these
+  calls separately. Its weight is set by hand (0.85 x the answer's logit: 95 is +2.5),
+  not learnt yet. On 32 frames from 10/8 (TBS and NBC, labelled by eye) it got 26 of the
+  27 clear ones right; $0.00012 a call, 1.3 s typical. The detector is unsure in 5-24% of
+  seconds, so about 2-5 cents an hour, at most 22.
 
 #### Overlays (`admute/overlays.py`)
 

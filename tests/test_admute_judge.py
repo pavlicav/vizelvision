@@ -125,11 +125,33 @@ class JudgeTests(unittest.TestCase):
             self.assertEqual(j.failed, 1)
             self.assertIn("down", j.error)
 
+    def test_pictures_go_with_their_own_prompt(self):
+        with tempfile.TemporaryDirectory() as d, mock.patch.dict(os.environ, {}, clear=True):
+            stop = threading.Event()
+            j, sent = self.judge(d, reply="85")
+            got = []
+            j.submit_picture(got.append, [b"\xff\xd8one", b"\xff\xd8two"], "a US TV channel")
+            threading.Thread(target=j.run, args=(stop,), daemon=True).start()
+            for _ in range(100):
+                if got:
+                    break
+                time.sleep(0.02)
+            stop.set()
+            self.assertEqual(got, [0.85])
+            body = sent[0]
+            self.assertEqual((body["system"], body["output_config"]), (J.PICTURE_SYSTEM, {"effort": "low"}))
+            content = body["messages"][0]["content"]
+            self.assertEqual([b["type"] for b in content], ["image", "image", "text"])
+            self.assertEqual(content[1]["source"], {"type": "base64", "media_type": "image/jpeg", "data": "/9h0d28="})
+            self.assertIn("Programme: a US TV channel.", content[2]["text"])
+            st = j.status(1.0)
+            self.assertEqual((st["calls_today"], st["pictures_today"]), (1, 1))
+
     def test_a_backlog_drops_the_oldest(self):
         j = J.Judge()
         got = []
         for k in range(J.BACKLOG + 2):
-            j.submit(lambda p, k=k: got.append((k, p)), [], 0, "x")
+            j.submit(lambda p, k=k: got.append((k, p)), [(0.0, 4.0, [])], 0, "x")
         self.assertEqual([k for k, _ in got], [0, 1])
         self.assertTrue(all(math.isnan(p) for _, p in got))
 
@@ -153,6 +175,10 @@ class WeightsTests(unittest.TestCase):
         self.assertIn(J.FEATURE, m["warm"]["features"])
         self.assertNotIn(J.FEATURE, m["nojudge"]["features"])
         self.assertNotIn(J.FEATURE, m["nojudge"]["warm"]["features"])
+        for part in (m, m["warm"]):
+            i = part["features"].index(J.PICTURE)
+            self.assertEqual((part["mean"][i], part["scale"][i], part["coef"][i]), (0.0, 1.0, 0.85), "set by hand")
+        self.assertNotIn(J.PICTURE, m["nojudge"]["features"] + m["nojudge"]["warm"]["features"])
         classic = D.load_model()
         for part in (m, m["warm"], m["nojudge"], m["nojudge"]["warm"]):
             for k in ("fp_show", "txt_known_ad", "ov_score", "ov_logo", "ov_ad"):
@@ -162,20 +188,21 @@ class WeightsTests(unittest.TestCase):
 
 
 class SessionTests(unittest.TestCase):
-    def session(self, with_judge=True, on=True):
+    def session(self, with_judge=True, on=True, frames=None):
         from admute import text as T
         from admute.service import Session, Service
         model = dict(D.DEFAULT_MODEL)
         if with_judge:
-            model = {**model, "features": model["features"] + [J.FEATURE], "mean": model["mean"] + [0.0],
-                     "scale": model["scale"] + [1.0], "coef": model["coef"] + [0.6]}
+            model = {**model, "features": model["features"] + [J.FEATURE, J.PICTURE], "mean": model["mean"] + [0.0, 0.0],
+                     "scale": model["scale"] + [1.0, 1.0], "coef": model["coef"] + [0.6, 0.85]}
         asked = []
         judge = SimpleNamespace(why_not=lambda budget: None,
-                                submit=lambda done, chunks, i, what: asked.append((done, chunks, i, what)))
+                                submit=lambda done, chunks, i, what: asked.append((done, chunks, i, what)),
+                                submit_picture=lambda done, jpegs, what: asked.append((done, jpegs, what)))
         svc = SimpleNamespace(embed=None, model=model, models={"classic": model}, engine="classic",
                               overlays=OV.Library(catalogue=None), prints=None, judge=judge, judge_ok=on,
                               library=T.AdLibrary(), settings={"sensitivity": .5, "max_mute": 300, "judge": on},
-                              speech=SimpleNamespace(usable=False), frames=SimpleNamespace(save=lambda *a: None),
+                              speech=SimpleNamespace(usable=False), frames=SimpleNamespace(save=lambda *a: None, root=Path(frames or "/nonexistent")),
                               quiet=lambda *a: False, resumed=set())
         svc.policy_config = lambda la, game=False, engine="classic": Service.policy_config(svc, la, game, engine)
         svc.lookahead = lambda info: 3.0
@@ -215,6 +242,40 @@ class SessionTests(unittest.TestCase):
             done.set()
         threading.Thread(target=update, daemon=True).start()
         self.assertTrue(done.wait(2), "deadlocked")
+
+    def test_haiku_sees_the_pictures_where_the_detector_is_unsure(self):
+        with tempfile.TemporaryDirectory() as d:
+            s, asked = self.session(frames=d)
+            s.edge, s.edge_wall, s.wall_off = 120.0, 1000.0, None       # input second t aired at wall 880 + t
+            folder = Path(d) / s.key
+            folder.mkdir()
+            for t in range(100, 120):
+                (folder / f"{880 + t}.jpg").write_bytes(b"jpg%d" % t)
+            det = s.det
+            det.lp_ad, det.lp_show = [0.0] * 120, [-5.0] * 120            # sure of an ad
+            det.seams, det.pending = [], []
+            self.assertIsNone(s._picture_job(120.0), "sure: not asked")
+            det.lp_ad[119] = -4.0                                          # unsure (logit 1)
+            job = s._picture_job(120.0)
+            self.assertEqual(job[1], 119)
+            self.assertIsNone(s._picture_job(120.5), "at most every PICTURE_EVERY seconds")
+            s._ask_picture(*job)
+            done, jpegs, what = asked[-1]
+            self.assertEqual(jpegs, [b"jpg115", b"jpg117", b"jpg119"])
+            self.assertEqual(what, J.SHOWS["mlb"])
+            self.assertEqual(s.src.extras_pending((J.PICTURE,), 121.0), 119, "the detector waits for it")
+            done(0.95)
+            self.assertEqual(s.src.extras_pending((J.PICTURE,), 121.0), math.inf)
+            self.assertAlmostEqual(s.src.image(J.PICTURE, 120), J.logit(0.95))
+            self.assertTrue(math.isnan(s.src.image(J.PICTURE, 118)))
+            # Sure, but a black frame just went by: a new spot, not heard yet.
+            det.lp_ad += [-6.0] * 4                                        # sure it's the show
+            det.lp_show += [0.0] * 4
+            det.pending = [D.Seam(118.0, "black")]
+            self.assertEqual(s._picture_job(124.0)[1], 123)
+            s.service.judge_ok = False
+            s.picture_at = -math.inf
+            self.assertIsNone(s._picture_job(124.0), "not with the judge off or over budget")
 
     def test_an_answer_for_an_earlier_timeline_is_dropped(self):
         s, asked = self.session()
