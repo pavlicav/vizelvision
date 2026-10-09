@@ -13,7 +13,8 @@ Haiku 5.5 at medium effort AUC 0.978, low 0.965, no thinking 0.962; Luna (gpt-6-
 0.953-0.958. 1.3 s typical, 2.5 s at p95; about 660 calls and 6 cents an hour of TV.
 
 Pictures (``llm_picture``): where the detector is unsure of the newest second (its
-per-second logit within UNSURE) or a black frame went by in the last AFTER_BLACK seconds,
+per-second logit within UNSURE) or a black frame went by in the last AFTER_BLACK seconds
+(not in a muted break that still looks like one),
 Haiku also gets the last three of the page's pictures (256x144, 2 s apart) and calls the
 newest one an ad or the programme, at most once every PICTURE_EVERY seconds per input. A
 new spot has no words for ~10 s after its black frame; its pictures are there at once.
