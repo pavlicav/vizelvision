@@ -305,6 +305,13 @@ counted (the score bug wins).
 - **After any unmute,** only a new black frame, or a hard cut into something clearly an
   ad, can mute again (black only until 10/3: that left TBS audible for the rest of a
   break).
+  - Outside games, a black frame up to 10 s before also counts (Haiku hears a new spot
+    ~10 s late).
+  - In an inning break the feed knows about, for 20 s after an unmute, the seconds that
+    followed turning out clearly an ad (the same test as the 130 s rule, once the late
+    evidence is in) mute again without a seam. On 10/7 and 10/8 that would have undone 8
+    unmutes, all into ads or MLB's logo bumper (a TNT football promo for 15 s, an MLB Shop
+    highlights spot for 12 s), and none of 22 into the game (at most 1.9 against 4).
 - **Caps:** a mute ends after 300 s, or 240 s with a sports feed.
 - **MLB gate:** with a game held on air, MLB's live feed vetoes mutes while play is
   live, and ends a mute still running.

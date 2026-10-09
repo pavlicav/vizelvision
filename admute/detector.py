@@ -120,7 +120,7 @@ class Segment:
     end: float
     p_ad: float
     seam: str | None       # the kind of seam at its start, if any
-    post_z: float | None = None  # at a seam: mean per-second ad logit of what follows it
+    post_z: float | None = None  # mean per-second ad logit from its start to the edge (what follows it)
     known: bool = False    # a known ad's sound, clearly (audio fingerprints)
     overlay: str | None = None   # a trusted score bug up as it begins (its name)
     ad_overlay: str | None = None   # a trusted ad label up as it begins (YouTube TV's "Sponsored")
@@ -727,10 +727,8 @@ class Detector:
             a, b = max(cuts[j], frm), min(cuts[j + 1], to)
             if b > a:
                 kind = kinds[j] if kinds[j] in SEAM_RANK and cuts[j] >= frm else None
-                post = None
-                if kind:
-                    zs = [self.lp_ad[k] - self.lp_show[k] for k in range(int(math.ceil(a)), min(len(self.lp_ad), int(self.edge_t)))]
-                    post = float(np.mean(zs)) if zs else None
+                zs = [self.lp_ad[k] - self.lp_show[k] for k in range(int(math.ceil(a)), min(len(self.lp_ad), int(self.edge_t)))]
+                post = float(np.mean(zs)) if zs else None
                 known = self.known_ad(a)
                 inside = int(a) < len(self.lp_ad)
                 over = self.overlays.showing(int(a), "score") if inside else None

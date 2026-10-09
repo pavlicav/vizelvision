@@ -29,6 +29,9 @@ that gets through.
     the show").
   * ``bug_return`` (off: on 10/5 it held mutes through the stadium b-roll a game comes
     back on): the detector ends a mute only where the score bug is back.
+  * In an inning break (the feed's), for reopen_window after an unmute, a mute starts again
+    without a seam once the seconds after it are clearly an ad (z_hold, per second): the
+    late evidence comes after the seam into a promo was judged.
   * Stable within a break (hysteresis from the lookahead, so nothing is delayed): a
     mute starts only if the seconds already seen beyond it stay ad-like, and ends on a
     dip only if everything seen beyond it agrees it is the programme. Early in an
@@ -69,6 +72,12 @@ class PolicyConfig:
     # 105-119 s in let an HBO Max promo, MLB's PSA and a Fox News promo through (10-15 s each).
     typical_break: float = 130.0
     z_hold: float = 4.0               # ... unless what follows the seam is this clearly an ad
+    # ... and for this long after any unmute in an inning break (the feed's), a mute starts
+    # again without a seam once what follows is that clearly an ad: the late evidence (Haiku,
+    # known wording) lands seconds after the seam was judged. On 2026-10-08 a TNT football
+    # promo (15 s) and an MLB Shop highlights spot (12 s) played after a seam into them was
+    # taken for the game, at P(ad) 1.00 throughout, with no seam to mute at again.
+    reopen_window: float = 20.0
     # Where a mute may start: "any" piece the detector is sure of, only at a "seam" (a black
     # frame or a hard cut), or only at a "black" seam. A clearly known ad (audio fingerprint)
     # may start one anywhere.
@@ -138,6 +147,7 @@ class Policy:
     break_since: float | None = None  # when the feed's current between-innings window began
     unmuted_at: float | None = None
     live_since: float | None = None   # since when the feed has said play is live
+    reopen_until: float | None = None # an unmute in an inning break may be undone until then (cfg.reopen_window)
     black_at: float | None = None     # the last black frame (cfg.seam_window)
 
     @property
@@ -153,8 +163,11 @@ class Policy:
         self.spans.append(span)
         self.unmuted_at = t
         # Once the sound is back, only a new seam can take it away again: the detector
-        # re-deciding that the break "never ended" is exactly the mistake to avoid.
+        # re-deciding that the break "never ended" is exactly the mistake to avoid (P(ad)
+        # saturates in a break). In an inning break, the seconds after it clearly an ad
+        # (per second, not P(ad)) also may, for a while.
         self.need_seam = True
+        self.reopen_until = t + self.cfg.reopen_window if reason == "show" else None
         if reason in ("capped", "override"):
             self.suppressed = True
             self.show_since = None
@@ -233,7 +246,9 @@ class Policy:
                      and self.black_at > (self.unmuted_at or -1e9))
             where = (c.open_at == "any" or known or labelled or seg.seam == "black" or black
                      or (c.open_at == "seam" and clear_cut))
-            rearmed = seg.seam == "black" or black or labelled or (
+            reopen = (gate == "break" and self.reopen_until is not None and t <= self.reopen_until
+                      and seg.post_z is not None and seg.post_z >= c.z_hold)
+            rearmed = seg.seam == "black" or black or labelled or reopen or (
                 seg.seam == "cut" and "cut" in c.rearm and clear_cut and t - (self.unmuted_at or -1e9) >= c.rearm_gap)
             over = c.overlay_veto and getattr(seg, "overlay", None) and not labelled
             if ((p >= c.t_provisional or labelled) and not self.suppressed and (gate != "live" or labelled) and not over
