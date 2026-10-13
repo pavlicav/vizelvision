@@ -303,7 +303,7 @@ svg.diagram .muted{fill:var(--muted)}
 
 /* ------------------------------------------------------------------ Up next: a rundown */
 .rundown{list-style:none;margin:0;padding:0 0 4px}
-.rundown .q{display:grid;grid-template-columns:58px minmax(0,1fr);gap:4px 12px;align-items:start;padding:10px 16px 10px 10px;border-top:1px solid var(--line);border-left:3px solid transparent}
+.rundown .q{display:grid;grid-template-columns:66px minmax(0,1fr);gap:4px 12px;align-items:start;padding:10px 16px 10px 10px;border-top:1px solid var(--line);border-left:3px solid transparent}
 .rundown .q-time{font-size:12px;color:var(--muted);padding-top:3px;text-align:right;display:flex;justify-content:flex-end}
 .rundown .q-body{display:grid;gap:1px;min-width:0}
 .rundown .q-body strong{font-weight:600;overflow-wrap:anywhere}
@@ -322,6 +322,19 @@ svg.diagram .muted{fill:var(--muted)}
 .rundown .q.empty{border-left-color:transparent}
 .rundown .q.divider{padding:9px 16px 3px 10px}
 .rundown .q.divider+.q{border-top-color:transparent}
+/* The projection's rows: what will air. A sign-off is a quiet line, not an entry. */
+.rundown .q.proj.sched{border-left-color:var(--line-3)}
+.rundown .q.proj.sched.game{border-left-color:var(--warn-line)}
+.rundown .q.proj.off{padding-top:6px;padding-bottom:6px;opacity:.7}
+.rundown .q.proj.off strong{font-weight:500;font-size:13px;letter-spacing:.04em}
+.rundown .q.wont-row{opacity:.85}
+.rundown .wont summary{cursor:pointer;display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
+.rundown .wont summary small{font-size:12.5px}
+.rundown .wont-list{list-style:none;margin:8px 0 2px;padding:0;display:grid;gap:8px}
+.rundown .wont-list li{display:grid;grid-template-columns:auto minmax(0,1fr);gap:2px 10px;align-items:start;font-size:13px}
+.rundown .wont-list li>span:nth-child(2){display:grid;gap:1px;min-width:0}
+.rundown .wont-list li>.actions{grid-column:2/-1}
+.rundown .wont-list .mono{font-size:12px;padding-top:2px}
 .queue.compact .rundown .q{grid-template-columns:46px minmax(0,1fr)}
 /* Find: the search box at the top of Up next; matches drop over the rundown. */
 .find{position:relative;padding:12px 16px 0}

@@ -1,0 +1,55 @@
+{
+  "id": "baseball",
+  "version": 1,
+  "name": "Baseball on VizelVision",
+  "kind": "ident",
+  "order": 20,
+  "description": "Only during baseball: a night ballpark, the organ on the logo, the PA announcing No. 19, VizelVision, and a home run into the scoreboard on the closed logo, with fireworks. The ribbon board shows the game on air. Jupiter on the PA.",
+  "duration": 10.0,
+  "file": "baseball.mp4",
+  "still": "baseball.png",
+  "still_at": 8.6,
+  "overlays": [
+    {
+      "field": "programme",
+      "box": [
+        440,
+        195,
+        400,
+        28
+      ],
+      "from": 1.2,
+      "to": 9.35,
+      "style": {
+        "font": "Nimbus Sans Narrow",
+        "bold": true,
+        "size": 26,
+        "min_size": 13,
+        "color": [
+          1.0,
+          0.72,
+          0.2
+        ],
+        "upper": true,
+        "tracking": 0.08
+      },
+      "enter": {
+        "kind": "fade",
+        "seconds": 0.3
+      },
+      "exit": {
+        "kind": "fade",
+        "seconds": 0.3
+      }
+    }
+  ],
+  "voice": null,
+  "leagues": [
+    "mlb"
+  ],
+  "loudness": {
+    "input": "-14.65",
+    "target": -20.0
+  },
+  "built_at": "2026-10-07T20:01:20-0400"
+}

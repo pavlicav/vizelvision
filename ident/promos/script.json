@@ -47,5 +47,193 @@
         "text": "This is Vizel Vision nineteen, Cable seventy."
       }
     ]
+  },
+  "metro": {
+    "host": "The Operator",
+    "model": "aura-2-mars-en",
+    "lines": [
+      {
+        "id": "promo-metro-1",
+        "at": 3.0,
+        "text": "This is a Vizel Vision train."
+      },
+      {
+        "id": "promo-metro-2",
+        "at": 4.75,
+        "text": "Step back, doors closing."
+      }
+    ]
+  },
+  "dupont": {
+    "host": "Delia",
+    "model": "aura-2-delia-en",
+    "lines": [
+      {
+        "id": "promo-dupont",
+        "at": 3.6,
+        "text": "From Dupont Circle... this is Vizel Vision."
+      }
+    ]
+  },
+  "meridian-hill": {
+    "host": "Aries",
+    "model": "aura-2-aries-en",
+    "lines": [
+      {
+        "id": "promo-meridian-hill",
+        "at": 3.6,
+        "text": "From Meridian Hill Park... this is Vizel Vision."
+      }
+    ]
+  },
+  "now-in-hd": {
+    "host": "Atlas",
+    "model": "aura-2-atlas-en",
+    "lines": [
+      {
+        "id": "promo-now-in-hd-1",
+        "at": 3.1,
+        "text": "Vizel Vision."
+      },
+      {
+        "id": "promo-now-in-hd-2",
+        "at": 4.95,
+        "text": "Now in high definition."
+      }
+    ]
+  },
+  "cat-remote": {
+    "host": "The Narrator",
+    "model": "aura-2-draco-en",
+    "lines": [
+      {
+        "id": "promo-cat-remote-1",
+        "at": 0.55,
+        "text": "The orange cat selects its channel."
+      },
+      {
+        "id": "promo-cat-remote-2",
+        "at": 4.2,
+        "text": "Vizzle Vision nineteen."
+      },
+      {
+        "id": "promo-cat-remote-3",
+        "at": 6.15,
+        "text": "A fine choice."
+      }
+    ]
+  },
+  "cat-laser": {
+    "host": "The Narrator",
+    "model": "aura-2-draco-en",
+    "lines": [
+      {
+        "id": "promo-cat-laser-1",
+        "at": 0.55,
+        "text": "The orange cat... a patient hunter."
+      },
+      {
+        "id": "promo-cat-laser-2",
+        "at": 5.45,
+        "text": "Rarely successful."
+      }
+    ]
+  },
+  "seventy-six": {
+    "host": "The Announcer",
+    "model": "aura-2-saturn-en",
+    "lines": [
+      {
+        "id": "promo-seventy-six-1",
+        "at": 3.4,
+        "text": "Happy birthday, America."
+      },
+      {
+        "id": "promo-seventy-six-2",
+        "at": 5.0,
+        "text": "From Vizzle Vision nineteen."
+      }
+    ]
+  },
+  "eighty-six": {
+    "host": "The Promo Voice",
+    "model": "aura-2-hermes-en",
+    "lines": [
+      {
+        "id": "promo-eighty-six-1",
+        "at": 3.2,
+        "text": "Vizzle Vision nineteen..."
+      },
+      {
+        "id": "promo-eighty-six-2",
+        "at": 5.0,
+        "text": "Get the picture!"
+      }
+    ]
+  },
+  "ninety-six": {
+    "host": "The Promo Voice",
+    "model": "aura-2-apollo-en",
+    "lines": [
+      {
+        "id": "promo-ninety-six-1",
+        "at": 3.2,
+        "text": "Vizzle Vision..."
+      },
+      {
+        "id": "promo-ninety-six-2",
+        "at": 4.6,
+        "text": "now on the World Wide Web!"
+      }
+    ]
+  },
+  "twenty-sixteen": {
+    "host": "The Promo Voice",
+    "model": "aura-2-thalia-en",
+    "lines": [
+      {
+        "id": "promo-twenty-sixteen-1",
+        "at": 2.6,
+        "text": "Vizzle Vision."
+      },
+      {
+        "id": "promo-twenty-sixteen-2",
+        "at": 4.5,
+        "text": "Stream it live. Anywhere."
+      }
+    ]
+  },
+  "the-cairo": {
+    "host": "Athena",
+    "model": "aura-2-athena-en",
+    "lines": [
+      {
+        "id": "promo-the-cairo",
+        "at": 3.1,
+        "text": "From atop The Cairo, this is Vizzle Vision."
+      }
+    ]
+  },
+  "baseball": {
+    "host": "The PA",
+    "model": "aura-2-jupiter-en",
+    "lines": [
+      {
+        "id": "promo-baseball",
+        "at": 2.0,
+        "text": "Now batting... number nineteen... Vizzle Vision!"
+      }
+    ]
+  },
+  "football": {
+    "host": "Zeus",
+    "model": "aura-2-zeus-en",
+    "lines": [
+      {
+        "id": "promo-football",
+        "at": 4.25,
+        "text": "Football... on Vizzle Vision."
+      }
+    ]
   }
 }

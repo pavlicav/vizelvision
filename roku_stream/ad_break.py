@@ -18,14 +18,36 @@ the break opens with it, or the next item is it; with `fill`, they stand in when
 left, each once a break. A promo's live text (the time, the temperature, the programme)
 is blended into its frames as they decode (PromoReel). With My ads off, a due promo still
 plays, and the break then carries on as ad mute has it ('pass': nothing replaced).
+
+**Next up.** The rotation's ads are drawn AHEAD at a time into a queue (self.queue), so the
+page shows what is coming and the operator can change it: an entry skipped never airs (a
+drawn ad is out of this round), and an ad or a promo queued by hand airs before the
+rotation's ads and before a due promo, whatever its switch or limit. The rotation's next
+promo (self.next_promo) keeps its place until it airs or is skipped. The operator can skip
+what is on air too (command). Entries queued by hand survive a restart (my-ads-queue.json).
+
+**The wait fill.** While the station ID holds its end card for a source still being
+prepared (a Roku changing channel), master shows ads in its place too: the worker opens a
+window on master's running clock where the end card froze (fill_start), and the ads (and a
+due promo) play there, whole and no longer than FILL_LONGEST, with nothing in a corner.
+With nothing to show, the end card shows. Once the source is ready (fill_finish), the ad
+on air plays out, then, for a game joined in progress, the "We now join..." bumper
+(sports_join.py). fill_end() says where the window ends, so the worker irises the ID out
+there, or the take lands at the bumper's end. The window is on the programme's own
+timeline, which runs the programme delay ahead of what master releases, so the worker and
+the take never wait on what viewers have yet to see.
 """
 from __future__ import annotations
 
 from array import array
 from collections import deque
+import json
 import logging
+import os
 from pathlib import Path
 import re
+import secrets
+import tempfile
 import threading
 import time
 
@@ -38,7 +60,8 @@ from gi.repository import GstVideo, Pango, PangoCairo  # noqa: E402
 import cairo  # noqa: E402
 
 from .admute_link import apply_gain
-from .my_ads import Rotation, allowed, append_play, card_file, counts, read_plays
+from .errors import ConfigError
+from .my_ads import Rotation, allowed, append_play, card_file, counts, played, read_plays
 from .programme_delay import retimable
 from . import promo_overlay
 from .promos import due as promo_due, last_promo, readiness, switched_on
@@ -169,6 +192,11 @@ class Pip:
                 out.fill(o_off + (y + r) * o_str + x, line)
 
 
+def _entry(kind, item_id, by):
+    """An entry of Next up: an ad or a promo, queued by the rotation or by the operator ('you')."""
+    return {'key': secrets.token_hex(4), 'kind': kind, 'id': item_id, 'by': by}
+
+
 def load_picture(gst, path, caps):
     """A picture file as one I420 frame of master's size (letterboxed), for the break card."""
     pipeline = gst.parse_launch('filesrc name=src ! decodebin ! videoconvert ! videoscale add-borders=true '
@@ -192,6 +220,7 @@ class Reel:
     frame() and sound() never wait. cue(), poll() and close() are the helper thread's."""
     VIDEO_BUFFERS = 12
     AUDIO_BUFFERS = 256
+    entry = None                     # its entry of Next up (the join bumper has none)
 
     def __init__(self, gst, ad, path, video_caps, audio_caps, live=False):
         self.gst, self.ad, self.path = gst, ad, Path(path)
@@ -381,6 +410,10 @@ class AdBreak:
     TICK = .2
     LEAVE_OUT = 600                  # seconds an ad (or promo) that would not play is left out
     HISTORY = 7 * 86400              # plays remembered for limits (the longest is a week)
+    FILL_LONGEST = 31.0              # seconds: the longest ad a wait fill starts (the source may be ready)
+    AHEAD = 5                        # the rotation's ads kept drawn in Next up
+    QUEUED_MOST = 20                 # entries queued by hand, at most
+    JOIN_GRACE = 3 * SECOND          # a take late for the bumper's end finds its last (black) frame
 
     def __init__(self, output, folder, plays_path):
         self.output, self.gst = output, output.gst
@@ -405,14 +438,33 @@ class AdBreak:
         self.now_playing = None              # (ad id, wall) while an ad airs
         self.promo_playing = None            # (promo id, wall) while a promo airs
         self.break_promos = set()            # promos aired in this break: each once at most
+        self.break_items = 0                 # what has gone on air this break: with every 0, a promo opens it or none does
         self.last_due = None
+        self.picture_due = None              # the latest frame's due: while frames come, they decide
         self.failed_once = False
+        self.reel_start_pts = None           # where the reel on air started, on the programme's clock
+        self.fill = None                     # the wait fill's window, while open (see fill_start)
         # Shared
         self.cued = None                     # the next ad, decoded up to its first frames
         self.cued_promo = None               # the next promo, likewise
         self.rotation, self.promo_rotation = Rotation(), Rotation()
         self.left_out = {}                   # ad or promo id -> (until, why): it would not play
+        # Next up: entries {key, kind (ad|promo), id, by (you|rotation)} in the order they air,
+        # those queued by hand first; the rotation's next promo, placed by its timing
+        self.queue_path = self.plays_path.with_name('my-ads-queue.json')
+        self.queue = self._load_queue()
+        self.queue_saved = [{'kind': e['kind'], 'id': e['id']} for e in self.queue]
+        self.queue_order = None              # (order, the list's ids in list order): a change redraws
+        self.next_promo = None
+        self.last_aired = None               # the rotation's last ad on air: list order resumes after it
+        self.skip_on_air = None              # the key of the entry on air the operator skipped
         self.done, self.log = deque(), deque()
+        # The wait fill: the worker's request (start, finish, join, stop on the running clock),
+        # whether ads are wanted for it, its join bumper decoded ahead, and its planned end.
+        self.fill_request = None
+        self.filling = False
+        self.cued_join = None
+        self.fill_report = None
         # The helper's
         self.plays = read_plays(self.plays_path, time.time() - self.HISTORY)
         self.last_promo = last_promo(self.plays)   # when the last promo that counted started
@@ -445,7 +497,7 @@ class AdBreak:
         self.library_folder, self.variants_folder = snapshot.get('library'), snapshot.get('variants')
         self.promos_on = bool(settings and settings['enabled'])
         self._activate()
-        for reel in (self.reel, self.cued_promo):
+        for reel in (self.reel, self.cued, self.cued_promo):
             if isinstance(reel, PromoReel):
                 reel.values = self.promo_values
 
@@ -461,8 +513,10 @@ class AdBreak:
             position = None
             if self.last_due is not None and self.reel_start is not None:
                 position = round(max(0., (self.last_due - self.reel_start) / SECOND), 1)
+            entry = getattr(reel, 'entry', None) or {}
             on_air = {'id': reel.ad['id'], 'name': reel.ad.get('name'), 'duration': reel.ad['duration'],
-                      'position': position, 'since': playing and round(playing[1], 1)}
+                      'position': position, 'since': playing and round(playing[1], 1),
+                      'key': entry.get('key'), 'by': entry.get('by')}
         with self.lock:
             left_out = {k: why for k, (until, why) in self.left_out.items() if until > now}
         settings = self.promos
@@ -470,20 +524,210 @@ class AdBreak:
                 'ad': on_air if kind == 'ad' else None, 'promo': on_air if kind == 'promo' else None,
                 'card_since': self.card_since and round(self.card_since[1], 1),
                 'cued': cued and cued.ad['id'], 'card': {'ready': self.card is not None, 'error': self.card_error},
+                'fill': self.fill_status(),
                 'left_out': left_out,
+                'next': self._upcoming(now),
                 'promos': {'active': self.active and self.promos_on, 'cued': cued_promo and cued_promo.ad['id'],
                            'last': self.last_promo and round(self.last_promo, 1),
                            'due': bool(settings) and promo_due(settings, self.last_promo, now),
                            'draw_failed': next((r.draw_failed for r in (reel, cued_promo)
                                                 if isinstance(r, PromoReel) and r.draw_failed), None)}}
 
+    # ------------------------------------------------------------ Next up (the worker's)
+    def command(self, body):
+        """The operator's changes to Next up. {op: add, kind: ad|promo, id, next}: queued by hand,
+        first (next) or after the others queued by hand. {op: skip, key}: an entry out of Next
+        up, the next promo for another, or what is on air cut short for what follows it."""
+        op = body.get('op')
+        if op == 'add':
+            kind, item_id, first = body.get('kind'), body.get('id'), body.get('next', False)
+            if not isinstance(first, bool):
+                raise ConfigError('next must be true or false')
+            if kind == 'ad':
+                ad = next((a for a in (self.settings or {}).get('ads', []) if a['id'] == item_id), None)
+                if ad is None:
+                    raise ConfigError('No such ad')
+                if not (self.folder / ad['file']).is_file():
+                    raise ConfigError('That ad\'s file is missing')
+            elif kind == 'promo':
+                promo = self.library.get(item_id) if isinstance(item_id, str) else None
+                if promo is None:
+                    raise ConfigError('No such promo')
+                why = readiness(promo, self.promo_values)
+                if why:
+                    raise ConfigError(f'{promo["name"]} cannot air now: {why}')
+            else:
+                raise ConfigError('kind must be ad or promo')
+            with self.lock:
+                mine = sum(1 for e in self.queue if e['by'] == 'you')
+                if mine >= self.QUEUED_MOST:
+                    raise ConfigError(f'At most {self.QUEUED_MOST} can be queued by hand')
+                entry = _entry(kind, item_id, 'you')
+                # Moved up: the rotation's own draw of it goes (never twice running)
+                self.queue = [e for e in self.queue if not (e['by'] == 'rotation' and e['kind'] == kind and e['id'] == item_id)]
+                self.queue.insert(0 if first else mine, entry)
+            self.wake.set()
+            return {'accepted': True, 'key': entry['key']}
+        if op == 'skip':
+            key = body.get('key')
+            if not isinstance(key, str) or not key:
+                raise ConfigError('skip takes the key of an entry')
+            reel = self.reel
+            if reel is not None and (getattr(reel, 'entry', None) or {}).get('key') == key:
+                with self.lock:
+                    request = self.fill_request
+                if self.fill is not None and request is not None and request['finish'] is not None:
+                    raise ConfigError('The next program is ready: what is on air plays out first')
+                self.skip_on_air = key       # the programme-delay thread cuts it at its next frame
+                return {'accepted': True, 'on_air': True}
+            with self.lock:
+                entry = next((e for e in self.queue if e['key'] == key), None)
+                if entry is not None:
+                    self.queue.remove(entry)
+                elif self.next_promo is not None and self.next_promo['key'] == key:
+                    entry, self.next_promo = self.next_promo, None
+                    self.promo_rotation.played(entry['id'])
+            if entry is None:
+                raise ConfigError('That is no longer in Next up')
+            self.wake.set()
+            return {'accepted': True, 'on_air': False}
+        raise ConfigError('op must be add or skip')
+
+    def _upcoming(self, now):
+        """Next up as the page shows it: the entries in the order they would air, with the next
+        promo where its timing puts it, each with its name, length, whether it is cued and, in a
+        break, in how many seconds it would start if the break lasts."""
+        settings, promos, library = self.settings, self.promos, self.library
+        ads = {a['id']: a for a in (settings or {}).get('ads', [])}
+        with self.lock:
+            queue, promo_entry, left_out = list(self.queue), self.next_promo, dict(self.left_out)
+        cued = {(getattr(r, 'entry', None) or {}).get('key') for r in (self.cued, self.cued_promo) if r is not None}
+        in_break = self.state not in ('idle', 'fill') and self.fill is None
+        at = None
+        if in_break:
+            at, reel = 0., self.reel
+            if reel is not None and self.last_due is not None and self.reel_start is not None:
+                at = max(0., reel.ad['duration'] - (self.last_due - self.reel_start) / SECOND)
+        rows = []
+
+        def add(entry, item, **extra):
+            nonlocal at
+            why = left_out.get(entry['id'])
+            plays = not why and (self.ads_on if entry['kind'] == 'ad' else self.promos_on)
+            rows.append({'key': entry['key'], 'kind': entry['kind'], 'id': entry['id'], 'by': entry['by'],
+                         'name': item.get('name') or '', 'duration': item.get('duration'),
+                         'cued': entry['key'] in cued, 'in': None if at is None or not plays else round(at, 1),
+                         'left_out': why and why[1], **extra})
+            if at is not None and plays:
+                at += item.get('duration') or 0
+
+        promo = promo_entry and self.promos_on and promos and library.get(promo_entry['id'])
+        due_at = None
+        if promo:
+            last = self.promo_playing[1] if self.promo_playing else self.last_promo
+            due_at = now if last is None else last + promos['every'] * 60
+        for entry in queue:
+            item = ads.get(entry['id']) if entry['kind'] == 'ad' else library.get(entry['id'])
+            if item is None:
+                continue
+            # The promo goes on before the rotation's ads (never before those queued by hand):
+            # between breaks, it opens the next one (once due); in a break, as it falls due.
+            # Every break (every 0): it opens the next break.
+            if promo and entry['by'] != 'you' and (not in_break or (promos['every'] and now + at >= due_at)):
+                add(promo_entry, promo, due_at=round(due_at, 1), opens=not in_break)
+                promo = None
+            add(entry, item)
+        if promo:
+            add(promo_entry, promo, due_at=round(due_at, 1), opens=True)
+        return rows
+
+    def _load_queue(self):
+        """What the operator queued by hand before a restart (my-ads-queue.json, master's own)."""
+        try:
+            rows = json.loads(self.queue_path.read_text())
+        except (OSError, ValueError):
+            return []
+        return [_entry(row['kind'], row['id'], 'you') for row in (rows if isinstance(rows, list) else [])
+                if isinstance(row, dict) and row.get('kind') in ('ad', 'promo')
+                and isinstance(row.get('id'), str) and 0 < len(row['id']) <= 40][:self.QUEUED_MOST]
+
+    def _save_queue(self):
+        with self.lock:
+            mine = [{'kind': e['kind'], 'id': e['id']} for e in self.queue if e['by'] == 'you']
+        if mine == self.queue_saved:
+            return
+        try:
+            fd, name = tempfile.mkstemp(prefix='.my-ads-queue-', dir=self.queue_path.parent)
+            try:
+                with os.fdopen(fd, 'w') as stream:
+                    json.dump(mine, stream)
+                os.replace(name, self.queue_path)
+            finally:
+                Path(name).unlink(missing_ok=True)
+            self.queue_saved = mine
+        except OSError as exc:
+            LOG.warning('Cannot keep Next up: %s', exc)
+
     def close(self):
         self.stopping.set()
         self.wake.set()
         self.thread.join(timeout=2)
-        for reel in (self.reel, self.cued, self.cued_promo, *self.done):
+        for reel in (self.reel, self.cued, self.cued_promo, self.cued_join, *self.done):
             if reel is not None:
                 reel.close()
+
+    # ------------------------------------------------------------ the wait fill (the worker's)
+    def fill_start(self, pts):
+        """The station ID holds its end card from running time pts (its first held frame)
+        while the next source is prepared: from there, ads in its place."""
+        with self.lock:
+            self.fill_request = {'start': pts, 'finish': None, 'join': None, 'stop': None}
+            self.filling, self.fill_report = True, None
+        self.wake.set()
+
+    def fill_finish(self, pts, join=None):
+        """The next source is ready, at running time pts. The ad on air plays out, then join
+        ({'path', 'seconds'}: the bumper for a game joined in progress) if given; fill_end()
+        then says where the window ends. False with no fill open."""
+        with self.lock:
+            request = self.fill_request
+            if request is None or request['stop'] is not None:
+                return False
+            request.update(finish=pts, join=dict(join) if join else None)
+            self.filling = False
+            window = self.fill
+            if window is None or window['request'] is not request:
+                # What master releases has not reached the fill yet, so no ad has started in
+                # it: the ID irises out at once, or the bumper takes the end card's place.
+                self.fill_report = ({'end': request['start'] + int(join['seconds'] * SECOND), 'take': True, 'fixed': False}
+                                    if join else {'end': pts, 'take': False, 'fixed': True})
+        self.wake.set()
+        return True
+
+    def fill_stop(self, pts):
+        """The ID left air or gave up holding: the window closes at running time pts, cutting
+        whatever plays there."""
+        with self.lock:
+            if self.fill_request is not None and self.fill_request['stop'] is None:
+                self.fill_request['stop'] = pts
+            self.filling = False
+        self.wake.set()
+
+    def fill_end(self):
+        """{'end': running time the window closes at, 'take': the take lands there (a join
+        bumper) rather than the ID irising out, 'fixed': it will not move}; None until the
+        end is planned (or with no fill)."""
+        with self.lock:
+            return dict(self.fill_report) if self.fill_report else None
+
+    def fill_status(self):
+        with self.lock:
+            request, report = self.fill_request, self.fill_report
+        if request is None:
+            return None
+        return {'state': 'finishing' if request['finish'] is not None else 'filling',
+                'join': bool(request['join']), 'joined': self.reel_kind == 'join',
+                'cued_join': self.cued_join is not None, 'planned': bool(report)}
 
     # ------------------------------------------------------------ the programme-delay thread's
     def _muted(self, pts, route):
@@ -503,7 +747,7 @@ class AdBreak:
             return
         if muted and self.state == 'idle' and (self.break_end is None or due >= self.break_end):
             self.break_start = due
-            self.break_promos = set()
+            self.break_promos, self.break_items = set(), 0
             self._next(due)
         elif not muted and self.state != 'idle' and due >= self.break_start:
             if self.reel is not None:
@@ -517,25 +761,63 @@ class AdBreak:
         if (not self.promos_on or not settings or promo is None or promo.failed
                 or promo.ad['id'] in self.break_promos):
             return False
-        if self.promo_playing is None and promo_due(settings, self.last_promo, now):
+        # Every break (every 0): a promo is always due, so only as the break's first item.
+        if (self.promo_playing is None and promo_due(settings, self.last_promo, now)
+                and (settings['every'] or not self.break_items)):
             return True
         return settings['fill'] and (not self.ads_on or self.cued is None)
 
-    def _next(self, due):
-        """What goes on air at due: the cued promo when one is due (or filling in), else the
-        cued ad, else the card; with my ads off, the programme as ad mute has it ('pass')."""
-        now = time.time()
+    def _choice(self, now, fill=False):
+        """What would go on now: 'cued' (Next up's first: queued by hand, or the rotation's ad),
+        'promo' (the next promo, due) or None. First what the operator queued, then a due
+        promo, then the rotation. A wait fill starts only short ads."""
+        cued = self.cued
+        if cued is not None and fill and cued.ad['duration'] > self.FILL_LONGEST:
+            cued = None
+        entry = (getattr(cued, 'entry', None) or {}) if cued is not None else {}
+        kind = entry.get('kind', 'ad')
+        if cued is not None and entry.get('by') == 'you' and (self.ads_on if kind == 'ad' else self.promos_on):
+            return 'cued'
+        if self._promo_wanted(now):
+            return 'promo'
+        return 'cued' if cued is not None and kind == 'ad' and self.ads_on else None
+
+    def _take(self, now, fill=False):
+        """Takes what goes on now off Next up: (reel, kind), or (None, None)."""
         with self.lock:
-            reel = kind = None
-            if self._promo_wanted(now):
-                reel, kind, self.cued_promo = self.cued_promo, 'promo', None
+            choice = self._choice(now, fill)
+            if choice is None:
+                return None, None
+            if choice == 'promo':
+                reel, self.cued_promo = self.cued_promo, None
+            else:
+                reel, self.cued = self.cued, None
+            entry = getattr(reel, 'entry', None) or {}
+            kind = 'promo' if choice == 'promo' or entry.get('kind') == 'promo' else 'ad'
+            if entry:
+                self.queue = [e for e in self.queue if e['key'] != entry['key']]
+            if kind == 'promo':
                 self.promo_rotation.played(reel.ad['id'])
                 self.break_promos.add(reel.ad['id'])
-            elif self.ads_on and self.cued is not None:
-                reel, kind, self.cued = self.cued, 'ad', None
-                self.rotation.played(reel.ad['id'])
+                if self.next_promo is not None and self.next_promo['id'] == reel.ad['id']:
+                    self.next_promo = None       # never the same promo twice running
+            elif entry.get('by') != 'you':
+                self.last_aired = reel.ad['id']
+        return reel, kind
+
+    def _skipped(self):
+        """Did the operator skip what is on air? (once)"""
+        key, self.skip_on_air = self.skip_on_air, None
+        return key is not None and self.reel is not None and (getattr(self.reel, 'entry', None) or {}).get('key') == key
+
+    def _next(self, due):
+        """What goes on air at due: what the operator queued, a due promo, the rotation's ad
+        (see _choice), else the card; with my ads off, the programme as ad mute has it ('pass')."""
+        now = time.time()
+        reel, kind = self._take(now)
         if reel is not None and not reel.failed:
             self._card_off(due)
+            self.break_items += 1
             self.reel, self.reel_kind, self.reel_start, self.state = reel, kind, due, kind
             if kind == 'promo':
                 self.promo_playing = (reel.ad['id'], now)
@@ -553,11 +835,11 @@ class AdBreak:
                 self.state = 'pass'
         self.wake.set()   # cue the one after
 
-    def _finish(self, due, cut=False):
+    def _finish(self, due, cut=False, skipped=False):
         reel, kind, self.reel, self.reel_kind = self.reel, self.reel_kind, None, None
         aired = max(0., (due - self.reel_start) / SECOND)
         length = reel.ad['duration']
-        complete = not cut and not reel.failed
+        complete = not cut and not skipped and not reel.failed
         playing = self.promo_playing if kind == 'promo' else self.now_playing
         row = {'kind': kind, 'id': reel.ad['id'], 'name': reel.ad.get('name'),
                'at': round(playing[1] if playing else time.time() - aired, 1),
@@ -565,11 +847,19 @@ class AdBreak:
                'counted': complete or counts(aired, length)}
         if reel.failed:
             row['error'] = str(reel.failed)[:200]
+        if skipped:
+            row['skipped'] = True
+            if kind == 'promo':
+                row['counted'] = True        # it was the break's promo: none takes its place at once
+        if (getattr(reel, 'entry', None) or {}).get('by') == 'you':
+            row['queued'] = True             # queued by hand
+        if self.fill is not None:
+            row['wait'] = True               # aired while the next source got ready
         if kind == 'promo':
             self.promo_playing = None
             if row['counted']:
                 self.last_promo = row['at']
-        else:
+        elif kind == 'ad':
             self.now_playing = None
         self.log.append(row)
         self.done.append(reel)
@@ -582,6 +872,16 @@ class AdBreak:
 
     def picture(self, live, due, pts, route):
         """The frame master shows at due in place of the programme's (live), or None."""
+        self.picture_due = due
+        try:
+            filled = self._fill_step(due, pts, route)
+        except Exception:            # never a reason to lose a frame: the fill is a nicety
+            if not self.failed_once:
+                self.failed_once = True
+                LOG.exception('The wait fill failed')
+            filled = False
+        if filled is not False:  # a wait fill's frame, or None: the ID's own (its end card)
+            return filled
         self._follow(due, self._muted(pts, route))
         if self.state == 'idle':
             return None
@@ -589,13 +889,14 @@ class AdBreak:
         base = None
         if self.reel is not None:
             t = due - self.reel_start
-            if not self.reel.failed:
+            skipped = self._skipped()
+            if not self.reel.failed and not skipped:
                 base = self.reel.frame(t)
-            if self.reel.failed or self.reel.ended(t):
-                self._finish(due)
+            if skipped or self.reel.failed or self.reel.ended(t):
+                self._finish(due, skipped=skipped)
                 self._next(due)
                 base = self.reel.frame(0) if self.reel is not None else None
-        elif self._promo_wanted(time.time()) or (self.ads_on and self.cued is not None):
+        elif self._choice(time.time()) is not None:
             self._next(due)                  # the card (or the muted programme) gives way: one is ready
             base = self.reel.frame(0) if self.reel is not None else None
         if self.state == 'pass':
@@ -614,6 +915,154 @@ class AdBreak:
                 LOG.exception('My ads: the picture in picture failed')
             return retimable(self.gst, base)
 
+    # ------------------------------------------------------------ the wait fill (programme-delay thread)
+    def _fill_step(self, due, pts, route):
+        """Inside a wait fill: what master shows at due (None: the ID's end card); outside,
+        False. Opens, plans and closes the window as the programme's clock (pts) crosses it."""
+        with self.lock:
+            request = self.fill_request
+        window = self.fill
+        if window is not None and window['request'] is not request:
+            self._fill_close(due, window)    # a new airing of the ID: the old window is over
+            window = None
+        if window is None:
+            if request is None or pts is None or pts < request['start']:
+                return False
+            if request['stop'] is not None and pts >= request['stop']:
+                self._fill_close(due, {'request': request})
+                return False
+            window = self.fill = {'request': request, 'route': route[2] if route else None,
+                                  'end': None, 'take': False, 'join_at': None, 'joined': False}
+            if self.state != 'idle':         # a muted break was on: the fill takes over from it
+                if self.reel is not None:
+                    self._finish(due, cut=True)
+                self._card_off(due)
+            self.state, self.break_start, self.break_end, self.break_promos = 'fill', due, None, set()
+            self.break_items = 0             # it opens like a break: with every 0, a promo first
+        if pts is not None:
+            if request['stop'] is not None and pts >= request['stop']:
+                self._fill_close(due, window)
+                return False
+            end = window['end']
+            if end is not None and pts >= end:
+                late = window['take'] and route is not None and route[2] == window['route'] and pts < end + self.JOIN_GRACE
+                if not late:
+                    self._fill_close(due, window)
+                    return False
+                shown = getattr(self.reel, 'shown', None) if self.reel is not None else None
+                last = shown[1] if shown else None
+                return retimable(self.gst, last) if last is not None else self.blank
+            if request['finish'] is not None and end is None:
+                self._fill_plan(window, request, pts)
+        self.last_due = due
+        base = None
+        if self.reel is not None:
+            t = due - self.reel_start
+            skipped = self.reel_kind != 'join' and window['end'] is None and self._skipped()
+            if not self.reel.failed and not skipped:
+                base = self.reel.frame(t)
+            if skipped or self.reel.failed or self.reel.ended(t):
+                joined = self.reel_kind == 'join'
+                self._finish(due, skipped=skipped)
+                base = None
+                if joined:                   # its last frame holds until the take (or the end)
+                    return self.blank
+        if self.reel is None and window['joined']:
+            return self.blank                # the bumper has ended: black until the take
+        if self.reel is None and pts is not None:
+            if window['end'] is None:
+                self._fill_next(due, pts)
+            elif window['join_at'] is not None and not window['joined'] and pts >= window['join_at']:
+                self._fill_join(due, pts, window)
+            if self.reel is not None:
+                base = self.reel.frame(0)
+        if base is None:
+            return None
+        return retimable(self.gst, base)
+
+    def _fill_plan(self, window, request, pts):
+        """The source is ready: the window ends where the ad on air ends, or after the join
+        bumper that follows it."""
+        start = pts
+        if self.reel is not None and self.reel_start_pts is not None and self.reel_kind != 'join':
+            start = max(pts, self.reel_start_pts + int(self.reel.ad['duration'] * SECOND))
+        start = max(start, request['start'])
+        join = request['join']
+        if join:
+            window.update(join_at=start, take=True, end=start + int(join['seconds'] * SECOND))
+        else:
+            window.update(end=start, take=False)
+        with self.lock:
+            if self.fill_request is request:
+                self.fill_report = {'end': window['end'], 'take': window['take'], 'fixed': not join}
+
+    def _fill_next(self, due, pts):
+        """The next of the fill: what the operator queued, a due promo, else a short ad; else the end card."""
+        now = time.time()
+        reel, kind = self._take(now, fill=True)
+        if reel is None:
+            return
+        self.wake.set()                      # cue the one after
+        if reel.failed:
+            self.done.append(reel)
+            return
+        self.break_items += 1
+        self.reel, self.reel_kind, self.reel_start, self.reel_start_pts = reel, kind, due, pts
+        if kind == 'promo':
+            self.promo_playing = (reel.ad['id'], now)
+        else:
+            self.now_playing = (reel.ad['id'], now)
+
+    def _fill_join(self, due, pts, window):
+        """The join bumper goes on (once decoded): the window then ends at its end, for good."""
+        with self.lock:
+            reel, self.cued_join = self.cued_join, None
+            request = window['request']
+            joined = reel is not None and not reel.failed
+            if not joined:                   # not decoded yet: the end moves with it
+                window['join_at'] = pts
+                window['end'] = pts + int(request['join']['seconds'] * SECOND)
+                if reel is not None:         # it failed: the window ends now, the take follows
+                    window.update(end=pts, take=True)
+            if self.fill_request is request:
+                self.fill_report = {'end': window['end'], 'take': True, 'fixed': joined or reel is not None}
+        if reel is None:
+            return
+        if not joined:
+            self.done.append(reel)
+            LOG.warning('The sports join bumper failed: %s', reel.failed)
+            return
+        window['joined'] = True
+        window['end'] = pts + int(reel.ad['duration'] * SECOND)
+        with self.lock:
+            if self.fill_request is request:
+                self.fill_report = {'end': window['end'], 'take': True, 'fixed': True}
+        self.reel, self.reel_kind, self.reel_start, self.reel_start_pts = reel, 'join', due, pts
+        self.now_playing = None
+
+    def _fill_close(self, due, window):
+        if self.reel is not None and self.fill is window:
+            self._finish(due, cut=self.reel_kind != 'join')
+        if self.fill is window:
+            self.fill = None
+            self.state, self.break_end = 'idle', due
+        with self.lock:
+            if self.fill_request is window['request']:
+                self.fill_request, self.fill_report, self.filling = None, None, False
+        self.wake.set()                      # the helper lets the bumper go
+
+    def fill_sound(self, due, pts, size):
+        """The wait fill's sound for one buffer at running time pts; None outside one (or with
+        nothing on in it: the ID's own silence)."""
+        window = self.fill
+        if window is None or pts is None or pts < window['request']['start'] or self.reel is None:
+            return None
+        try:
+            return self.reel.sound(due - self.reel_start, size)
+        except Exception:            # the ID's own silence rather than no sound at all
+            LOG.debug('The wait fill\'s sound failed', exc_info=True)
+            return None
+
     def sound(self, due, at, gain_at, scaled):
         """The break's sound for one programme audio buffer (scaled: already faded by ad
         mute's gain): the ad's or promo's, crossfaded with the programme's. None: the usual
@@ -621,7 +1070,12 @@ class AdBreak:
         if not self.active:
             return None
         end = at + len(scaled) * SECOND // (RATE * FRAME_BYTES)
-        self._follow(due, gain_at((at + end) // 2) < .5)
+        # The picture decides when a break starts and ends; the sound only while no frame has
+        # come for a second. When the two disagreed (2026-10-08 11:56-11:58, a second input
+        # tapped: the frames said muted, the sound not), each cut and restarted the ad:
+        # 48 of my ads in two minutes, each on air for about a second.
+        if self.picture_due is None or due - self.picture_due > SECOND:
+            self._follow(due, gain_at((at + end) // 2) < .5)
         if self.reel is None:
             return None
         mine = self.reel.sound(due - self.reel_start, len(scaled))
@@ -668,8 +1122,10 @@ class AdBreak:
                                 reel.ad.get('name') or reel.ad['id'], 'on air' if reel is self.reel else 'while cued',
                                 reel.failed)
         self._load_card()
+        self._cue_join()
         self._cue()
         self._cue_promo()
+        self._save_queue()
 
     def _load_card(self):
         settings = self.settings
@@ -693,50 +1149,144 @@ class AdBreak:
             LOG.warning('%s', self.card_error)
 
     def _cue(self):
+        """Keeps Next up, and its first entry that may go on now cued."""
         settings, now, playing = self.settings, time.time(), self.now_playing
         with self.lock:
             cued = self.cued
-        if not self.active or not self.ads_on or not settings:
+        if not settings:
             if cued is not None:
                 self._drop(cued)
             return
         # The ad on air counts towards its limit while it plays.
         plays = self.plays + ([{'kind': 'ad', 'id': playing[0], 'at': playing[1], 'counted': True}] if playing else [])
-        ads = {a['id']: a for a in settings['ads']}
+        self._keep_queue(settings, plays, now)
+        entry = self._first() if self.active or self.filling else None
         if cued is not None:
-            ad = ads.get(cued.ad['id'])
-            same = ad is not None and all(ad.get(k) == cued.ad.get(k) for k in ('file', 'gain_db', 'trim_db'))
-            if same and not cued.failed and allowed(ad, plays, now):
+            why = self._stale(cued, entry)
+            if why is None:
                 return
-            LOG.info('My ads: %r is no longer next (%s)', cued.ad.get('name') or cued.ad['id'],
-                     'failed' if cued.failed else 'changed' if ad is not None and not same else 'removed' if ad is None
-                     else 'over its limit or switched off')
+            LOG.info('My ads: %r is no longer next (%s)', cued.ad.get('name') or cued.ad['id'], why)
             self._drop(cued)
-        with self.lock:
-            self.left_out = {k: v for k, v in self.left_out.items() if v[0] > now}
-            ad = self.rotation.pick(settings, plays, now, skip=set(self.left_out))
-        if ad is None:
+        if entry is None:
             return
-        reel = None
         try:
+            reel = self._reel(entry)
+        except Exception as exc:
+            with self.lock:
+                self.left_out[entry['id']] = (now + self.LEAVE_OUT, str(exc)[:200])
+                self.queue = [e for e in self.queue if e['key'] != entry['key']]
+            LOG.warning('%s %r is left out for %d minutes: %s', 'My ad' if entry['kind'] == 'ad' else 'Station promo',
+                        entry['id'], self.LEAVE_OUT // 60, exc)
+            return
+        with self.lock:
+            if self.cued is None and (self.active or self.filling) and any(e is entry for e in self.queue):
+                self.cued, reel = reel, None
+        if reel is not None:
+            reel.close()
+
+    def _keep_queue(self, settings, plays, now):
+        """Next up: drops what can no longer air (gone; the rotation's over its limit or
+        switched off; a promo that cannot air now) and draws the rotation's next ads, AHEAD of
+        them. A new order (or list order) puts the rotation's back and draws them again. The
+        limits are weighed outside the lock: the programme-delay thread takes from Next up."""
+        ads = {a['id']: a for a in settings['ads']}
+        order = (settings['order'], tuple(ads) if settings['order'] == 'list' else None)
+        # Only plays that a limit can still see count (the longest limit, not the week).
+        horizon = max((a['limit']['minutes'] for a in settings['ads'] if a.get('limit')), default=0) * 60
+        plays = [p for p in plays if p.get('kind', 'ad') == 'ad' and played(p) and p.get('at', 0) >= now - horizon]
+        with self.lock:
+            if order != self.queue_order:
+                if self.queue_order is not None:
+                    self.rotation.undraw([e['id'] for e in self.queue if e['by'] == 'rotation'], self.last_aired)
+                self.queue = [e for e in self.queue if e['by'] != 'rotation']
+                self.queue_order = order
+            self.left_out = {k: v for k, v in self.left_out.items() if v[0] > now}
+            queue, left_out = list(self.queue), set(self.left_out)
+            library, values, known = self.library, self.promo_values, self.library_folder is not None
+        ahead, gone, drawn = [], set(), 0    # ahead: plays to come, for the limits of what follows them
+        for e in queue:
+            if e['kind'] == 'ad':
+                ad = ads.get(e['id'])
+                if ad is None or (e['by'] == 'rotation' and not allowed(ad, plays + ahead, now)):
+                    gone.add(e['key'])
+                    continue
+                ahead.append({'kind': 'ad', 'id': e['id'], 'at': now, 'counted': True})
+                drawn += e['by'] == 'rotation'
+            elif known and (e['id'] not in library or readiness(library[e['id']], values)):
+                gone.add(e['key'])
+        new = []
+        while drawn < self.AHEAD:            # the rotation is the helper's alone
+            ad = self.rotation.pick(settings, plays + ahead, now, skip=left_out)
+            if ad is None:
+                break
+            self.rotation.played(ad['id'])
+            new.append(_entry('ad', ad['id'], 'rotation'))
+            ahead.append({'kind': 'ad', 'id': ad['id'], 'at': now, 'counted': True})
+            drawn += 1
+        if gone or new:
+            with self.lock:
+                self.queue = [e for e in self.queue if e['key'] not in gone] + new
+
+    def _first(self):
+        """The first entry of Next up that may go on now: an ad with My ads on (in a wait fill,
+        a short one), a promo with promos on; none left out."""
+        ads = {a['id']: a for a in (self.settings or {}).get('ads', [])}
+        with self.lock:
+            for e in self.queue:
+                if e['id'] in self.left_out:
+                    continue
+                if e['kind'] == 'ad':
+                    if self.ads_on and not (self.filling and (ads.get(e['id'], {}).get('duration') or 0) > self.FILL_LONGEST):
+                        return e
+                elif self.promos_on and self.library_folder is not None:
+                    return e
+        return None
+
+    def _stale(self, cued, entry):
+        """Why the cued reel should not stay cued for entry (Next up's first), or None."""
+        mine = getattr(cued, 'entry', None)
+        if cued.failed:
+            return 'failed'
+        if entry is None or mine is None or mine['key'] != entry['key']:
+            with self.lock:
+                there = mine is not None and any(e['key'] == mine['key'] for e in self.queue)
+            return 'not first any more' if there else 'out of Next up'
+        if entry['kind'] == 'ad':
+            ad = next((a for a in self.settings['ads'] if a['id'] == entry['id']), None)
+            if ad is None or any(ad.get(k) != cued.ad.get(k) for k in ('file', 'gain_db', 'trim_db')):
+                return 'changed'
+        else:
+            promo = self.library.get(entry['id'])
+            if promo is None or promo != cued.ad or self._promo_path(promo, self.promo_values) != cued.path:
+                return 'changed'
+        return None
+
+    def _reel(self, entry):
+        """A reel for an entry, decoded up to its first frames. RuntimeError: it won't play."""
+        if entry['kind'] == 'ad':
+            ad = next((a for a in self.settings['ads'] if a['id'] == entry['id']), None)
+            if ad is None:
+                raise RuntimeError('it is gone')
             path = self.folder / ad['file']
             if not path.is_file():
                 raise RuntimeError('its file is missing')
             reel = Reel(self.gst, ad, path, self.caps, self.output.audio_caps)
+        else:
+            promo = self.library.get(entry['id'])
+            if promo is None:
+                raise RuntimeError('it is gone')
+            path = self._promo_path(promo, self.promo_values)
+            if not path.is_file():
+                raise RuntimeError('its file is missing')
+            reel = PromoReel(self.gst, promo, path, self.caps, self.output.audio_caps, self.promo_values)
+        reel.entry = entry
+        try:
             if not reel.cue():
                 raise RuntimeError(reel.failed)
-        except Exception as exc:
-            with self.lock:
-                self.left_out[ad['id']] = (now + self.LEAVE_OUT, str(exc)[:200])
-            LOG.warning('My ad %r is left out for %d minutes: %s', ad.get('name') or ad['id'], self.LEAVE_OUT // 60, exc)
-            if reel is not None:
-                reel.close()
-            return
-        with self.lock:
-            if self.cued is None and self.active and self.ads_on:
-                self.cued, reel = reel, None
-        if reel is not None:
+        except BaseException:
             reel.close()
+            raise
+        return reel
 
     def _drop(self, reel):
         with self.lock:
@@ -754,47 +1304,82 @@ class AdBreak:
         return Path(self.library_folder) / promo['file']
 
     def _cue_promo(self):
+        """Keeps the rotation's next promo (kept until it airs, is skipped or cannot air now),
+        cued while breaks may come."""
         settings, values, library, now = self.promos, self.promo_values, self.library, time.time()
         with self.lock:
             cued = self.cued_promo
-        if not self.active or not self.promos_on or not settings or self.library_folder is None:
+        if not self.promos_on or not settings or self.library_folder is None:
+            with self.lock:
+                self.next_promo = None
+            if cued is not None:
+                self._drop_promo(cued)
+            return
+        with self.lock:
+            self.left_out = {k: v for k, v in self.left_out.items() if v[0] > now}
+            entry = self.next_promo
+            promo = entry and library.get(entry['id'])
+            if entry is not None and (promo is None or not switched_on(settings, promo['id'])
+                                      or readiness(promo, values) or promo['id'] in self.left_out):
+                entry = self.next_promo = None
+            if entry is None:
+                choices = [{'id': p['id'], 'enabled': True, 'limit': None} for p in library.values()
+                           if switched_on(settings, p['id']) and readiness(p, values) is None and p['id'] not in self.left_out]
+                pick = self.promo_rotation.pick({'ads': choices, 'order': 'shuffle'}, [], now) if choices else None
+                if pick is not None:
+                    entry = self.next_promo = _entry('promo', pick['id'], 'promos')
+        if not (self.active or self.filling) or entry is None:
             if cued is not None:
                 self._drop_promo(cued)
             return
         if cued is not None:
-            promo = library.get(cued.ad['id'])
-            why = ('removed' if promo is None else 'switched off' if not switched_on(settings, promo['id'])
-                   else 'failed' if cued.failed else readiness(promo, values)
-                   or ('changed' if self._promo_path(promo, values) != cued.path or promo != cued.ad else None))
+            why = self._stale(cued, entry)
             if why is None:
                 return
             LOG.info('Station promo %r is no longer next (%s)', cued.ad.get('name') or cued.ad['id'], why)
             self._drop_promo(cued)
-        with self.lock:
-            self.left_out = {k: v for k, v in self.left_out.items() if v[0] > now}
-            choices = [{'id': p['id'], 'enabled': True, 'limit': None} for p in library.values()
-                       if switched_on(settings, p['id']) and readiness(p, values) is None and p['id'] not in self.left_out]
-            pick = self.promo_rotation.pick({'ads': choices, 'order': 'shuffle'}, [], now) if choices else None
-        if pick is None:
-            return
-        promo, reel = library[pick['id']], None
         try:
-            path = self._promo_path(promo, values)
-            if not path.is_file():
-                raise RuntimeError('its file is missing')
-            reel = PromoReel(self.gst, promo, path, self.caps, self.output.audio_caps, values)
-            if not reel.cue():
-                raise RuntimeError(reel.failed)
+            reel = self._reel(entry)
         except Exception as exc:
             with self.lock:
-                self.left_out[promo['id']] = (now + self.LEAVE_OUT, str(exc)[:200])
-            LOG.warning('Station promo %r is left out for %d minutes: %s', promo['name'], self.LEAVE_OUT // 60, exc)
-            if reel is not None:
-                reel.close()
+                self.left_out[entry['id']] = (now + self.LEAVE_OUT, str(exc)[:200])
+                if self.next_promo is entry:
+                    self.next_promo = None
+            LOG.warning('Station promo %r is left out for %d minutes: %s', entry['id'], self.LEAVE_OUT // 60, exc)
             return
         with self.lock:
-            if self.cued_promo is None and self.active and self.promos_on:
+            if self.cued_promo is None and (self.active or self.filling) and self.promos_on and self.next_promo is entry:
                 self.cued_promo, reel = reel, None
+        if reel is not None:
+            reel.close()
+
+    # ------------------------------------------------------------ the join bumper (the helper's)
+    def _cue_join(self):
+        """Decode the join bumper the fill asks for, ahead of its turn; let it go after."""
+        try:
+            self._cue_join_now()
+        except Exception:            # never in the way of cueing the ads
+            LOG.exception('The sports join bumper could not be cued')
+
+    def _cue_join_now(self):
+        with self.lock:
+            request, cued = self.fill_request, self.cued_join
+            join = request and request['stop'] is None and request['join']
+        if cued is not None and (not join or str(cued.path) != join['path']):
+            with self.lock:
+                if self.cued_join is cued:
+                    self.cued_join = None
+            cued.close()
+            cued = None
+        if not join or cued is not None:
+            return
+        reel = Reel(self.gst, {'id': 'sports-join', 'name': 'We now join', 'duration': float(join['seconds'])},
+                    join['path'], self.caps, self.output.audio_caps)
+        if not reel.cue():
+            LOG.warning('The sports join bumper could not be decoded: %s', reel.failed)
+        with self.lock:
+            if self.fill_request is request and self.cued_join is None:
+                self.cued_join, reel = reel, None
         if reel is not None:
             reel.close()
 

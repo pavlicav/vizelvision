@@ -49,6 +49,16 @@ there).
 - **Sound.** An ad's sound replaces the programme's, crossfaded with ad mute's gain.
   Under the break card, the sound is ad mute's own break sound: silence or Cairo radio.
 
+## Filling a wait
+
+The same machinery fills the wait for the next program: while the station ID holds its end
+card for a source still being prepared (the Roku changing channel), your ads play over it,
+full frame with no corner, a due station promo first ([station ID](station-id.md#covering-a-channel-change)).
+It works with ad mute in any mode, since nothing is muted. Only ads of 31 s or less start
+there, and the one on air plays out before the next program. Before a game already under
+way, the "We now join…" bumper follows it. Those plays count towards limits as any other
+and are marked "while the next program got ready".
+
 ## Station promos in the break
 
 The station's own bumpers share the break ([promos.md](promos.md)). When one is due (none for
@@ -57,6 +67,35 @@ also stand in before the break card when none of your ads may play. They are log
 `my-ads-plays.jsonl` with `kind: promo`, and master's status reads `state: promo` while one
 airs. With My ads switched off, a due promo still opens the break, and the break then goes on
 as ad mute has it (`state: pass`).
+
+## Next up
+
+The tab's **Next up** shows what the breaks play next, in order, and lets you change it.
+Master keeps it (`ad_break.AdBreak`): the page only asks.
+
+- **The rotation is drawn ahead.** Master keeps the rotation's next five ads drawn into
+  Next up (shuffle or list order, limits and switches as below). The first is the one
+  decoded and ready (cued). In a break, each row says when it would start if the break lasts.
+- **The station promo** (one at a time, the rotation's next) shows where its timing puts it:
+  between breaks, first, opening the next break once due (every 5 minutes as set now); in a
+  break, after whatever ends past its due time.
+- **Skip** takes an ad out of Next up and out of this round: it comes back in a later one.
+  Skipping the promo puts another promo in its place.
+- **Skip what is on air** (the On air panel): the ad or promo is cut at the next frame and
+  what is next goes on. Its play is logged `skipped`; an ad still counts towards its limit
+  if 10 s of it aired. A skipped promo counts as the break's promo, so no other promo
+  replaces it at once. While the next program is ready in a wait fill, the ad on air plays
+  out (it cannot be skipped).
+- **Queue by hand:** pick any ad or promo and **Play next** (first) or **Add to queue**
+  (after whatever else you queued); each ad's **Queue** button does the same. What you queue
+  plays before the rotation and **before a due promo**, even when it is switched off or
+  over its limit (it still counts towards the limit once it airs). My ads must be on for an
+  ad, promos for a promo. A promo that cannot air now (say, Baseball outside an MLB game) is
+  refused. At most 20 wait. In a wait fill, a long one (over 31 s) waits for a real break.
+- **A restart keeps** what you queued by hand (`my-ads-queue.json`); the rotation's part is
+  drawn again.
+- **A new order** (Shuffle ↔ In list order, or the list reordered in list order) draws the
+  rotation's part again, after the last ad that aired.
 
 ## Order and limits
 
@@ -67,7 +106,10 @@ as ad mute has it (`state: pass`).
 - **Limits** are per ad: at most N plays in any stretch of M minutes. The presets run
   from once every 15 minutes to once a day; **Custom** allows 1–50 plays in 5 minutes
   to a week. **Limit for new uploads** sets the limit each new upload gets.
-- **What counts as a play:** a play counts towards a limit once half the ad has aired.
+- **What counts as a play:** a play counts towards a limit once 10 s of it has aired, or
+  half of an ad under 20 s (breaks often end mid-ad). Until 8 October 2026 it was half of
+  any ad; plays logged before then are counted by the new rule from what aired of them
+  (`my_ads.played`).
   An ad cut short by the programme's return before that does not count. While an ad
   airs, it counts already, so the next one cued respects its limit.
 - **Sitting out:** an ad switched off, or over its limit, sits out. The page shows
@@ -102,7 +144,8 @@ Beside the master socket (`state/master-candidate/`):
 | `my-ads/<id>.<ext>` | the ads as uploaded |
 | `my-ads/<id>-<n>.jpg` | their pictures |
 | `my-ads/card-<hash>.png`, `my-ads/card-own-*.{png,jpg,webp}` | the break card (the station card's words, or your picture) |
-| `my-ads-plays.jsonl` | what aired: `{kind: ad, id, name, at, seconds, length, complete, counted[, error]}` and `{kind: card, at, seconds}` (master writes it) |
+| `my-ads-plays.jsonl` | what aired: `{kind: ad, id, name, at, seconds, length, complete, counted[, error, skipped, queued]}` and `{kind: card, at, seconds}` (master writes it) |
+| `my-ads-queue.json` | what you queued by hand in Next up: `[{kind, id}]` (master writes it, and reads it when it starts) |
 
 ## The API
 
@@ -115,20 +158,27 @@ Beside the master socket (`state/master-candidate/`):
 | `POST /v1/my-ads/order` `{ids}` · `/shuffle` `{}` | reorder · a random order |
 | `POST /v1/my-ads/card-image?name=` · `DELETE` | your own card picture · back to the station card |
 | `GET /v1/my-ads/file/<name>` | an ad (`<id>`), a picture, or the card, for the page |
+| `POST /v1/my-ads/next` | Next up, on master: `{op: add, kind: ad\|promo, id, next}` (next: first, else after what you queued) · `{op: skip, key}` (an entry, the next promo, or what is on air). Answers the view, with master's fresh status and `result` |
 
 Master's status (`GET /v1/master` → `my_ads`): `active`, `state` (idle/ad/card), the ad
-on air and its position, `cued`, `card`, and the ads `left_out` with why.
+on air and its position (with its Next up `key`), `cued`, `card`, the ads `left_out` with why,
+and `next`: Next up in order, each `{key, kind, id, by (you|rotation|promos), name, duration,
+cued, in (seconds, in a break), left_out}`, the promo also with `due_at` and `opens`.
+
+`GET /v1/my-ads` also lists the station promos for the picker (`promos`: enabled, every, and
+each with `why` it cannot air now).
 
 ## Tests
 
 ```bash
 /usr/bin/python3 -m unittest tests.test_my_ads                  # settings, rotation, limits, store, routes, the break with stand-in ads
+/usr/bin/python3 -m unittest tests.test_next_up                 # Next up: drawn ahead, skip, queue by hand, skip on air, the promo's place
 nice -n 19 /usr/bin/python3 tests/myads_master_integration.py   # a real master: ads, card, corner, sound, cut short, play log
 node tests/browser_ui_my_ads.cjs <playwright>                   # its tab
 ```
 
 ## Deploying
 
-Changes to `ad_break.py` or `master_media.py` need a master restart. New routes need a
+Changes to `ad_break.py`, `master_media.py` or `master_worker.py` need a master restart. New routes need a
 web restart. Both drop what is on air, so restart only with nothing on air, then
 `POST /v1/queue/resume`. The page's own files (`static/ui/ads.html`, `my-ads.js`) need no restart.

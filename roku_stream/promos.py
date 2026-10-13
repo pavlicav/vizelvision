@@ -4,7 +4,8 @@ ident/promos/build.py), aired in the breaks ad mute takes off air, beside My ads
 - **At least one every `every` minutes** (15 by default). Once that long has passed since
   the last promo aired, the next break opens with one, as breaks allow. A promo that
   the programme's return cuts short before half of it airs does not count, so the next
-  break tries again.
+  break tries again. **`every` 0: every break** opens with one (master plays it only before
+  anything else in the break, so they never run back to back).
 - **Fill** (off by default): when My ads has nothing left to show, promos stand in before
   the break card, each once a break.
 - With My ads switched off, a promo still opens the break when one is due; the break then
@@ -12,6 +13,8 @@ ident/promos/build.py), aired in the breaks ad mute takes off air, beside My ads
 - **Live text.** Some promos carry text that master draws as they air (promo_overlay.py):
   the time and the temperature, or the programme on air. A promo whose text is not known
   sits out (no temperature reading, no programme name).
+- **Sports.** A promo with `leagues` in its manifest (baseball: mlb; football: nfl, ncaaf)
+  airs only while a game of one of them is on air. Otherwise it sits out.
 - **A voiced name.** 'only-on' also says the programme's name: the web app has it voiced
   (Deepgram, as the continuity announcements are) and mixed into a copy of the promo
   whenever the programme changes (PromoDesk). Until that copy is ready, the promo airs
@@ -23,7 +26,8 @@ is ad_break.py.
 
     ident/promos/<id>.mp4, .png, .json   the promos, a still of each, their manifests (the build's)
     promos.json        settings (beside the master socket)
-    promos-now.json    live values: the temperature, the programme on air, its voiced copies
+    promos-now.json    live values: the temperature, the programme on air (and its league, for a
+                       game), its voiced copies
     promos/            those copies (<promo>-<hash>.mp4)
 Plays are logged with My ads' plays (my-ads-plays.jsonl), kind "promo".
 """
@@ -50,6 +54,7 @@ DEFAULTS = {
     # Play promos in the breaks ad mute takes off air (its mode On).
     'enabled': True,
     # At least one every this many minutes: the first break after that opens with one.
+    # 0: every break opens with one.
     'every': 15,
     # When My ads has nothing left, promos stand in (each once a break) before the break card.
     'fill': False,
@@ -57,7 +62,8 @@ DEFAULTS = {
     'promos': {},
 }
 EVERY = (5, 240)
-EVERY_CHOICES = (5, 10, 15, 20, 30, 45, 60, 90, 120)
+EVERY_BREAK = 0
+EVERY_CHOICES = (EVERY_BREAK, 5, 10, 15, 20, 30, 45, 60, 90, 120)
 # The web app writes the live values every minute; older ones are not trusted (it is down).
 FRESH_VALUES = 300
 # Weather stations report hourly; the crawl's weather goes stale after the same.
@@ -82,8 +88,9 @@ def validate(value, *, lenient=False):
         if not isinstance(result[key], bool):
             raise ConfigError(f'{key} must be true or false')
     every = result['every']
-    if isinstance(every, bool) or not isinstance(every, int) or not EVERY[0] <= every <= EVERY[1]:
-        raise ConfigError(f'every is a whole number of minutes from {EVERY[0]} to {EVERY[1]}')
+    if (isinstance(every, bool) or not isinstance(every, int)
+            or not (every == EVERY_BREAK or EVERY[0] <= every <= EVERY[1])):
+        raise ConfigError(f'every is a whole number of minutes from {EVERY[0]} to {EVERY[1]}, or 0 for every break')
     promos = result['promos']
     if not isinstance(promos, dict) or len(promos) > 100:
         raise ConfigError('promos maps a promo id to its settings')
@@ -131,13 +138,18 @@ def _manifest(raw, folder, name):
                 or not all(isinstance(voice.get(k), (int, float)) for k in ('start', 'earliest', 'end'))
                 or not 0 <= voice['earliest'] <= voice['start'] < voice['end'] <= duration):
             raise ValueError('its voice needs model, template (with {name}), music, earliest, start and end')
+    leagues = raw.get('leagues') or []
+    if (not isinstance(leagues, list) or len(leagues) > 10
+            or not all(isinstance(league, str) and _ID.match(league) for league in leagues)):
+        raise ValueError('its leagues are a list of league ids (mlb, nfl, ...)')
     still = raw.get('still')
     still = still if isinstance(still, str) and still == name + '.png' else None
     return {'id': name, 'name': str(raw.get('name') or name)[:60], 'kind': raw.get('kind') if raw.get('kind') in ('ident', 'promo') else 'promo',
             'description': str(raw.get('description') or '')[:400], 'order': raw.get('order') if isinstance(raw.get('order'), int) else 99,
             'duration': float(duration), 'file': raw['file'], 'still': still,
             'still_at': float(raw.get('still_at') or duration / 2), 'overlays': overlays, 'voice': voice,
-            'needs': sorted({NEEDS[o['field']] for o in overlays if o['field'] in NEEDS}),
+            'leagues': list(leagues),
+            'needs': sorted({NEEDS[o['field']] for o in overlays if o['field'] in NEEDS} | ({'league'} if leagues else set())),
             'built_at': raw.get('built_at'), 'present': (folder / raw['file']).is_file()}
 
 
@@ -196,6 +208,8 @@ def fresh(values, now=None):
         variants = programme.get('variants') if isinstance(programme.get('variants'), dict) else {}
         result['programme'] = {'title': programme['title'].strip()[:120], 'spoken': programme.get('spoken'),
                                'variants': {k: v for k, v in variants.items() if isinstance(v, str) and _VARIANT.match(v)}}
+        if isinstance(programme.get('league'), str) and _ID.match(programme['league']):
+            result['programme']['league'] = programme['league']
     return result
 
 
@@ -207,6 +221,9 @@ def readiness(promo, values):
         return 'no recent temperature reading'
     if 'programme' in promo['needs'] and not values.get('programme'):
         return 'no programme name on air'
+    leagues = promo.get('leagues')
+    if leagues and (values.get('programme') or {}).get('league') not in leagues:
+        return 'only during ' + ' or '.join(league.upper() for league in leagues) + ' games'
     return None
 
 
@@ -216,7 +233,8 @@ def last_promo(plays):
 
 
 def due(settings, last, now):
-    """Is a promo due: none counted yet, or none for `every` minutes."""
+    """Is a promo due: none counted yet, or none for `every` minutes (with 0, always: master
+    then opens each break with one)."""
     return last is None or now - last >= settings['every'] * 60
 
 
@@ -317,6 +335,15 @@ def display_name(segment, game_info=None):
     return title[:120] or None
 
 
+def league_of(segment):
+    """The league of the game a segment airs ("mlb", "nfl", ...), or None if it is not a game."""
+    game = (segment or {}).get('game')
+    if not isinstance(game, dict) or game.get('game_pk') is None:
+        return None
+    league = game.get('league') or 'mlb'
+    return league if isinstance(league, str) and _ID.match(league) else None
+
+
 def spoken_line(template, spoken):
     """The voiced line: the template with the programme's name, capitalised to start."""
     name = ' '.join(str(spoken).split())
@@ -326,8 +353,8 @@ def spoken_line(template, spoken):
 class PromoDesk:
     """Keeps promos-now.json fresh for master (every minute, and at once on a change): the
     temperature (an api.weather.gov reading, fetched only while a promo needs it), and the
-    programme on air with, for a promo that says its name, a copy voiced and mixed for it.
-    Also builds the page's view.
+    programme on air with, for a promo that says its name, a copy voiced and mixed for it,
+    and the league of the game on air (for the sports promos). Also builds the page's view.
 
     programme() returns the segment on air (playback projection) or None; name(segment)
     gives (shown, spoken) for it; weather is a crawl_feeds.WeatherFeed of its own (its
@@ -398,15 +425,18 @@ class PromoDesk:
                 else:
                     errors['temperature'] = (self.weather.status().get('error')
                                              or ('The last reading is over 3 hours old' if reading else 'No reading yet'))
-        if 'programme' in needs and self.programme is not None:
+        if needs & {'programme', 'league'} and self.programme is not None:
             try:
                 segment = self.programme()
                 shown, spoken = self.name(segment) if segment else (None, None)
             except Exception as exc:
-                shown, spoken = None, None
+                segment, shown, spoken = None, None, None
                 errors['programme'] = f'The playback projection is unavailable: {exc}'
             if shown:
                 programme = {'title': shown, 'spoken': spoken or shown, 'variants': {}}
+                league = league_of(segment)
+                if league:
+                    programme['league'] = league
                 for promo in wanted:
                     if promo.get('voice'):
                         made = self._variant(promo, programme['spoken'])

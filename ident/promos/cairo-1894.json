@@ -1,0 +1,20 @@
+{
+  "id": "cairo-1894",
+  "version": 1,
+  "name": "The Cairo, 1894",
+  "kind": "ident",
+  "order": 17,
+  "description": "A sepia silent film: the fire ladder runs up The Cairo a section a note and stops at the seventh floor; \"TOO TALL!\" said the Fire Chief, and Congress capped the city in 1899. VizelVision, still on top since 1894. Ragtime piano, no voice.",
+  "duration": 10.0,
+  "file": "cairo-1894.mp4",
+  "still": "cairo-1894.png",
+  "still_at": 8.2,
+  "overlays": [],
+  "voice": null,
+  "leagues": [],
+  "loudness": {
+    "input": "-15.38",
+    "target": -20.0
+  },
+  "built_at": "2026-10-07T19:59:55-0400"
+}

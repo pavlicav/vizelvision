@@ -56,6 +56,7 @@ from . import crawl_feeds
 from .production_monitor import ProductionMonitor
 from . import playback
 from .continuity import Continuity, Voice
+from .sports_join import SportsJoin
 from .ident import ident_file
 from .programming import Programming
 from .sports import SportsCatalog
@@ -335,7 +336,7 @@ def handler_factory(
         ads = []
         for ad in settings['ads']:
             mine = [p for p in plays if p.get('kind') == 'ad' and p.get('id') == ad['id']]
-            counted = [p['at'] for p in mine if p.get('counted')]
+            counted = [p['at'] for p in mine if my_ads_module.played(p)]
             ads.append({**ad, 'present': (my_ads.folder / ad['file']).is_file(),
                         'allowed': my_ads_module.allowed(ad, plays, now),
                         'again': my_ads_module.allowed_again(ad, plays, now),
@@ -343,8 +344,15 @@ def handler_factory(
                                    'day': sum(1 for t in counted if t >= now - 86400), 'week': len(counted),
                                    'last': max((p['at'] for p in mine), default=None)}})
         cards = [p for p in plays if p.get('kind') == 'card']
+        # The station promos, for Next up's picker: each with whether it may air now.
+        promo_settings, values = promo_desk.store.read(), promos_module.fresh(promo_desk.store.values(), now)
+        promos = [{'id': p['id'], 'name': p['name'], 'duration': p['duration'], 'still': p['still'],
+                   'enabled': promos_module.switched_on(promo_settings, p['id']), 'why': promos_module.readiness(p, values)}
+                  for p in promo_desk.library.read()]
         return {'settings': {k: v for k, v in settings.items() if k != 'ads'}, 'ads': ads, 'status': worker,
-                'admute_mode': admute_settings.read()['mode'], 'on_air': on_air, 'recent': plays[-80:][::-1],
+                'promos': {'enabled': promo_settings['enabled'], 'every': promo_settings['every'], 'list': promos},
+                'admute_mode': admute_settings.read()['mode'], 'on_air': on_air,
+                'recent': [{**p, 'counted': my_ads_module.played(p)} if p.get('kind', 'ad') == 'ad' else p for p in plays[-80:][::-1]],
                 'card': {'file': my_ads_module.card_file(settings),
                          'seconds_today': round(sum(p.get('seconds', 0) for p in cards if p['at'] >= now - 86400))},
                 'limits': {'bytes': my_ads_module.MAX_BYTES, 'image_bytes': my_ads_module.MAX_IMAGE_BYTES,
@@ -1036,6 +1044,15 @@ def handler_factory(
                         raise ConfigError('Shuffle takes an empty object')
                     my_ads.shuffle()
                     self._json(HTTPStatus.OK, my_ads_view())
+                elif path == '/v1/my-ads/next':
+                    # Next up in breaks, on master: {op: add, kind, id, next} or {op: skip, key}.
+                    if data.get('op') not in ('add', 'skip') or set(data) - {'op', 'kind', 'id', 'next', 'key'}:
+                        raise ConfigError('Next up takes op add (kind, id, next) or skip (key)')
+                    result = worker_client.request('my_ads', data)
+                    view = my_ads_view()
+                    if isinstance(result.get('my_ads'), dict):   # fresher than the worker's last publication
+                        view['status'] = {**(view['status'] or {}), **result['my_ads']}
+                    self._json(HTTPStatus.OK, {**view, 'result': {k: v for k, v in result.items() if k != 'my_ads'}})
                 elif path == '/v1/crawl/dismiss':
                     if set(data) - {'source', 'id', 'dismissed'}:
                         raise ConfigError('Dismiss takes source, id and dismissed')
@@ -1363,6 +1380,9 @@ def serve(config: AppConfig) -> None:
                                 project=lambda: projector.describe(datetime.now(timezone.utc),
                                                                    datetime.now(timezone.utc) + timedelta(hours=6))['segments'],
                                 spoken=projector.spoken, master=coordinator.master, start_worker=False)
+        # The "We now join..." bumper before a game joined in progress (sports_join.py).
+        from .continuity import mix as continuity_mix
+        coordinator.joiner = SportsJoin(folder, voice=continuity.voice, sports=sports.game, mix=continuity_mix)
     if config.master.enabled:
         # The crawl's rotation: bulletins from public feeds, sent to the worker (crawl_desk.py).
         crawl_settings, feed_settings = CrawlSettings(config.master), FeedSettings(config.master)

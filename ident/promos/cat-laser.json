@@ -1,0 +1,20 @@
+{
+  "id": "cat-laser",
+  "version": 1,
+  "name": "Orange Cat Behavior: The Dot",
+  "kind": "ident",
+  "order": 11,
+  "description": "A nature documentary: the orange cat stalks a laser dot, wiggles once on each note of the logo, pounces, and ends up with the dot on its own head; the dot writes VIZELVISION on the wall. Narrated by Draco.",
+  "duration": 10.0,
+  "file": "cat-laser.mp4",
+  "still": "cat-laser.png",
+  "still_at": 8.75,
+  "overlays": [],
+  "voice": null,
+  "leagues": [],
+  "loudness": {
+    "input": "-12.45",
+    "target": -20.0
+  },
+  "built_at": "2026-10-07T19:52:19-0400"
+}

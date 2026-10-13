@@ -147,6 +147,21 @@ dialog.break{width:min(860px,94vw)}
 #panel-my-ads .screen .corner::before{content:'LIVE';position:absolute;left:2px;top:2px;padding:0 3px;background:#cc1616;color:#fff;font:700 8px/1.4 var(--body)}
 #panel-my-ads .screen.off .corner{display:none}
 #panel-my-ads td.when{white-space:nowrap;font-family:var(--mono);font-size:13px}
+/* Next up */
+#panel-my-ads .nextup{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+#panel-my-ads .nextup li{display:grid;grid-template-columns:20px 96px minmax(0,1fr) auto;gap:10px;align-items:center;padding:6px 8px;border:1px solid var(--line);border-radius:var(--r);background:var(--well)}
+#panel-my-ads .nextup li.cued{border-color:var(--pvw-line)}
+#panel-my-ads .nextup li.mine{box-shadow:inset 3px 0 0 var(--touch)}
+#panel-my-ads .nextup li.held{opacity:.6}
+#panel-my-ads .nextup .pos{font:700 16px/1 var(--display);color:var(--muted);text-align:center}
+#panel-my-ads .nextup .thumb{border-radius:4px}
+#panel-my-ads .nextup .what{display:grid;gap:3px;min-width:0}
+#panel-my-ads .nextup .what b{font:600 14px/1.25 var(--body);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#panel-my-ads .nextup .facts{font-size:12px;gap:4px 8px}
+#panel-my-ads .queue-add{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+#panel-my-ads .queue-add select{flex:1 1 220px;min-width:0;height:30px}
+#panel-my-ads .skip-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+@media (max-width:520px){#panel-my-ads .nextup li{grid-template-columns:18px 64px minmax(0,1fr) auto;gap:8px}}
 #panel-my-ads td.aired{white-space:nowrap}
 /* Idents ----------------------------------------------------------------------------------------------- */
 #panel-idents .top{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(300px,1fr);gap:var(--gap);align-items:start;margin-bottom:var(--gap)}
@@ -371,6 +386,7 @@ dialog.preview video{width:100%;max-height:70vh;background:#000;border-radius:va
               <div class="status-big" id="my-status">—</div>
               <div class="small" id="my-status-detail">—</div>
               <div id="progress" hidden><div class="meter ad"><i id="progress-bar" style="width:0"></i></div><div class="tiny muted num" id="progress-text"></div></div>
+              <div class="skip-row"><button type="button" class="sm" id="skip-now" hidden title="Cut it short: what is next in Next up goes on at once"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 5l9 7-9 7zM18 5v14"/></svg><span>Skip this ad</span></button></div>
               <p class="tiny muted" id="next"></p>
               <p class="note bad" id="my-error" role="status"></p>
             </div>
@@ -379,6 +395,18 @@ dialog.preview video{width:100%;max-height:70vh;background:#000;border-radius:va
               <button type="button" id="my-mute" title="Start a break now: my ads until the programme comes back (a)">It's an ad · break now</button>
               <p class="tiny muted">The corner of the screen shows the programme throughout a break. If it is back before the detector notices, press <kbd>u</kbd>.</p>
             </div></div></div></section>
+
+        <section class="panel" id="next-panel" aria-label="Next up"><div class="head"><h2>Next up</h2><div class="end"><span class="tiny muted" id="next-when"></span></div></div>
+          <div class="body stack tight">
+            <ol class="nextup" id="nextup" aria-label="Next up in breaks, in order"></ol>
+            <p class="hint" id="nextup-empty" hidden></p>
+            <form class="queue-add" id="queue-add">
+              <select id="queue-pick" aria-label="An ad or a promo to queue"></select>
+              <button class="sm primary" type="submit" data-next="true" title="Before everything else in Next up">Play next</button>
+              <button class="sm" type="submit" data-next="false" title="After whatever else you queued">Add to queue</button>
+            </form>
+            <p class="tiny muted">What you queue plays first, ahead of a due promo, even when it is switched off or over its limit. Skip takes an ad out of this round (it comes back in a later one) and swaps a promo for another. A station promo opens a break once one is due (<span id="promo-every">every few minutes</span>).</p>
+          </div></section>
 
         <section class="panel" aria-label="Upload"><div class="head"><h2>Upload</h2><div class="end"><span class="tiny muted" id="upload-limits"></span></div></div>
           <div class="body">
@@ -404,7 +432,7 @@ dialog.preview video{width:100%;max-height:70vh;background:#000;border-radius:va
 
         <section class="panel" aria-label="What aired"><div class="head"><h2>What aired</h2><div class="end"><span class="tiny muted" id="card-today"></span></div></div>
           <div class="body scroll-x"><table class="data"><thead><tr><th>When</th><th>What</th><th>Aired</th><th></th></tr></thead><tbody id="recent"></tbody></table>
-            <p class="hint" id="recent-empty">Nothing yet: plays show here as they air. A play counts towards an ad's limit once half of it has aired.</p></div></section>
+            <p class="hint" id="recent-empty">Nothing yet: plays show here as they air. A play counts towards an ad's limit once 10 seconds of it have aired (half, for an ad under 20 seconds).</p></div></section>
       </div>
 
       <div class="stack">

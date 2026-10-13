@@ -122,6 +122,36 @@
   "id": "k1",
   "source_id": "youtube-tv"
  },
+ "promos": {
+  "enabled": true,
+  "every": 5,
+  "list": [
+   {
+    "duration": 10.0,
+    "enabled": true,
+    "id": "metro",
+    "name": "The VizelVision Line",
+    "still": "metro.png",
+    "why": null
+   },
+   {
+    "duration": 10.0,
+    "enabled": true,
+    "id": "baseball",
+    "name": "Baseball on VizelVision",
+    "still": "baseball.png",
+    "why": "only during MLB games"
+   },
+   {
+    "duration": 5.0,
+    "enabled": true,
+    "id": "legal",
+    "name": "Legal ID",
+    "still": "legal.png",
+    "why": null
+   }
+  ]
+ },
  "recent": [
   {
    "at": 1790907388.0,
@@ -189,8 +219,10 @@
  "status": {
   "active": true,
   "ad": {
+   "by": "rotation",
    "duration": 30.03,
    "id": "3f9c1a2b4d5e",
+   "key": "5e1f02aa",
    "name": "Cousin Vinny's Pizza",
    "position": 11.6,
    "since": 1790907388.0
@@ -203,6 +235,43 @@
   "cued": null,
   "error": null,
   "left_out": {},
+  "next": [
+   {
+    "by": "you",
+    "cued": true,
+    "duration": 15.0,
+    "id": "7a1e0c9d8b2f",
+    "in": 18.4,
+    "key": "9b3c7d10",
+    "kind": "ad",
+    "left_out": null,
+    "name": "Rocket Lawn Care"
+   },
+   {
+    "by": "promos",
+    "cued": true,
+    "due_at": 1790907420.0,
+    "duration": 10.0,
+    "id": "metro",
+    "in": 33.4,
+    "key": "c4d2e8f1",
+    "kind": "promo",
+    "left_out": null,
+    "name": "The VizelVision Line",
+    "opens": false
+   },
+   {
+    "by": "you",
+    "cued": false,
+    "duration": 20.5,
+    "id": "c0ffee123456",
+    "in": 43.4,
+    "key": "0a7e66b2",
+    "kind": "ad",
+    "left_out": null,
+    "name": "Hometown Hardware"
+   }
+  ],
   "state": "ad"
  }
 }

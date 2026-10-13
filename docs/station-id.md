@@ -45,6 +45,29 @@ and the cut lands on the ID's black tail as usual. A hold gives up after two min
 the iris closes and master falls back to the test card. A failed or cancelled
 preparation, or pausing the queue, releases the hold the same way.
 
+**Ads fill the wait** (since 7 October 2026). Over the held end card, master plays the
+user's own ads ([My ads](my-ads.md)) and a due station promo, as in a muted break but full
+frame, with nothing in a corner. Only ads of 31 s or less start in a wait, and an ad is
+never cut for the take: once the source is ready, the ad on air plays out, then the iris
+closes. With nothing to show (My ads and promos off, every ad over its limit), the end card
+shows as before. A filled hold gives up after five minutes instead of two.
+
+**"We now join..."** When the next program is a game already under way, a 10-second
+VizelVision Sports bumper plays where the iris would (after the ad on air), with the score
+read over it in the Sports ID's voice: *"We now join the Bengals and the Jaguars, who are
+tied at 7 in the fourth quarter."* The take lands at its end. It replaces the Sports ID in
+the [break before a game](#vizelvision-sports); a game that has not started still gets
+the Sports ID. See [the join bumper](#the-join-bumper).
+
+- The wait is a window on master's running clock, opened where the end card froze
+  (`AdBreak.fill_start`). The ads play in it on what master releases, which runs the
+  programme delay (9 s) behind the inputs. When the source is ready, `fill_finish` plans
+  where the window ends: the ad's end, or the bumper's. The worker irises the ID out
+  there, or the coordinator takes there (`ident.fill` in `GET /v1/master`: `take`,
+  `ends_in`, `fixed`). A source ready before the window reaches the screen gets no ad.
+- Plays are logged with My ads' (`my-ads-plays.jsonl`); those in a wait carry `wait`, and
+  the bumper is kind `join`.
+
 - The coordinator asks for the hold (`ident_hold` with `hold: true`) when it starts
   preparing a queue entry with the ID on air, and releases it just before the take or
   when the operation ends. An early Roku preparation that finishes seconds before its
@@ -64,6 +87,31 @@ While the ID is on air, master shows **Station ID** with its progress. A file cu
 follow it shows *Plays when the station ID ends*. Other entries prepare during the ID
 and take when it ends. The previous source is released when the ID cuts in, so a
 tuner or the Roku is free for the next program.
+
+## The join bumper
+
+Before master joins a game in progress, the VizelVision Sports voice (Deepgram
+`aura-2-jupiter-en`, as the Sports ID) says where it stands:
+
+- *"We now join the Dodgers and the Braves, with the Braves leading 3 to 1 in the bottom of
+  the fifth."*
+- *"…who are tied at 7 at halftime."*, *"…with under 3 minutes left in the fourth quarter."*,
+  *"…in overtime."*; hockey periods, soccer halves.
+
+The picture is a 10-second cut of the Sports ID, made by `ident/build.py --join` (no new
+animation). The channel-change snow comes first, then SPORTS slamming in, through the march
+into the build. It then jumps to the final hit, which the hit's flash hides, and the iris
+closes to black at 9.3 s. The music is the Sports jingle without its voice, cut at the same
+places (`ident/build/sports-join-music.wav`). The video is `ident/vizelvision-sports-join.mp4`.
+
+`roku_stream/sports_join.py` writes the line from the sports feeds (MLB's score within a
+minute, ESPN's within 30 s). It voices the line once per wording and mixes it over the
+bumper's music as continuity's announcements are (−20 LUFS), into the announcements folder
+as `join-<hash>.mp4`. The line starts at 1.2 s (earlier if it is long) and ends by 9 s.
+Voicing starts as soon as the game's source begins preparing, so it is usually ready.
+If the score changes, the take waits up to 6 s for it to be voiced again, and otherwise
+goes without (the Sports ID or the iris). Only a game under way gets one: MLB with an
+inning on the board, ESPN's leagues in progress.
 
 ## How it works
 
@@ -115,9 +163,12 @@ phrasings came back as "Visol". The verified take is kept in
   2. The duty announcer says what just played and what is next ("Coming up: the Padres and
      the Brewers. Stay tuned."). With announcements off, or when the lines cannot be
      voiced, the plain ID plays in its place.
-  3. Its *Stay tuned* end card (27.9 s) holds while the game's source is prepared. A
-     YouTube TV channel change takes 22 to 137 s.
-  4. Once the source is verified, the iris closes and the Sports ID plays.
+  3. Its *Stay tuned* end card (27.9 s) holds while the game's source is prepared, with
+     ads over it ([the wait](#covering-a-channel-change)). A YouTube TV channel change
+     takes 22 to 137 s.
+  4. Once the source is verified, the ad on air plays out, the iris closes and the Sports
+     ID plays. **A game already under way gets the join bumper instead** (10 s, the score
+     read over it), since 7 October 2026.
   5. The game is taken on its black tail.
 
   With the game's source already prepared (the antenna, or a Roku warmed up early), the
@@ -173,7 +224,9 @@ Rebuild with:
 ```
 
 - `ident/script.json`: DJ Low Tide's lines and when each starts. The text says
-  "Vizel Vision" (two words) to guide the pronunciation; edit it if it sounds wrong.
+  "Vizel Vision" (two words) to guide the pronunciation. VizelVision is said
+  **"VIZZLE-VISION"**, and newer lines write it "Vizzle Vision" ([README](../README.md));
+  change it here if the ID ever says it any other way.
 - `ident/voice.py`: renders only lines whose text changed. Each line is kept in
   `ident/voice/<id>.wav` with its script, so rebuilds cost nothing. The key comes from
   `DEEPGRAM_API_KEY` or `--keys-file` and is never printed or stored.

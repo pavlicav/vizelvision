@@ -26,7 +26,8 @@ from urllib.request import urlopen
 from .errors import ConfigError, ControlBusyError
 from .master import MasterStreamError, _gst
 from .master_media import DecodedInput, FileInput, MasterMedia
-from .ident import IDENT_HOLD_AT, IDENT_HOLD_LIMIT, IDENT_PATH, IDENT_SECONDS, IDENT_SLOT, IdentLease
+from .ident import (FILL_HOLD_LIMIT, IDENT_HOLD_AT, IDENT_HOLD_LIMIT, IDENT_PATH, IDENT_SECONDS, IDENT_SLOT,
+                    JOIN_FREEZE_SLACK, IdentLease)
 from .library import FileLease, LIBRARY_SOURCE_ID, library_target
 from .tv_control import RokuLease, SharedLease, TvControl, target_from
 from .roku_input import ROKU_SOURCE_IDS, roku_target
@@ -46,6 +47,8 @@ class MasterWorker:
     NEXT_FILE_LEAD = .4
     IDENT_PREPARE_SECONDS = 20
     IDENT_RETRY_SECONDS = 60
+    # The take lands at the join bumper's end; this long after, the ID stops waiting for it.
+    JOIN_TAKE_GRACE_NS = 5_000_000_000
     # A prepared (off-air) input that was ready may drop out this long before it fails.
     PREPARED_SETTLE_SECONDS = 8
     # A live input on air that stops delivering holds its last picture this long (see
@@ -101,6 +104,10 @@ class MasterWorker:
         self.ident_from_test_card = False
         # Hold the ID's end card until this moment (the next source is being prepared).
         self.ident_hold_until = None
+        # The join bumper to play once the next source is ready ({'path', 'seconds'}), and the
+        # wait fill under way on the held end card ({'finishing'}; ad_break.py), this airing's.
+        self.ident_join = None
+        self.ident_fill = None
         # A continuity announcement version of the ID, for its next airing only.
         self.ident_override = None
         self.ident_retry_at = 0.
@@ -186,12 +193,33 @@ class MasterWorker:
             return {"accepted": True}
         if action == "ident_hold":
             # Immediate: the next source is still being prepared, so the ID on air holds its
-            # end card; false plays the iris-out so the take lands on its black tail.
+            # end card, with ads over it when there are some (a wait fill); false plays the
+            # iris-out once the ad on air ends, so the take lands on its black tail. With join
+            # (a game joined in progress), the "We now join..." bumper plays instead of the
+            # iris (and of the Sports ID after it), and the take lands at its end.
             if not isinstance(body.get('hold'), bool):
                 raise ConfigError('hold must be true or false')
+            join = body.get('join')
+            if join is not None:
+                path = join.get('path') if isinstance(join, dict) else None
+                seconds = join.get('seconds') if isinstance(join, dict) else None
+                if (body['hold'] or not isinstance(path, str) or not Path(path).name.startswith('join-')
+                        or not self._continuity_file(Path(path)) or isinstance(seconds, bool)
+                        or not isinstance(seconds, (int, float)) or not 1 <= seconds <= 30):
+                    raise ConfigError('join must be a join bumper in the announcements folder, with its seconds')
+                join = {'path': str(Path(path).resolve()), 'seconds': float(seconds)}
+            limit = FILL_HOLD_LIMIT if self._fills() else IDENT_HOLD_LIMIT
             with self.lock:
-                self.ident_hold_until = time.monotonic() + IDENT_HOLD_LIMIT if body['hold'] else None
+                self.ident_hold_until = time.monotonic() + limit if body['hold'] else None
+                self.ident_join = join
             return {"accepted": True}
+        if action == "my_ads":
+            # Immediate: the operator's Next up in breaks (ad_break.AdBreak.command): queue an ad
+            # or a promo by hand, skip one, or cut short the one on air.
+            breaks = self._ad_break()
+            if breaks is None:
+                raise ConfigError('My ads is not running on master')
+            return {**breaks.command(body), 'my_ads': breaks.status()}
         if action == "admute":
             # Immediate: the operator's correction for the input on air ("it's the show" /
             # "it's an ad"). Applied here at once, and the detector learns of it.
@@ -313,9 +341,11 @@ class MasterWorker:
                 self.arm = None
         if self.ident_key == key:
             self.ident_key = None
+            self._end_fill()  # The ID left air: whatever fills its end card stops there.
             if self.active == key:
                 with self.lock:
                     self.ident_hold_until = None  # A hold belongs to the airing that ended.
+                    self.ident_join = None
         if self.active == key:
             self.active = None
         if self.recovering == key:
@@ -677,23 +707,97 @@ class MasterWorker:
 
     # ------------------------------------------------------------ station ID
 
+    def _ad_break(self):
+        """Master's ad breaks (ad_break.AdBreak), which fill a wait; None without one."""
+        return getattr(self.output, 'ad_break', None) if self.output is not None else None
+
+    def _fills(self):
+        """Whether a wait would be filled: My ads or station promos are switched on."""
+        breaks = self._ad_break()
+        return bool(breaks and (getattr(breaks, 'ads_on', False) or getattr(breaks, 'promos_on', False)))
+
+    def _end_fill(self):
+        """Close the wait fill now (the ID left air, or gave up holding)."""
+        fill, self.ident_fill = self.ident_fill, None
+        breaks = self._ad_break()
+        if fill is not None and breaks is not None:
+            try:
+                breaks.fill_stop(self.output.running_time())
+            except Exception:  # No clock: the next airing's window replaces this one.
+                logging.getLogger(__name__).warning('The wait fill could not be closed', exc_info=True)
+
     def _hold_ident(self):
-        """Hold the ID's end card while the next source is prepared; iris out when it is
-        ready (the hold is released) or after the limit."""
+        """Hold the ID's end card while the next source is prepared, with ads over it (the
+        wait fill); once it is ready (the hold is released), iris out when the ad on air
+        ends, or play the join bumper there and leave the take to land at its end. After
+        the limit, iris out regardless."""
         entry = self.inputs.get(self.ident_key) if self.active and self.active == self.ident_key else None
         decoder = entry and entry["decoder"]
         if not decoder or not hasattr(decoder, "freeze"):
             return
+        log = logging.getLogger(__name__)
+        now = time.monotonic()
         with self.lock:
-            until = self.ident_hold_until
-        wanted = until is not None and time.monotonic() < until
+            until, join = self.ident_hold_until, self.ident_join
+        wanted = until is not None and now < until
+        breaks = self._ad_break()
         if getattr(decoder, "frozen", False):
-            if not wanted:
+            if wanted:
+                return
+            fill = self.ident_fill
+            if fill is None or breaks is None:
                 decoder.thaw()
-                logging.getLogger(__name__).info("Station ID released its end card")
-        elif wanted and (decoder.progress().get("position_seconds") or 0) >= IDENT_HOLD_AT:
+                log.info("Station ID released its end card")
+                return
+            if until is not None:  # Out of time: the ID irises out, whatever fills it.
+                self._end_fill()
+                decoder.thaw()
+                log.warning("Station ID gave up holding its end card for the next source")
+                return
+            running = self.output.running_time()
+            if not fill['finishing']:
+                fill['finishing'] = True
+                if not breaks.fill_finish(running, join):
+                    self._end_fill()
+                    decoder.thaw()
+                    return
+                log.info("The next source is ready: %s", 'the join bumper follows the wait fill' if join
+                         else 'the station ID irises out after the wait fill')
+            report = breaks.fill_end()
+            if report and not report['take'] and running >= report['end']:
+                decoder.thaw()  # The fill has ended: the iris (or the Sports ID after it), then the take.
+                self.ident_fill = None  # Its window closes there on its own.
+                log.info("Station ID released its end card after the wait fill")
+            elif report and report['take'] and running >= report['end'] + self.JOIN_TAKE_GRACE_NS:
+                self._end_fill()  # The take never came (cancelled, or it failed): iris out.
+                decoder.thaw()
+                log.warning("No take followed the join bumper: the station ID irises out")
+            return
+        position = decoder.progress().get("position_seconds") or 0
+        # A join bumper only takes the end card's place: once the iris has begun, it is too late.
+        joining = join is not None and position <= IDENT_HOLD_AT + JOIN_FREEZE_SLACK and breaks is not None
+        if (wanted or joining) and position >= IDENT_HOLD_AT:
             if decoder.freeze():
-                logging.getLogger(__name__).info("Station ID holding its end card for the next source")
+                log.info("Station ID holding its end card for the next source%s",
+                         ' (the join bumper next)' if not wanted else ' (ads over it)' if self._fills() else '')
+                frozen_at = getattr(decoder, 'frozen_at', None)
+                if breaks is not None and isinstance(frozen_at, int) and (self._fills() or not wanted):
+                    breaks.fill_start(frozen_at)
+                    self.ident_fill = {'finishing': False}
+
+    def _fill_status(self):
+        """The wait fill for the status: filling, or finishing with where it ends (ends_in
+        seconds from now on master's clock; take: the take lands there, after the bumper)."""
+        breaks, fill = self._ad_break(), self.ident_fill
+        if fill is None or breaks is None:
+            return None
+        report = breaks.fill_end()
+        try:
+            ends_in = round((report['end'] - self.output.running_time()) / 1e9, 3) if report else None
+        except Exception:
+            ends_in = None
+        return {'state': 'finishing' if fill['finishing'] else 'filling', 'take': bool(report and report['take']),
+                'fixed': bool(report and report['fixed']), 'ends_in': ends_in}
 
     def _ident_status(self):
         entry = self.inputs.get(self.ident_key)
@@ -701,7 +805,8 @@ class MasterWorker:
                 "on_air": self.active is not None and self.active == self.ident_key,
                 "held": bool(entry and entry["decoder"] and getattr(entry["decoder"], "frozen", False)),
                 "file": Path(entry["lease"].path).name if entry else None,
-                "duration_seconds": entry.get("duration") if entry else None, "error": self.ident_error}
+                "duration_seconds": entry.get("duration") if entry else None, "error": self.ident_error,
+                "fill": self._fill_status()}
 
     def _ident_ready(self):
         entry = self.inputs.get(self.ident_key)

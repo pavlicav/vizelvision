@@ -289,7 +289,11 @@ class MasterMedia:
     def release_programme(self, kind, buffer, due, duration, pts, route):
         gst = self.gst
         replaced = False
-        if kind == 'audio' and route and route[0] and pts is not None:
+        filled = (self.ad_break.fill_sound(due, pts, buffer.get_size())
+                  if kind == 'audio' and self.ad_break and pts is not None else None)
+        if filled is not None:  # the wait fill's ad or bumper, over the station ID's held end card
+            buffer = gst.Buffer.new_wrapped(filled)
+        elif kind == 'audio' and route and route[0] and pts is not None:
             tap, offset, _ = route
             raw = buffer.extract_dup(0, buffer.get_size())
             scaled = apply_gain(raw, pts + offset, 48000, 2, tap.gain)
@@ -1103,6 +1107,7 @@ class FileInput(DecodedInput):
 
     def __init__(self, output: MasterMedia, slot: int, url: str, *, start_seconds=0):
         self.cued = self.started = self.finished = self.frozen = False
+        self.frozen_at = None
         self.holder = None
         self.ended = set()
         self.start_ns = int(start_seconds * 1_000_000_000)
@@ -1199,6 +1204,8 @@ class FileInput(DecodedInput):
             if self.frozen or not self.started or self.closed or self.last_frame is None:
                 return False
             self.frozen = True
+            # Where the held frames start on master's clock: a wait fill opens there.
+            self.frozen_at = self.last['video']['end']
         self.pipeline.set_state(self.gst.State.PAUSED)
         self.holder = threading.Thread(target=self._hold, name='file-hold', daemon=True)
         self.holder.start()

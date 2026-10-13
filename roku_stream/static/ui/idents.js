@@ -43,7 +43,7 @@
       ['Sonic logo', h('span', {class: 'row', style: 'gap:6px'}, 'Viz-el-Vi-sion: C E G A, then D F♯ A D', open, closed)],
       ['Voices', 'DJ Low Tide (station ID) · Jupiter (Sports ID, legal ID)'],
       ['Announcer', !c ? '—' : !c.settings?.enabled ? 'Off: the plain ID plays' : (onDuty ? onDuty.name + ' is on duty' : 'On')],
-      ['Promos', !p ? '—' : p.enabled ? `On · at least one every ${p.every} min, as breaks allow` : 'Off'],
+      ['Promos', !p ? '—' : !p.enabled ? 'Off' : p.every === 0 ? 'On · every break opens with one' : `On · at least one every ${p.every} min, as breaks allow`],
       ['Loudness', '−20 LUFS, like the programmes around it'],
     ];
     VV.fill($('idt-card'), ...rows.flatMap(([k, v]) => [h('dt', null, k), h('dd', null, v)]));

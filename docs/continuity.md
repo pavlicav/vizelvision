@@ -45,6 +45,10 @@ September. VizelVision does not call Cairo at runtime; they are copied into its 
 | The Daytime Announcer (The Morning Show) | `aura-2-zeus-en` | You've been watching … / This is Vizel Vision. / Next: … / Stay with us. | 9–11, 18–19 |
 | Amélie (L'heure québécoise) | `aura-2-agathe-fr` | C'était … / Vous regardez Vizel Vision. / À suivre : … / Restez avec nous. | 11–13, 23–24 |
 
+VizelVision is pronounced **"VIZZLE-VISION"**. The English lines on air write it "Vizzle
+Vision" (changed in the settings), so the voices say it that way; the defaults above, in
+`continuity.py`, still spell it "Vizel Vision".
+
 Only DJ Low Tide's voice is Cairo's own. Cairo does not publish the other two, so their
 voices were chosen from Deepgram's catalogue to fit: a deep, smooth announcer, and a
 French host.
@@ -79,6 +83,9 @@ tuned."), or the plain ID when announcements are off. Then comes the VizelVision
 holds while the game's source is prepared, so the Sports ID opens the game once it is
 ready. It plays even from the test card, where there is no "That was…". Continuity cues it
 the same way, as `sports-<hash>.mp4`. See [VizelVision Sports](station-id.md#vizelvision-sports).
+A game already under way gets the [join bumper](station-id.md#the-join-bumper) in the Sports
+ID's place, its score read over it, which the source coordinator asks for when the game
+is ready.
 
 A failure to voice or mix (no key, network) leaves the plain ID and shows the reason in
 the tab. A rebuilt ID or music bed changes the file identity, so announcements are

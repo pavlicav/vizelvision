@@ -28,6 +28,12 @@ IDENT_TAIL_SECONDS = 0.5
 IDENT_HOLD_AT = 27.9
 # A held end card gives up after this long: the iris closes and master falls back.
 IDENT_HOLD_LIMIT = 120
+# With ads to fill the wait (ad_break.py), the hold lasts this long: YouTube TV can take over
+# two minutes to change channel, and ads are better than the test card meanwhile.
+FILL_HOLD_LIMIT = 300
+# The join bumper (sports_join.py) freezes the ID at its end card only this soon after it:
+# later, the iris (or the Sports ID after it) is already on air, and the take follows that.
+JOIN_FREEZE_SLACK = 0.25
 IDENT_PATH = Path(__file__).resolve().parent.parent / 'ident' / 'vizelvision-id.mp4'
 # The VizelVision Sports ID (ident/build.py --sports), with the same 30-second form. The
 # break before a game plays it instead of the ID, even from the test card: continuity

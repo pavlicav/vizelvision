@@ -63,6 +63,9 @@ MAX_ADS = 200
 LIMIT_COUNT = (1, 50)
 LIMIT_MINUTES = (5, 7 * 24 * 60)
 TRIM_DB = (-12.0, 12.0)
+# A play counts towards an ad's limit once this much of it has aired (half of a shorter ad):
+# breaks often end mid-ad, the programme's return cutting it short.
+COUNTS_AFTER = 10.0
 CARD_TEXT = 32
 # Ads are levelled to the station's loudness (the station ID and the TV recordings, ident/sonic.py),
 # and never pushed past -1 dB true peak.
@@ -183,7 +186,7 @@ def validate(value, *, lenient=False):
 def counted(plays, ad_id, since):
     """Plays of this ad since then that count towards its limit, oldest first."""
     return sorted(p['at'] for p in plays if p.get('kind', 'ad') == 'ad' and p.get('id') == ad_id
-                  and p.get('counted') and p.get('at', 0) >= since)
+                  and played(p) and p.get('at', 0) >= since)
 
 
 def allowed(ad, plays, now):
@@ -205,14 +208,25 @@ def allowed_again(ad, plays, now):
 
 
 def counts(play_seconds, length):
-    """A play counts towards a limit once half the ad has aired."""
-    return play_seconds >= length / 2
+    """A play counts towards a limit once 10 s of it has aired, or half of an ad under 20 s."""
+    return play_seconds >= min(COUNTS_AFTER, length / 2)
+
+
+def played(row):
+    """Does a logged play count: as it was logged, or by the rule now (until 8 October 2026
+    a play counted from half the ad), from what aired of it."""
+    if row.get('counted'):
+        return True
+    seconds, length = row.get('seconds'), row.get('length')
+    return (isinstance(seconds, (int, float)) and isinstance(length, (int, float)) and length > 0
+            and counts(seconds, length))
 
 
 class Rotation:
     """Which ad next. In list order: the one after the last that aired. Shuffled: a random
     order, each ad once before any airs again (a bag, refilled when empty, never starting
-    with the ad that just aired). pick() only looks; played() commits."""
+    with the ad that just aired). pick() only looks; played() commits. Master draws ahead
+    (Next up, ad_break.py): played() as an ad is drawn, undraw() to put them back."""
 
     def __init__(self, rng=None):
         self.rng = rng or random.Random()
@@ -241,6 +255,12 @@ class Rotation:
         self.last = ad_id
         if ad_id in self.bag:
             self.bag.remove(ad_id)
+
+    def undraw(self, ids, last):
+        """Puts ads drawn ahead (played, not aired) back: first in the bag, and list order
+        resuming after last, the last that aired."""
+        self.bag = list(ids) + [i for i in self.bag if i not in ids]
+        self.last = last
 
 
 # ---------------------------------------------------------------- the play log

@@ -1,0 +1,19 @@
+{
+  "id": "dupont",
+  "version": 1,
+  "name": "From Dupont Circle",
+  "kind": "ident",
+  "order": 7,
+  "description": "A summer afternoon at the Dupont Circle fountain: the jet spurts the logo, a knight hops on a chess table, the pigeons take off on the closed logo. \"From Dupont Circle... this is VizelVision.\" Voiced by Delia.",
+  "duration": 10.0,
+  "file": "dupont.mp4",
+  "still": "dupont.png",
+  "still_at": 8.6,
+  "overlays": [],
+  "voice": null,
+  "loudness": {
+    "input": "-13.45",
+    "target": -20.0
+  },
+  "built_at": "2026-10-06T21:38:00-0400"
+}

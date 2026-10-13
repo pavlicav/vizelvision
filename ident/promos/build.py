@@ -32,7 +32,9 @@ import common  # noqa: E402
 import build as id_build  # noqa: E402  ident/build.py: measure(), numpy_python()
 import voice  # noqa: E402
 
-PROMOS = ('time-temp', 'watching', 'only-on', 'legal', 'press-start')
+PROMOS = ('time-temp', 'watching', 'only-on', 'legal', 'press-start', 'metro', 'dupont', 'meridian-hill',
+          'now-in-hd', 'cat-remote', 'cat-laser', 'seventy-six', 'eighty-six', 'ninety-six', 'twenty-sixteen',
+          'the-cairo', 'cairo-1894', 'baseball', 'football')
 BUILD = IDENT / 'build' / 'promos'
 LOUDNESS, TRUE_PEAK = id_build.LOUDNESS, id_build.TRUE_PEAK
 VERSION = 1
@@ -109,7 +111,8 @@ def manifest(promo_id, loudness):
     return {'id': promo_id, 'version': VERSION, 'name': picture.NAME, 'kind': picture.KIND, 'order': picture.ORDER,
             'description': picture.DESCRIPTION, 'duration': picture.DURATION, 'file': f'{promo_id}.mp4',
             'still': f'{promo_id}.png', 'still_at': picture.STILL_AT, 'overlays': picture.OVERLAYS,
-            'voice': getattr(picture, 'VOICE', None), 'loudness': {'input': loudness['input_i'], 'target': LOUDNESS},
+            'voice': getattr(picture, 'VOICE', None), 'leagues': list(getattr(picture, 'LEAGUES', ())),
+            'loudness': {'input': loudness['input_i'], 'target': LOUDNESS},
             'built_at': time.strftime('%Y-%m-%dT%H:%M:%S%z')}
 
 

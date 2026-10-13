@@ -4,7 +4,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from roku_stream.playback import Entry, Program, Projector, describe, project
+from roku_stream.playback import Entry, Fill, Program, Projector, describe, project
 from roku_stream.programming import OFF_AIR, Programming
 from roku_stream.source_queue import SourceQueue
 
@@ -85,6 +85,62 @@ class ProjectionTests(unittest.TestCase):
         rows = self.run_projection(self.game_now(3 * H), entries, finals={401: at(4 * H)})
         self.assertEqual([(r[0], r[1]) for r in rows], [('Phillies at Braves', timedelta()), ('Lions at Panthers', 3 * H),
                                                         ('OFF AIR', 4 * H)])
+
+class DroppedTests(unittest.TestCase):
+    """What never airs, and why: On Air's Up next folds these away (Won't air)."""
+
+    def run_projection(self, current, entries, recordings=(), finals=None):
+        dropped = []
+        segments = project(T0, T0 + 6 * H, current, entries, list(recordings),
+                           game_end=lambda game, start=None: (finals or {}).get(game['game_pk']),
+                           schedule_at=lambda when: None, dropped=dropped)
+        return segments, [(entry.item or entry.title, why) for entry, why in dropped]
+
+    def game_now(self, until):
+        return Program('Phillies at Braves', 'game', MLB, T0 - H, at(until), True, PHILLIES, item='game')
+
+    def test_slots_that_end_while_the_game_runs_on_never_air(self):
+        entries = [Entry(at(30 * M), 'News 10', 'block', NBC, 0, at(H), True, item='news'),
+                   Entry(at(H), 'OFF AIR', 'off_air', dict(OFF_AIR), 1, at(90 * M), True, item='off'),
+                   Entry(at(90 * M), 'Jeopardy', 'block', NBC, 2, at(2 * H), True, item='jeopardy')]
+        segments, dropped = self.run_projection(self.game_now(3 * H), entries)
+        self.assertEqual([(s['title'], s['item']) for s in segments], [('Phillies at Braves', 'game'), ('OFF AIR', None)])
+        self.assertEqual(dropped, [(name, 'Its slot ends before Phillies at Braves does') for name in ('news', 'off', 'jeopardy')])
+
+    def test_a_game_under_way_at_the_final_drops_what_it_replaces(self):
+        entries = [Entry(at(H), 'News 10', 'block', NBC, 0, at(4 * H), True, item='news'),
+                   Entry(at(H), 'White Sox at Astros', 'game', ESPN, 1, None, False, WHITE_SOX, item='sox')]
+        segments, dropped = self.run_projection(self.game_now(2 * H), entries, finals={849846: at(5 * H)})
+        self.assertEqual([(s['title'], s['item'], s['notes']) for s in segments][1], ('White Sox at Astros', 'sox', ['Joins in progress']))
+        self.assertEqual(dropped, [('news', 'White Sox at Astros airs instead')])
+
+    def test_a_live_channel_queued_to_fill_stays_on_until_the_next_entry(self):
+        recording = Program('Jeopardy!', 'recording', {'source_id': 'library'}, T0, at(30 * M), item='rec')
+        tbs = {'source_id': 'youtube-tv', 'channel_id': 'TBS'}
+        entries = [Entry(at(H), 'OFF AIR', 'off_air', dict(OFF_AIR), 0, at(5 * H), True),
+                   Entry(at(5 * H), 'News', 'block', NBC, 1, at(6 * H), True)]
+        segments, dropped = self.run_projection(recording, entries, [Fill('', tbs, None, 'tbs', live=True)])
+        self.assertEqual([(s['kind'], s['item'], datetime.fromisoformat(s['start']) - T0) for s in segments],
+                         [('recording', 'rec', timedelta()), ('manual', 'tbs', 30 * M), ('off_air', None, H), ('block', None, 5 * H)])
+        self.assertEqual(dropped, [])
+
+    def test_a_live_fill_given_an_end_holds_until_it_or_is_dropped_once_it_has_passed(self):
+        tbs = {'source_id': 'youtube-tv', 'channel_id': 'TBS'}
+        entries = [Entry(at(H), 'OFF AIR', 'off_air', dict(OFF_AIR), 0, at(5 * H), True)]
+        segments, _ = self.run_projection(Program('OFF AIR', 'off_air', dict(OFF_AIR), T0), entries,
+                                          [Fill('TBS', tbs, None, 'tbs', live=True, until=at(2 * H))])
+        self.assertEqual([(s['title'], datetime.fromisoformat(s['end']) - T0) for s in segments], [('TBS', 2 * H), ('OFF AIR', 6 * H)])
+        segments, dropped = self.run_projection(self.game_now(3 * H), [], [Fill('TBS', tbs, None, 'tbs', live=True, until=at(2 * H))])
+        self.assertEqual(dropped, [('tbs', 'Its end time passes before it could air')])
+        self.assertEqual([s['title'] for s in segments], ['Phillies at Braves', 'OFF AIR'])
+
+    def test_a_game_queued_to_follow_is_joined_in_progress(self):
+        tbs = {'source_id': 'youtube-tv', 'channel_id': 'TBS'}
+        rays = Fill('Rays at Yankees', tbs, None, 'tbs', True, at(5 * H), WHITE_SOX, at(H))
+        segments, _ = self.run_projection(self.game_now(2 * H), [], [rays])
+        self.assertEqual([(s['title'], s['kind'], s['notes'], s['estimated']) for s in segments][1],
+                         ('Rays at Yankees', 'game', ['Joins in progress'], True))
+
 
 class DescribeTests(unittest.TestCase):
     def test_up_next_and_the_schedule_become_one_projection(self):

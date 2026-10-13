@@ -24,40 +24,25 @@
     "channel_id": "NBC",
     "source_id": "youtube-tv"
    },
-   "title": "Philadelphia Phillies at Atlanta Braves"
-  },
-  {
-   "color": null,
-   "end": "2026-10-02T03:36:06.601631+00:00",
-   "estimated": false,
-   "game": null,
-   "kind": "recording",
-   "notes": [
-    "Length unknown"
-   ],
-   "source": "recording",
-   "start": "2026-10-02T03:06:06.601631+00:00",
-   "target": {
-    "channel_id": "401872964",
-    "date": "2026-10-01",
-    "source_id": "thursday-night-football"
-   },
-   "title": ""
+   "title": "Philadelphia Phillies at Atlanta Braves",
+   "item": "21d1b99b6eb14d51b7bc06a85106676d"
   },
   {
    "color": null,
    "end": "2026-10-02T04:00:00+00:00",
    "estimated": false,
    "game": null,
-   "kind": "off_air",
+   "kind": "manual",
    "notes": [],
-   "source": "schedule",
-   "start": "2026-10-02T03:36:06.601631+00:00",
+   "source": "queue",
+   "start": "2026-10-02T03:06:06.601631+00:00",
    "target": {
-    "channel_id": "off-air",
-    "source_id": "off-air"
+    "channel_id": "401872964",
+    "date": "2026-10-01",
+    "source_id": "thursday-night-football"
    },
-   "title": "OFF AIR"
+   "title": "",
+   "item": "d33ae12bfbcb4257ab79c634f851d074"
   },
   {
    "color": null,
@@ -72,7 +57,8 @@
     "channel_id": "off-air",
     "source_id": "off-air"
    },
-   "title": "OFF AIR"
+   "title": "OFF AIR",
+   "item": null
   },
   {
    "color": "#2f7d5b",
@@ -88,7 +74,8 @@
     "quality": "medium",
     "source_id": "tv-thing-digital"
    },
-   "title": "The View"
+   "title": "The View",
+   "item": null
   },
   {
    "color": "#a0582f",
@@ -103,7 +90,8 @@
     "channel_id": "CBS",
     "source_id": "youtube-tv"
    },
-   "title": "6 News"
+   "title": "6 News",
+   "item": null
   },
   {
    "color": null,
@@ -118,7 +106,8 @@
     "channel_id": "off-air",
     "source_id": "off-air"
    },
-   "title": "OFF AIR"
+   "title": "OFF AIR",
+   "item": null
   },
   {
    "color": "#7a4f9a",
@@ -133,8 +122,36 @@
     "channel_id": "NBC",
     "source_id": "youtube-tv"
    },
-   "title": "News 10"
+   "title": "News 10",
+   "item": null
   }
  ],
- "until": "2026-10-03T02:16:36.601631+00:00"
+ "until": "2026-10-03T02:16:36.601631+00:00",
+ "dropped": [
+  {
+   "item": null,
+   "key": "2026-10-02T23:30:00+00:00|block|jeopardy|{}",
+   "title": "Jeopardy",
+   "kind": "block",
+   "target": {
+    "channel_id": "wjla_7_1",
+    "quality": "medium",
+    "source_id": "tv-thing-digital"
+   },
+   "due": "2026-10-02T23:30:00+00:00",
+   "why": "Its slot ends before Philadelphia Phillies at Atlanta Braves does"
+  },
+  {
+   "item": null,
+   "key": "2026-10-02T04:00:00+00:00|off_air|None|{}",
+   "title": "OFF AIR",
+   "kind": "off_air",
+   "target": {
+    "channel_id": "off-air",
+    "source_id": "off-air"
+   },
+   "due": "2026-10-02T03:36:00+00:00",
+   "why": "OFF AIR gives way to Up next"
+  }
+ ]
 }

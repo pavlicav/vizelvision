@@ -101,10 +101,10 @@ dialog.promo-preview .stage img{position:absolute;pointer-events:none;transform-
 <div class="cols-2">
  <section class="panel" aria-label="Station promo settings"><div class="head"><span class="lamp" data-id="lamp"></span><h2>Station promos</h2></div><div class="body stack tight">
   <label class="switch"><input type="checkbox" data-id="enabled"><span>Play promos in ad breaks</span></label>
-  <label class="field"><span>At least one every</span><select data-id="every"></select></label>
+  <label class="field"><span>How often</span><select data-id="every"></select></label>
   <label class="switch"><input type="checkbox" data-id="fill"><span>Fill in when My ads runs out<small class="muted" style="display:block">Promos stand in before the break card, each once a break</small></span></label>
   <p class="note warn" data-id="warning" role="status"></p>
-  <p class="hint tiny">Promos play in the breaks ad mute takes off air (its mode On), in My ads' place. Once the interval has passed since the last one, the next break opens with a promo. One cut short by the programme's return before half of it airs doesn't count, so the next break tries again. Time and temperature and the programme's name are drawn live by master as they air.</p></div></section>
+  <p class="hint tiny">Promos play in the breaks ad mute takes off air (its mode On), in My ads' place. With <b>Every break</b>, each break opens with one; otherwise, once the interval has passed since the last one, the next break opens with a promo. One cut short by the programme's return before half of it airs doesn't count, so the next break tries again. Time and temperature and the programme's name are drawn live by master as they air.</p></div></section>
  <section class="panel" aria-label="Promos on master"><div class="head"><h2>On master</h2></div><div class="body"><dl class="kv" data-id="master"></dl></div></section>
 </div>
 <section class="panel" aria-label="The promos"><div class="head"><h2>The promos</h2><div class="end"><span class="chip" data-id="count"></span></div></div>
@@ -134,7 +134,8 @@ dialog.promo-preview .stage img{position:absolute;pointer-events:none;transform-
       if (m.promo) rows.push(['On air now', `${m.promo.name} · ${fmt.dur(m.promo.position || 0)} of ${fmt.dur(m.promo.duration)}`]);
       rows.push(['Cued next', p.cued ? (byId[p.cued]?.name || p.cued) : s.enabled ? 'Nothing yet' : '—']);
       rows.push(['Last promo', view.last ? `${fmt.clock(view.last)} (${fmt.rel(view.last)})` : 'None yet']);
-      rows.push(['Next one', !s.enabled ? 'Promos are off' : view.due ? 'Due: it opens the next break' : 'At the first break after ' + fmt.clock(view.next_due)]);
+      rows.push(['Next one', !s.enabled ? 'Promos are off' : s.every === 0 ? 'Every break opens with one'
+        : view.due ? 'Due: it opens the next break' : 'At the first break after ' + fmt.clock(view.next_due)]);
       rows.push(['Temperature', temp ? `${temp.f}°F · ${temp.place || 'unknown station'} · read ${fmt.clock(temp.observed_at)}` : (view.errors.temperature || 'Not needed')]);
       rows.push(['Programme', prog ? h('span', null, prog.title, ' ', prog.variants && prog.variants['only-on'] ? h('span', {class: 'chip pvw'}, 'voiced') :
         h('span', {class: 'chip warn', title: view.errors.voice || 'Voicing it…'}, 'own line')) : (view.errors.programme || 'None on air with a name')]);
@@ -166,7 +167,8 @@ dialog.promo-preview .stage img{position:absolute;pointer-events:none;transform-
       if (!busy) {
         $('enabled').checked = s.enabled; $('fill').checked = s.fill;
         if ($('every').options.length !== view.every_choices.length + (view.every_choices.includes(s.every) ? 0 : 1))
-          VV.fill($('every'), ...[...new Set([...view.every_choices, s.every])].sort((a, b) => a - b).map(n => new Option(n + ' minutes', n)));
+          VV.fill($('every'), ...[...new Set([...view.every_choices, s.every])].sort((a, b) => a - b)
+            .map(n => new Option(n === 0 ? 'Every break' : `At least one every ${n} minutes`, n)));
         $('every').value = String(s.every);
       }
       $('lamp').className = 'lamp' + (m.promo ? ' pgm' : (m.promos || {}).active ? ' pvw' : s.enabled ? ' warn' : '');

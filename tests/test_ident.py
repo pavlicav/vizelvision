@@ -119,7 +119,8 @@ class IdentWorkerTests(unittest.TestCase):
         self.worker.output.take.assert_not_called()
         status = self.worker.status()
         self.assertEqual(status['ident'], {'enabled': True, 'ready': True, 'on_air': False, 'held': False,
-                                           'file': 'station-id.mp4', 'duration_seconds': 30.0, 'error': None})
+                                           'file': 'station-id.mp4', 'duration_seconds': 30.0, 'error': None,
+                                           'fill': None})
         self.assertIsNone(status['on_air'])
 
     def test_a_file_with_the_next_one_armed_plays_to_its_end_then_the_id(self):

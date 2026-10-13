@@ -80,7 +80,9 @@ class RotationTests(unittest.TestCase):
         self.assertEqual(allowed_again(a, plays, now), now - 600 + 3600)
         self.assertTrue(allowed(a, plays, now + 3001))
         uncounted = [{**plays[0], 'counted': False}]
-        self.assertTrue(allowed(a, uncounted, now), 'a play cut short before half does not count')
+        self.assertTrue(allowed(a, uncounted, now), 'a play cut short early does not count')
+        logged = [{**plays[0], 'counted': False, 'seconds': 12.0, 'length': 60.0}]
+        self.assertFalse(allowed(a, logged, now), 'logged under the old rule (half): 12 s of it aired counts now')
         twice = {**a, 'limit': {'count': 2, 'minutes': 60}}
         self.assertTrue(allowed(twice, plays, now))
         self.assertFalse(allowed({**a, 'enabled': False}, [], now))
@@ -90,9 +92,16 @@ class RotationTests(unittest.TestCase):
         self.assertIsNone(Rotation().pick(s, [{**plays[0], 'id': ad(1)['id']}], now), 'nothing left: the card')
         self.assertIsNone(Rotation().pick(self.settings(n=1), [], now, skip={ad(1)['id']}))
 
-    def test_counts_from_half(self):
-        self.assertFalse(my_ads.counts(14.9, 30))
-        self.assertTrue(my_ads.counts(15, 30))
+    def test_counts_from_ten_seconds_or_half_a_short_ad(self):
+        self.assertFalse(my_ads.counts(9.9, 60))
+        self.assertTrue(my_ads.counts(10, 60), 'a minute-long ad cut at 10 s counts')
+        self.assertTrue(my_ads.counts(10, 30))
+        self.assertFalse(my_ads.counts(4.9, 10), 'a 10 s ad: from half')
+        self.assertTrue(my_ads.counts(5, 10))
+        self.assertTrue(my_ads.played({'counted': True}))
+        self.assertTrue(my_ads.played({'counted': False, 'seconds': 10.2, 'length': 59.8}))
+        self.assertFalse(my_ads.played({'counted': False, 'seconds': 9.0, 'length': 59.8}))
+        self.assertFalse(my_ads.played({'counted': False}), 'nothing to go by')
 
 
 class StoreTests(unittest.TestCase):
@@ -355,7 +364,7 @@ class BreakTests(unittest.TestCase):
         self.assertEqual([(r['kind'], r.get('id'), r.get('complete'), r.get('counted'), r['seconds']) for r in rows],
                          [('ad', ad(1)['id'], True, True, 1.0), ('ad', ad(2)['id'], True, True, 1.0), ('card', None, None, None, 1.0)])
         self.assertEqual(list(self.b.done), [one, two], 'finished ads go to the helper to close')
-        self.assertEqual(self.b.rotation.last, ad(2)['id'])
+        self.assertEqual(self.b.last_aired, ad(2)['id'])
 
     def test_the_show_coming_back_cuts_an_ad_short(self):
         self.cue(FakeReel(ad(1), int(30e9), 50))
@@ -364,6 +373,14 @@ class BreakTests(unittest.TestCase):
         self.assertIsNone(self.frame(3.0))
         row = self.b.log[-1]
         self.assertEqual((row['complete'], row['counted'], row['seconds']), (False, False, 2.0))
+
+    def test_ten_seconds_of_an_ad_cut_short_counts(self):
+        self.cue(FakeReel(ad(1, duration=60.0), int(60e9), 50))
+        self.tap.mutes.append((int(1e9), int(11e9)))
+        self.assertEqual(self.frame(1.0), 50)
+        self.assertIsNone(self.frame(11.0))
+        row = self.b.log[-1]
+        self.assertEqual((row['complete'], row['counted'], row['seconds']), (False, True, 10.0))
 
     def test_fillers_keep_the_break_and_switching_off_ends_it(self):
         self.cue(FakeReel(ad(1), int(30e9), 50))

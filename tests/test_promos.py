@@ -46,6 +46,16 @@ class SettingsTests(unittest.TestCase):
                                   lenient=True)
         self.assertEqual(lenient['promos'], {'legal': {'enabled': False}})
 
+    def test_every_break(self):
+        self.assertEqual(promos.validate({'every': 0})['every'], promos.EVERY_BREAK)
+        self.assertIn(0, promos.EVERY_CHOICES)
+        for bad in (1, 4, 241, -5):
+            with self.assertRaises(ConfigError, msg=bad):
+                promos.validate({'every': bad})
+        settings = promos.validate({'every': 0})
+        self.assertTrue(promos.due(settings, None, 1000))
+        self.assertTrue(promos.due(settings, 1000, 1000), 'due again at once: master limits it to a break\'s start')
+
     def test_store_update_and_switch_a_promo_off(self):
         with tempfile.TemporaryDirectory() as tmp:
             store = promos.Promos(Path(tmp) / 'master.sock', library=library(Path(tmp) / 'lib', manifest('legal')))
@@ -75,9 +85,17 @@ class LibraryTests(unittest.TestCase):
     def test_a_bad_manifest_is_set_aside_with_why(self):
         with tempfile.TemporaryDirectory() as tmp:
             lib = library(tmp, manifest('good'), {**manifest('bad'), 'file': 'other.mp4'},
-                          manifest('worse', [{**TEXT, 'field': 'weather'}]))
+                          manifest('worse', [{**TEXT, 'field': 'weather'}]), manifest('odd', leagues='mlb'),
+                          manifest('odder', leagues=['MLB']))
             self.assertEqual([p['id'] for p in lib.read()], ['good'])
-            self.assertEqual(sorted(lib.problems), ['bad', 'worse'])
+            self.assertEqual(sorted(lib.problems), ['bad', 'odd', 'odder', 'worse'])
+
+    def test_a_sports_promo_needs_the_league_on_air(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            lib = library(tmp, manifest('baseball', [TEXT], leagues=['mlb']), manifest('legal'))
+            found = {p['id']: p for p in lib.read()}
+            self.assertEqual((found['baseball']['leagues'], found['baseball']['needs']), (['mlb'], ['league', 'programme']))
+            self.assertEqual((found['legal']['leagues'], found['legal']['needs']), ([], []))
 
     def test_library_files(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -99,12 +117,32 @@ class ValuesTests(unittest.TestCase):
         self.assertEqual(promos.fresh({**values, 'at': now - 400}, now), {}, 'the web app went quiet')
         stale = {**values, 'temperature': {'f': 61, 'observed_at': now - 4 * 3600}}
         self.assertNotIn('temperature', promos.fresh(stale, now))
+        self.assertNotIn('league', got['programme'])
+        game = {**values, 'programme': {**values['programme'], 'league': 'mlb'}}
+        self.assertEqual(promos.fresh(game, now)['programme']['league'], 'mlb')
+        self.assertNotIn('league', promos.fresh({**values, 'programme': {**values['programme'], 'league': '../x'}}, now)['programme'])
 
     def test_readiness(self):
         promo = {'present': True, 'needs': ['temperature']}
         self.assertEqual(promos.readiness(promo, {}), 'no recent temperature reading')
         self.assertIsNone(promos.readiness(promo, {'temperature': {'f': 60}}))
         self.assertEqual(promos.readiness({'present': False, 'needs': []}, {}), 'its video is not built')
+
+    def test_a_sports_promo_airs_only_during_its_leagues_games(self):
+        football = {'present': True, 'needs': ['league'], 'leagues': ['nfl', 'ncaaf']}
+        self.assertEqual(promos.readiness(football, {}), 'only during NFL or NCAAF games')
+        self.assertEqual(promos.readiness(football, {'programme': {'title': 'Jeopardy!'}}), 'only during NFL or NCAAF games')
+        self.assertEqual(promos.readiness(football, {'programme': {'title': 'Guardians at White Sox', 'league': 'mlb'}}),
+                         'only during NFL or NCAAF games')
+        self.assertIsNone(promos.readiness(football, {'programme': {'title': 'Lions at Panthers', 'league': 'nfl'}}))
+        self.assertIsNone(promos.readiness({'present': True, 'needs': [], 'leagues': []}, {}), 'not a sports promo')
+
+    def test_league_of_a_segment(self):
+        self.assertEqual(promos.league_of({'kind': 'game', 'game': {'game_pk': 1, 'league': 'nfl'}}), 'nfl')
+        self.assertEqual(promos.league_of({'kind': 'game', 'game': {'game_pk': 7}}), 'mlb', "a game's league defaults to MLB")
+        self.assertIsNone(promos.league_of({'kind': 'manual', 'title': 'Jeopardy!'}))
+        self.assertIsNone(promos.league_of({'kind': 'game', 'game': {'title': 'TBD'}}), 'no game id: not a game')
+        self.assertIsNone(promos.league_of(None))
 
     def test_due(self):
         settings = promos.validate({'every': 15})
@@ -236,6 +274,21 @@ class DeskTests(unittest.TestCase):
         values = json.loads(self.store.values_path.read_text())
         self.assertEqual(values['programme']['variants'], {})
         self.assertIn('too long', self.desk.errors['voice'])
+
+    def test_the_league_on_air_for_a_sports_promo(self):
+        library(self.tmp / 'lib', manifest('football', leagues=['nfl', 'ncaaf']))
+        self.store.save({'promos': {'time-temp': {'enabled': False}, 'only-on': {'enabled': False}}})
+        self.segment = {'kind': 'game', 'title': 'Lions at Panthers', 'game': {'game_pk': 1, 'league': 'nfl'}}
+        self.desk.step()
+        values = json.loads(self.store.values_path.read_text())
+        self.assertEqual((values['programme']['title'], values['programme']['league']), ('Lions at Panthers', 'nfl'))
+        self.assertIsNone(promos.readiness(next(p for p in self.store.library.read() if p['id'] == 'football'),
+                                           promos.fresh(values, self.now)))
+        self.segment = {'kind': 'show', 'title': 'Jeopardy!'}
+        self.desk.step()
+        values = json.loads(self.store.values_path.read_text())
+        self.assertNotIn('league', values['programme'])
+        self.line.assert_not_called()
 
     def test_nothing_needed_nothing_fetched(self):
         self.store.save({'promos': {'time-temp': {'enabled': False}, 'only-on': {'enabled': False}}})

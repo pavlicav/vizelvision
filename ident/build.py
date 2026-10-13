@@ -1,7 +1,10 @@
 """Build the VizelVision station ID: vizelvision-id.mp4 beside this file. With --sports,
 build the VizelVision Sports ID instead (vizelvision-sports.mp4), which plays before games.
+With --join, cut the "We now join..." bumper from the Sports ID (vizelvision-sports-join.mp4
+and its music, build/sports-join-music.wav), which plays before a game joined in progress
+with the score read over it (roku_stream/sports_join.py voices that line when it airs).
 
-    /usr/bin/python3 ident/build.py [--sports] [--keys-file FILE] [--workers 3]
+    /usr/bin/python3 ident/build.py [--sports | --join] [--keys-file FILE] [--workers 3]
 
 1. DJ Low Tide's lines (voice.py): only lines that are missing or whose text
    changed are sent to Deepgram, and only when a key is available.
@@ -33,6 +36,13 @@ import voice  # noqa: E402
 
 OUTPUT = HERE / 'vizelvision-id.mp4'
 SPORTS_OUTPUT = HERE / 'vizelvision-sports.mp4'
+JOIN_OUTPUT = HERE / 'vizelvision-sports-join.mp4'
+JOIN_MUSIC = HERE / 'build' / 'sports-join-music.wav'
+# The join bumper's cut of the Sports ID, in seconds of it: the channel-change snow; SPORTS
+# slamming in, through the march into the build; then the final hit (its flash hides the
+# jump) and the iris to black. 10 s, cut on frames (60 fps); the line goes over the middle.
+JOIN_CUTS = ((0.0, 0.5), (17.3, 23.3), (26.5, 30.0))
+JOIN_SECONDS = sum(b - a for a, b in JOIN_CUTS)
 BUILD = HERE / 'build'
 MUSIC = BUILD / 'music.wav'  # The jingle without its voice, for continuity announcements.
 LOUDNESS = -20.0   # LUFS: the TV-Thing recordings measure about -20.
@@ -105,9 +115,42 @@ def verify(path):
     return duration
 
 
+def build_join(python):
+    """The join bumper: JOIN_CUTS of the Sports ID's picture, and of its music without the
+    voice (8 ms fades at each seam), as a video with that music and the music on its own."""
+    if not SPORTS_OUTPUT.is_file():
+        raise SystemExit('Build the Sports ID first (--sports): the join bumper is cut from it')
+    music = BUILD / 'sports-music.wav'
+    subprocess.run([python, str(HERE / 'sports_jingle.py'), '--no-voice', str(music)], check=True)
+    graph = []
+    for i, (a, b) in enumerate(JOIN_CUTS):
+        graph.append(f'[0:v]trim={a}:{b},setpts=PTS-STARTPTS[v{i}]')
+        graph.append(f'[1:a]atrim={a}:{b},asetpts=PTS-STARTPTS,afade=t=in:d=0.008,'
+                     f'afade=t=out:st={b - a - 0.008:.3f}:d=0.008[a{i}]')
+    graph.append(''.join(f'[v{i}][a{i}]' for i in range(len(JOIN_CUTS))) + f'concat=n={len(JOIN_CUTS)}:v=1:a=1[v][a]')
+    partial = JOIN_OUTPUT.with_suffix('.part.mp4')
+    subprocess.run(['ffmpeg', '-y', '-hide_banner', '-loglevel', 'error', '-i', str(SPORTS_OUTPUT), '-i', str(music),
+                    '-filter_complex', ';'.join(graph), '-map', '[v]', '-map', '[a]', '-threads', '2',
+                    '-c:v', 'libx264', '-preset', 'slow', '-crf', '17', '-profile:v', 'high', '-g', str(T.FPS),
+                    '-color_primaries', 'bt709', '-color_trc', 'bt709', '-colorspace', 'bt709',
+                    '-c:a', 'aac', '-b:a', '192k', '-ar', '48000', '-ac', '2', '-movflags', '+faststart', str(partial)],
+                   check=True)
+    music_partial = JOIN_MUSIC.with_suffix('.part.wav')
+    subprocess.run(['ffmpeg', '-y', '-hide_banner', '-loglevel', 'error', '-i', str(partial), '-map', '0:a',
+                    '-c:a', 'pcm_f32le', str(music_partial)], check=True)
+    result = subprocess.run(['ffprobe', '-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', str(partial)],
+                            capture_output=True, text=True, check=True)
+    if abs(float(result.stdout) - JOIN_SECONDS) > 0.1:
+        raise SystemExit(f'The join bumper is {float(result.stdout):.2f} s, not {JOIN_SECONDS:g}')
+    music_partial.replace(JOIN_MUSIC)
+    partial.replace(JOIN_OUTPUT)
+    print(f'Done: {JOIN_OUTPUT} ({JOIN_SECONDS:g} s) and {JOIN_MUSIC}')
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description='Build the VizelVision station ID')
     parser.add_argument('--sports', action='store_true', help='build the VizelVision Sports ID')
+    parser.add_argument('--join', action='store_true', help='cut the join bumper from the Sports ID')
     parser.add_argument('--keys-file', type=Path, help='a file with DEEPGRAM_API_KEY=... for new voice lines')
     parser.add_argument('--numpy-python', help='Python to run the jingle with (needs numpy and scipy)')
     parser.add_argument('--workers', type=int, default=3, help='frame-drawing processes (default 3)')
@@ -115,6 +158,9 @@ def main(argv=None):
     os.nice(19)
     sys.stdout.reconfigure(line_buffering=True)
     BUILD.mkdir(exist_ok=True)
+    if args.join:
+        build_join(numpy_python(args.numpy_python))
+        return
 
     script = json.loads((HERE / ('sports_script.json' if args.sports else 'script.json')).read_text())
     missing = [line['id'] for line in script['lines'] if not (voice.VOICE_DIR / f"{line['id']}.wav").exists()]

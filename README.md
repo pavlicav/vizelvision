@@ -1,5 +1,12 @@
 # VizelVision Roku Stream
 
+**VizelVision is pronounced "VIZZLE-VISION":** *vizzle* as in *fizzle*, then *vision*. Every
+spoken line should say it that way: announcers, promo and ident voice-overs, the station ID.
+Text for text-to-speech writes it as two words, **"Vizzle Vision"**, so the voice cannot
+misread "Vizel" (the continuity announcers' lines already do). Lines voiced before
+7 October 2026 (the station ID, the Sports ID and the first nine promos) spell it
+"Vizel Vision".
+
 > **The source Roku moved to TV Thing on 2026-10-06.** TV Thing's *Roku lane* now owns the
 > Roku (10.0.0.240) and its Hauppauge HD PVR: the YouTube TV, MLB, Thursday Night Football and
 > Sunday Ticket navigation and screen recognition described below (now TV Thing's
@@ -309,9 +316,13 @@ target, backup, backup_title, start, end}` (`league` is `mlb`, `nfl` or `nba`;
 lists games with `game_id`, networks and a `suggested_target`. `DELETE /v1/programming/shows/<id>` removes a
 show. `POST /v1/programming/take-current` queues the current segment.
 `GET /v1/playback[?until=ISO]` returns the projection (default 24 h, up to 8 days):
-`segments` of `{start, end, title, kind, target, game, estimated, notes}`, where
-`kind` is `game`, `block`, `show`, `backup`, `off_air`, `recording`, `manual` or `ident`. The OFF AIR
-target is `{"source_id": "off-air", "channel_id": "off-air"}`.
+`segments` of `{start, end, title, kind, target, game, estimated, notes, item}`, where
+`kind` is `game`, `block`, `show`, `backup`, `off_air`, `recording`, `manual` or `ident`, and
+`item` is the Up next entry it airs from (null for the schedule's own). `dropped` lists what
+never airs, as `{item, key, title, kind, target, due, why}` (a slot that ends while a game
+runs on, OFF AIR giving way, an entry outranked). A live channel queued to fill time stays
+on until the next timed entry, or until the end it was given. The OFF AIR target is
+`{"source_id": "off-air", "channel_id": "off-air"}`.
 
 ## NFL Sunday Ticket
 

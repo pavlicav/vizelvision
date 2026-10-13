@@ -1,0 +1,55 @@
+{
+  "id": "football",
+  "version": 1,
+  "name": "Football on VizelVision",
+  "kind": "ident",
+  "order": 21,
+  "description": "Only during football: a coach's chalkboard. PLAY 19's O's and X's tap in with the drumline, the routes are drawn on the logo, a pass for a touchdown, and the wordmark on the closed logo. The game on air is chalked in the corner. Zeus.",
+  "duration": 10.0,
+  "file": "football.mp4",
+  "still": "football.png",
+  "still_at": 8.6,
+  "overlays": [
+    {
+      "field": "programme",
+      "box": [
+        700,
+        34,
+        520,
+        64
+      ],
+      "from": 0.55,
+      "to": 9.35,
+      "style": {
+        "font": "Z003",
+        "bold": false,
+        "size": 50,
+        "min_size": 22,
+        "color": [
+          0.93,
+          0.94,
+          0.9
+        ],
+        "align": "right"
+      },
+      "enter": {
+        "kind": "fade",
+        "seconds": 0.4
+      },
+      "exit": {
+        "kind": "fade",
+        "seconds": 0.3
+      }
+    }
+  ],
+  "voice": null,
+  "leagues": [
+    "nfl",
+    "ncaaf"
+  ],
+  "loudness": {
+    "input": "-14.39",
+    "target": -20.0
+  },
+  "built_at": "2026-10-07T20:02:21-0400"
+}

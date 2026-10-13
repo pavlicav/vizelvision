@@ -34,7 +34,7 @@
     id('master-state').textContent = connected ? (m.publisher_ready ? m.state : m.state + ' · publisher not ready') : 'not connected';
     id('master-state').className = 'chip ' + (STATES[m.state] || '');
     VV.fill(id('bug'), onAir ? h('span', {class: 'chip solid pgm'}, 'PGM') : h('span', {class: 'chip'}, 'OFF AIR'),
-      m.ident?.on_air ? h('span', {class: 'chip warn'}, 'Station ID') : null, m.crawl?.on_air ? h('span', {class: 'chip touch'}, 'Crawl') : null,
+      m.ident?.on_air ? h('span', {class: 'chip warn'}, 'Station ID') : null, waitChip(m), m.crawl?.on_air ? h('span', {class: 'chip touch'}, 'Crawl') : null,
       adMuteChip(m));
     const title = !connected ? 'Master not connected' : onAir ? (onAir.source_id === 'ident' ? 'Station ID' : label(onAir).replace(/^[^·]+ · /, '')) : 'Test card';
     id('pgm-title').textContent = title;
@@ -68,6 +68,15 @@
     id('master-error').textContent = errors.join(' · ');
     adMuteRow(m);
     flow();
+  }
+  /* The wait fill: ads over the station ID's held end card while the next source gets ready,
+     then "We now join..." before a game in progress (my_ads status: state fill). */
+  function waitChip(m) {
+    const fill = m.ident?.on_air && m.ident.fill, ads = m.my_ads;
+    if (!fill) return null;
+    const what = ads?.fill?.joined ? 'We now join…' : ads?.state === 'fill' && (ads.ad || ads.promo) ? 'Ad while the next program gets ready'
+      : fill.state === 'finishing' ? 'Next program ready' : 'Next program getting ready';
+    return h('span', {class: 'chip ' + (ads?.fill?.joined ? 'solid pvw' : 'touch'), title: 'The station ID holds its end card; ads fill the wait'}, what);
   }
   /* Ad mute: a tally while a break is muted (or would be, in shadow), and the two quick fixes. */
   function adMuteChip(m) {

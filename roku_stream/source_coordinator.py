@@ -19,6 +19,7 @@ from .tv_control import target_from
 from .ident import IDENT_HOLD_AT, IDENT_SECONDS, IDENT_SOURCE_ID, IDENT_TAIL_SECONDS, is_sports_ident
 from .library import LIBRARY_SOURCE_ID
 from .networks import ANTENNA_SOURCE, youtube_only
+from . import sports_join
 
 TAKES = ('take', 'take-known', 'prepare-take')
 # The latest a manual take can be held on air before the schedule takes back.
@@ -96,6 +97,7 @@ class SourceCoordinator:
         self.sports = None  # SportsCatalog; resolves NFL games for Roku providers.
         self.library = None  # MediaLibrary; validates library file targets.
         self.networks = None  # Networks; the antenna's station for a network YouTube TV is late with.
+        self.joiner = None  # SportsJoin; the "We now join..." bumper before a game joined in progress.
         # A queue entry's YouTube TV navigation is stopped at this wall time (None: no limit).
         self.deadline = None
         self.late = threading.Event()
@@ -632,12 +634,17 @@ class SourceCoordinator:
             pass  # Worker unavailable: nothing is armed there.
         self._hold_ident(False)  # Nothing will follow: the ID irises out.
 
-    def _hold_ident(self, hold):
-        """Hold the station ID's end card while the next source is prepared, or let it end."""
+    def _hold_ident(self, hold, join=None):
+        """Hold the station ID's end card while the next source is prepared (with ads over it,
+        the wait fill), or let it end; join ({'path', 'seconds'}) plays the join bumper there
+        instead of the iris, and the take lands at its end."""
         try:
-            self.master.request('ident_hold', {'hold': hold})
-        except (MasterStreamError, ConfigError):
-            pass  # An older worker: the ID ends on its own and fallback covers the rest.
+            self.master.request('ident_hold', {'hold': hold, **({'join': join} if join else {})})
+        except (MasterStreamError, ConfigError) as exc:
+            if join:  # The bumper was refused: the ID ends as before.
+                logging.getLogger(__name__).warning('Master did not take the join bumper: %s', exc)
+                self._hold_ident(hold)
+            # An older worker: the ID ends on its own and fallback covers the rest.
 
     def station_id(self, target=None):
         """Put the station ID on air now, over the end of what is on air: called 30 s before a
@@ -676,27 +683,62 @@ class SourceCoordinator:
     def _station_id_on_air(self):
         return (self.master.request().get('on_air') or {}).get('source_id') == IDENT_SOURCE_ID
 
-    def _after_station_id(self, cancellable=True):
+    # A queued take waits at most this long on the station ID: an ad filling the wait plays
+    # out (30 s at most), then the iris or the join bumper (10 s), or a sports break's Sports ID.
+    AFTER_ID_LIMIT = 120
+    # The join bumper ends in black: the take goes this close to its end.
+    JOIN_TAKE_LEAD = .3
+    # How long a take waits for the join bumper to be voiced (warm() has usually made it).
+    JOIN_WAIT = 6
+
+    def _join(self, item, target, game):
+        """The join bumper ({'path', 'seconds'}) for a game joined in progress, while the
+        station ID on air can still hold its end card for it; None otherwise."""
+        if self.joiner is None or not self._ident_can_hold():
+            return None
+        clip = self.joiner.clip(sports_join.game_of(item, target, game), timeout=self.JOIN_WAIT)
+        if clip is None:
+            return None
+        logging.getLogger(__name__).info('The join bumper plays before the take: %s', clip['line'])
+        return {'path': clip['path'], 'seconds': clip['seconds']}
+
+    def _after_station_id(self, cancellable=True, join=None):
         """A queued take lets the station ID finish instead of cutting into it. A held end
-        card is released first: the next source is ready, so the ID irises out."""
+        card is released first: the next source is ready, so the ID irises out once the ad
+        filling the wait ends; or, with join, the join bumper plays there and the take lands
+        at its end."""
         if self._station_id_on_air():
-            self._hold_ident(False)
+            self._hold_ident(False, join)
         # A sports break is two IDs long: wait for what is left of it, not one ID's length.
         position, duration = self._ident_media() or (None, None)
         left = duration - (position or 0) if duration else IDENT_SECONDS
-        deadline = time.monotonic() + max(left, 0) + 5
-        while time.monotonic() < deadline:
+        started = time.monotonic()
+        deadline = started + max(left, 0) + 5
+        while time.monotonic() < min(deadline, started + self.AFTER_ID_LIMIT):
             if cancellable:
                 self._check_cancel()
             elif self.stopping.is_set():
                 return
-            on_air = self.master.request().get('on_air') or {}
+            state = self.master.request()
+            on_air = state.get('on_air') or {}
             if on_air.get('source_id') != IDENT_SOURCE_ID:
                 return
-            media = on_air.get('media') or {}
-            position, duration = media.get('position_seconds'), media.get('duration_seconds')
-            if position is not None and duration and duration - position <= IDENT_TAIL_SECONDS:
-                return
+            ident = state.get('ident') or {}
+            fill = ident.get('fill')
+            if fill and fill.get('take'):  # The join bumper: the take lands at its end.
+                ends = fill.get('ends_in')
+                if fill.get('fixed') and ends is not None and ends <= self.JOIN_TAKE_LEAD:
+                    return
+                deadline = max(deadline, time.monotonic() + max(ends or 0, 0) + 5)
+            elif ident.get('held'):  # The ad filling the wait plays out; the iris follows.
+                deadline = max(deadline, time.monotonic() + 5)
+            else:
+                media = on_air.get('media') or {}
+                position, duration = media.get('position_seconds'), media.get('duration_seconds')
+                if position is not None and duration:
+                    if duration - position <= IDENT_TAIL_SECONDS:
+                        return
+                    deadline = max(deadline, time.monotonic() + duration - position + 2)
             time.sleep(.05)
 
     def _reuse_library(self, queue_item):
@@ -781,6 +823,9 @@ class SourceCoordinator:
         self.force = force
         if holding:
             self._hold_ident(True)
+        if self.joiner is not None and action in ('_queue', '_preroll'):
+            # A game joined in progress gets the join bumper: voice it while the source prepares.
+            self.joiner.warm(sports_join.game_of(queue_item, body, game))
         with self.lock:
             try:
                 library = body.get('source_id') == LIBRARY_SOURCE_ID
@@ -832,7 +877,7 @@ class SourceCoordinator:
                         if not result.get('can_take') or not prepared.get('id'):
                             raise MasterStreamError('Source is no longer ready')
                         if queue_item and action == '_queue':
-                            self._after_station_id()
+                            self._after_station_id(join=self._join(queue_item, body, game))
                         # A queued take (or the way back to YouTube TV) is ordered with Pause by
                         # the queue's take guard.
                         result = self._worker('take', {'prepared_id': prepared['id']}, queue_item=queue_item)

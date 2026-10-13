@@ -1,0 +1,20 @@
+{
+  "id": "eighty-six",
+  "version": 1,
+  "name": "VizelVision '86",
+  "kind": "ident",
+  "order": 13,
+  "description": "1986: a striped sunset over a neon grid, laser beams on the logo, the wordmark flying in as a wireframe and turning to extruded chrome, GET THE PICTURE! and a neon 19. FM bells, gated snares, an orchestra hit. Hermes.",
+  "duration": 10.0,
+  "file": "eighty-six.mp4",
+  "still": "eighty-six.png",
+  "still_at": 8.5,
+  "overlays": [],
+  "voice": null,
+  "leagues": [],
+  "loudness": {
+    "input": "-15.13",
+    "target": -20.0
+  },
+  "built_at": "2026-10-07T19:54:40-0400"
+}

@@ -1,5 +1,5 @@
-// My ads (a tab of Ads): what is on air, the list with its limits and order, uploads, the break card and the
-// corner picture, and what aired. node tests/browser_ui_my_ads.cjs /path/to/playwright
+// My ads (a tab of Ads): what is on air, Next up (skip, queue by hand), the list with its limits and order,
+// uploads, the break card and the corner picture, and what aired. node tests/browser_ui_my_ads.cjs /path/to/playwright
 const {open, run, overflow, assert} = require('./ui_harness.cjs');
 
 const VINNY = '3f9c1a2b4d5e', ROCKET = '7a1e0c9d8b2f', HARDWARE = 'c0ffee123456';
@@ -21,7 +21,7 @@ run(async browser => {
     'POST /v1/my-ads/upload': (body, F) => ({...F.my_ads, ads: [...F.my_ads.ads, added], added: added.id}),
     'POST /v1/admute/override': () => ({override: {accepted: true}}),
     'POST /v1/my-ads/ads/*': (body, F) => F.my_ads, 'POST /v1/my-ads': (body, F) => F.my_ads, 'POST /v1/my-ads/order': (body, F) => F.my_ads,
-    'DELETE /v1/my-ads/ads/*': (body, F) => F.my_ads,
+    'DELETE /v1/my-ads/ads/*': (body, F) => F.my_ads, 'POST /v1/my-ads/next': (body, F) => F.my_ads,
   }});
   const {page} = t;
   await page.waitForSelector('#my-list li.ad');
@@ -29,9 +29,31 @@ run(async browser => {
   // On air: the ad playing, how far in, and the quick fixes.
   assert.equal(await page.locator('#my-status').textContent(), "Cousin Vinny's Pizza");
   assert.equal(await page.locator('#progress-text').textContent(), '0:12 / 0:30');
-  assert.match(await page.locator('#next').textContent(), /readying the next/);
+  assert.match(await page.locator('#next').textContent(), /Plays next: Rocket Lawn Care \(0:15\)/, 'Next up\'s first');
   assert.equal(await page.locator('#mode-note').isVisible(), false, 'ad mute is On');
   assert.deepEqual(await posted(t, () => page.locator('#my-unmute').click()), {method: 'POST', path: '/v1/admute/override', body: {action: 'unmute'}});
+
+  // Next up: what you queued, the promo where its timing puts it. Skip one, skip what is on air, queue by hand.
+  const next = page.locator('#nextup li');
+  assert.equal(await next.count(), 3);
+  assert.match(await next.nth(0).innerText(), /Rocket Lawn Care[\s\S]*Queued by you[\s\S]*0:15[\s\S]*in 0:18/);
+  assert.match(await next.nth(1).innerText(), /The VizelVision Line[\s\S]*Station promo[\s\S]*0:10[\s\S]*in 0:33/);
+  assert.match(await page.locator('#next-when').textContent(), /In this break/);
+  assert.ok(t.frames.some(f => f.endsWith('/v1/promos/file/metro.png')), 'the promo\'s still');
+  assert.deepEqual(await posted(t, () => next.nth(1).getByRole('button', {name: 'Skip The VizelVision Line'}).click()),
+    {method: 'POST', path: '/v1/my-ads/next', body: {op: 'skip', key: 'c4d2e8f1'}});
+  assert.equal(await page.locator('#skip-now').innerText(), 'Skip this ad');
+  assert.deepEqual(await posted(t, () => page.locator('#skip-now').click()),
+    {method: 'POST', path: '/v1/my-ads/next', body: {op: 'skip', key: '5e1f02aa'}});
+  assert.equal(await page.locator('#queue-pick option[value="promo:baseball"]').isDisabled(), true, 'only during MLB games');
+  await page.locator('#queue-pick').selectOption('promo:legal');
+  assert.deepEqual((await posted(t, () => page.getByRole('button', {name: 'Play next'}).click())).body,
+    {op: 'add', kind: 'promo', id: 'legal', next: true});
+  await page.locator('#queue-pick').selectOption('ad:' + VINNY);
+  assert.deepEqual((await posted(t, () => page.getByRole('button', {name: 'Add to queue'}).click())).body,
+    {op: 'add', kind: 'ad', id: VINNY, next: false});
+  assert.deepEqual((await posted(t, () => page.locator('#my-list li.ad').nth(1).getByRole('button', {name: 'Queue'}).click())).body,
+    {op: 'add', kind: 'ad', id: ROCKET, next: false});
 
   // The list, in order, with what each is doing.
   const rows = page.locator('#my-list li.ad');
@@ -108,7 +130,8 @@ run(async browser => {
   }});
   await t.page.waitForSelector('#my-list li.ad');
   assert.equal(await t.page.locator('#my-status').textContent(), 'Break card');
-  assert.match(await t.page.locator('#next').textContent(), /Plays next: Hometown Hardware/);
+  assert.match(await t.page.locator('#next').textContent(), /Plays next: Rocket Lawn Care/);
+  assert.equal(await t.page.locator('#skip-now').isVisible(), false, 'nothing to skip under the card');
   assert.match(await t.page.locator('#my-list li.ad').nth(2).innerText(), /Plays next/i);
   assert.match(await t.page.locator('#mode-note').innerText(), /Ad mute is in shadow: it mutes nothing/);
   assert.equal(await t.page.locator('#my-unmute').isDisabled(), true, 'no quick fixes while ad mute is not On');

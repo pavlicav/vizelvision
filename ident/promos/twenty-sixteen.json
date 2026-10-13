@@ -1,0 +1,20 @@
+{
+  "id": "twenty-sixteen",
+  "version": 1,
+  "name": "VizelVision '16",
+  "kind": "ident",
+  "order": 15,
+  "description": "2016: a flat white phone on a purple-to-orange gradient; a LIVE notification, a tap and the stream on the logo; floating hearts and comments, flat long-shadow type, #VizelVision. Tropical house marimba and vocal chops. Thalia.",
+  "duration": 10.0,
+  "file": "twenty-sixteen.mp4",
+  "still": "twenty-sixteen.png",
+  "still_at": 8.4,
+  "overlays": [],
+  "voice": null,
+  "leagues": [],
+  "loudness": {
+    "input": "-14.75",
+    "target": -20.0
+  },
+  "built_at": "2026-10-07T19:57:01-0400"
+}

@@ -1,12 +1,13 @@
 // Ads › My ads: the operator's own ads, aired over the breaks ad mute mutes (my_ads.py, ad_break.py).
-// Upload, order, limits, the break card and the corner picture; what is on air now and what aired.
+// Upload, order, limits, the break card and the corner picture; what is on air now, Next up (skip,
+// queue by hand: master's, ad_break.AdBreak.command) and what aired.
 // Its ids start my- where the other tabs use the same name.
 (() => {
   'use strict';
   const {h, api, fmt, toast} = VV;
   const $ = id => document.getElementById(id);
   const panel = $('panel-my-ads');
-  let view = null, editing = null, drawn = '', drawnLimit = null;
+  let view = null, editing = null, drawn = '', drawnLimit = null, drawnPick = '', drawnNext = '';
 
   // Limits: at most count plays in any stretch of minutes.
   const LIMITS = [[null, 'No limit'], [{count: 1, minutes: 15}, 'Once every 15 minutes'], [{count: 1, minutes: 30}, 'Once every 30 minutes'],
@@ -51,18 +52,20 @@
     });
   }
 
-  // Files (pictures, the card, the ads themselves) need the API key: fetched as blobs, once each.
+  // Files (pictures, the card, the ads themselves, the promos' stills) need the API key: fetched as blobs, once each.
   const blobs = new Map();
-  function blob(name) {
-    if (!blobs.has(name)) blobs.set(name, api('v1/my-ads/file/' + name, undefined, {raw: true, timeout: 120000})
+  function fetched(path) {
+    if (!blobs.has(path)) blobs.set(path, api(path, undefined, {raw: true, timeout: 120000})
       .then(r => r.ok ? r.blob() : null).then(b => b && URL.createObjectURL(b)).catch(() => null));
-    return blobs.get(name);
+    return blobs.get(path);
   }
-  function show(img, name) {
-    if (img.dataset.name === name) return;
-    img.dataset.name = name;
-    blob(name).then(url => { if (img.dataset.name !== name) return; if (url) img.src = url; img.closest('.shot')?.classList.toggle('none', !url); });
+  const blob = name => fetched('v1/my-ads/file/' + name);
+  function showAt(img, path) {
+    if (img.dataset.name === path) return;
+    img.dataset.name = path;
+    fetched(path).then(url => { if (img.dataset.name !== path) return; if (url) img.src = url; img.closest('.shot')?.classList.toggle('none', !url); });
   }
+  const show = (img, name) => showAt(img, 'v1/my-ads/file/' + name);
 
   // Settings ------------------------------------------------------------------------------------
   async function save(changes, done) {
@@ -157,11 +160,112 @@
           h('label', {class: 'field'}, h('span', 'Volume'), trim),
           h('span', {class: 'grow'}),
           h('button', {class: 'xs', type: 'button', onclick: () => preview(ad)}, VV.icon(VV.ICONS.play), 'Preview'),
+          h('button', {class: 'xs', type: 'button', title: 'Next up: after anything else you queued, before the rotation (even if it is off or over its limit)',
+            onclick: () => queueIt({kind: 'ad', id: ad.id, name: ad.name}, false)}, VV.icon(VV.ICONS.plus), 'Queue'),
           h('button', {class: 'xs danger', type: 'button', onclick: () => remove(ad)}, 'Delete'))));
   }
 
+  // Next up -------------------------------------------------------------------------------------------
+  // Master's queue for the breaks (ad_break.py): what you queued first, then the rotation's ads drawn
+  // ahead, with the next promo where its timing puts it. A skipped ad is out of this round.
+  async function command(body, done) {
+    try {
+      view = await api('v1/my-ads/next', body); render(true);
+      if (done) toast(done, {ok: true});
+      setTimeout(() => VV.poke('v1/my-ads'), 400);
+    } catch (e) { toast(e.message, {error: true}); }
+  }
+  const queueIt = (item, first) => command({op: 'add', kind: item.kind, id: item.id, next: first},
+    `${item.name || 'It'} ${first ? 'plays next' : 'is queued'}.`);
+  const skip = row => command({op: 'skip', key: row.key}, row.kind === 'promo' && row.by === 'promos'
+    ? `Skipped ${row.name}: another promo instead.` : `Skipped ${row.name || 'it'} this time round.`);
+  function timing(row) {
+    if (row.kind === 'promo' && row.opens)
+      return row.due_at <= Date.now() / 1000 + 1 ? 'opens the next break' : 'opens the first break after ' + fmt.clock(row.due_at);
+    return row.in == null ? null : row.in < 1 ? 'next' : 'in ' + fmt.dur(row.in);
+  }
+  function nextUp() {
+    const st = view.status || {}, s = view.settings, rows = st.next, empty = $('nextup-empty');
+    const byId = Object.fromEntries(view.ads.map(a => [a.id, a]));
+    const stills = Object.fromEntries((view.promos?.list || []).map(p => [p.id, p.still]));
+    const inBreak = ['ad', 'promo', 'card', 'pass'].includes(st.state);
+    $('next-when').textContent = !rows ? '' : inBreak ? 'In this break if it lasts, then the next'
+      : st.state === 'fill' ? 'While the next program gets ready' : 'For the next break';
+    if (!rows) {
+      VV.fill($('nextup'));
+      drawnNext = '';
+      empty.hidden = false;
+      empty.textContent = st.error ? 'Master is unavailable, so Next up is unknown.' : 'Master has not shown Next up yet: it needs a restart for it.';
+      return;
+    }
+    const every = view.promos?.every;
+    $('promo-every').textContent = !view.promos?.enabled ? 'promos are off now' : every === 0 ? 'every break' : 'every ' + every + ' minutes';
+    empty.hidden = rows.length > 0;
+    empty.textContent = !s.enabled && !view.promos?.enabled ? 'My ads and promos are both off: breaks show the programme, muted.'
+      : view.ads.length ? 'Nothing may play now: every ad is off or over its limit, so the break card.' : 'Nothing yet: upload ads below.';
+    // Drawn again only when an entry changes (a click is never lost to a redraw); the times tick in place.
+    const key = JSON.stringify([rows.map(r => ({...r, in: null})), rows.map(r => byId[r.id]?.pics), s.enabled, view.promos?.enabled]);
+    if (key === drawnNext) {
+      for (const row of rows) {
+        const el = $('nextup').querySelector(`li[data-key="${row.key}"] .when`);
+        if (el) el.textContent = timing(row) || '';
+      }
+      return;
+    }
+    drawnNext = key;
+    VV.fill($('nextup'), ...rows.map((row, i) => {
+      const ad = row.kind === 'ad' ? byId[row.id] : null, still = row.kind === 'promo' && stills[row.id];
+      const img = h('img', {alt: ''}), shot = h('div', {class: 'shot thumb'}, img);
+      if (ad?.pics) show(img, `${ad.id}-0.jpg`);
+      else if (still) showAt(img, 'v1/promos/file/' + still);
+      else shot.classList.add('none');
+      const off = row.kind === 'ad' ? !s.enabled : !view.promos?.enabled;
+      const when = timing(row), name = row.name || 'Untitled';
+      return h('li', {class: [row.kind, row.by === 'you' ? 'mine' : '', row.cued ? 'cued' : '', off || row.left_out ? 'held' : ''].filter(Boolean).join(' '),
+        data: {key: row.key}, title: row.cued ? 'Decoded and ready to go on' : null},
+        h('span', {class: 'pos'}, String(i + 1)), shot,
+        h('div', {class: 'what'}, h('b', {title: name}, name),
+          h('span', {class: 'facts'}, row.kind === 'promo' ? h('span', {class: 'chip pvw'}, 'Station promo') : null,
+            row.by === 'you' ? h('span', {class: 'chip touch'}, 'Queued by you') : null,
+            h('span', {class: 'num'}, fmt.dur(row.duration)), h('span', {class: 'when'}, when || ''),
+            row.left_out ? h('span', {class: 'chip pgm', title: row.left_out}, 'Would not play · retried in 10 min') : null,
+            off ? h('span', {class: 'chip'}, row.kind === 'ad' ? 'My ads is off' : 'Promos are off') : null)),
+        h('button', {class: 'xs quiet', type: 'button', 'aria-label': 'Skip ' + name,
+          title: row.kind === 'promo' && row.by === 'promos' ? 'Another promo instead' : 'Not this time: it comes round again later',
+          onclick: () => skip(row)}, VV.icon(VV.ICONS.x), 'Skip'));
+    }));
+  }
+  // The picker: every promo and ad, by name. Drawn again only when what it lists changes.
+  function queuePicker() {
+    const select = $('queue-pick'), promos = view.promos?.list || [];
+    const byName = (a, b) => (a.name || '').localeCompare(b.name || '', undefined, {sensitivity: 'base'});
+    const options = [
+      ['Station promos', [...promos].sort(byName).map(p => ['promo:' + p.id, `${p.name} · ${fmt.dur(p.duration)}${p.why ? ' · ' + p.why : ''}`, !!p.why])],
+      ['My ads', [...view.ads].sort(byName).map(a => ['ad:' + a.id, `${a.name || 'Untitled'} · ${fmt.dur(a.duration)}`
+        + (!a.present ? ' · file missing' : !a.enabled ? ' · off' : !a.allowed ? ' · over its limit' : ''), !a.present])]];
+    const key = JSON.stringify(options);
+    if (key === drawnPick) return;
+    drawnPick = key;
+    const value = select.value;
+    VV.fill(select, h('option', {value: ''}, 'Choose an ad or a promo…'),
+      ...options.filter(([, items]) => items.length).map(([label, items]) =>
+        h('optgroup', {label}, items.map(([v, text, disabled]) => h('option', {value: v, disabled}, text)))));
+    select.value = [...select.options].some(o => o.value === value && !o.disabled) ? value : '';
+  }
+  $('queue-add').onsubmit = e => {
+    e.preventDefault();
+    const [kind, id] = $('queue-pick').value.split(':');
+    if (!id) { toast('Choose an ad or a promo first.', {error: true}); return; }
+    const item = kind === 'ad' ? view.ads.find(a => a.id === id) : view.promos.list.find(p => p.id === id);
+    queueIt({kind, id, name: item?.name}, e.submitter?.dataset.next === 'true');
+  };
+  $('skip-now').onclick = () => {
+    const key = $('skip-now').dataset.key;
+    if (key) command({op: 'skip', key}, 'Skipped: the next goes on.');
+  };
+
   // The page ------------------------------------------------------------------------------------------
-  const CORNERS = {'bottom-right': ['right', 'bottom'], 'bottom-left': ['left', 'bottom'], 'top-right': ['right', 'top'], 'top-left': ['left', 'top']};
+  const CORNERS ={'bottom-right': ['right', 'bottom'], 'bottom-left': ['left', 'bottom'], 'top-right': ['right', 'top'], 'top-left': ['left', 'top']};
   function corner(pip) {
     const box = $('corner'), f = {small: 5, medium: 4, large: 3}[pip.size], [x, y] = CORNERS[pip.corner];
     $('screen').classList.toggle('off', !pip.enabled);
@@ -175,11 +279,21 @@
     note.hidden = !(s.enabled && mode !== 'on');
     if (!note.hidden) VV.fill(note, `Ad mute is ${mode === 'off' ? 'off' : 'in shadow'}: it mutes nothing, so your ads never air. `,
       h('a', {href: '#admute'}, 'Turn ad mute On'), '.');
-    const big = $('my-status'), lamp = $('my-lamp'), chip = $('state-chip');
+    const big = $('my-status'), lamp = $('my-lamp'), chip = $('state-chip'), playing = st.promo || st.ad;
     const byId = Object.fromEntries(view.ads.map(a => [a.id, a]));
     $('my-error').textContent = st.error || (st.card?.error && s.enabled ? st.card.error : '') || '';
     let text = 'Off', detail = 'Muted breaks look as ad mute leaves them: the programme\'s picture, muted.', cls = '';
-    if (st.state === 'promo' && st.promo) {
+    const waiting = st.state === 'fill';  // the station ID holds its end card while the next source gets ready
+    if (waiting && st.promo) {
+      text = st.promo.name; cls = 'on';
+      detail = 'A station promo, while the next program gets ready (over the station ID\'s end card).';
+    } else if (waiting && st.ad) {
+      text = st.ad.name || 'Untitled ad'; cls = 'on';
+      detail = 'Your ad fills the wait while the next program gets ready; the station ID irises out after it.';
+    } else if (waiting) {
+      text = st.fill?.joined ? 'We now join…' : 'Station ID end card'; cls = st.fill?.joined ? 'on' : 'card';
+      detail = st.fill?.joined ? 'The VizelVision Sports bumper: the game in progress is next.' : 'The next program is getting ready; an ad goes on once one is readied.';
+    } else if (st.state === 'promo' && st.promo) {
       text = st.promo.name; cls = 'on';
       detail = 'A station promo opens this break (Presentation → Promos); your ads follow.';
     } else if (s.enabled && st.state === 'ad' && st.ad) {
@@ -199,16 +313,23 @@
     chip.textContent = st.state === 'promo' ? 'promo' : cls === 'on' ? 'my ad' : cls === 'card' ? 'card' : st.active ? 'armed' : 'idle';
     chip.className = 'chip' + (cls === 'on' ? ' solid pgm' : cls === 'card' ? ' warn' : st.active ? ' pvw' : '');
     $('now-panel').classList.toggle('live', !!cls);
-    const playing = st.state === 'promo' ? st.promo : st.ad;
     const progress = cls === 'on' && playing && playing.duration;
     $('progress').hidden = !progress;
     if (progress) {
       $('progress-bar').style.width = Math.min(100, 100 * (playing.position || 0) / playing.duration) + '%';
       $('progress-text').textContent = fmt.dur(playing.position || 0) + ' / ' + fmt.dur(playing.duration);
     }
-    const cued = st.cued && byId[st.cued];
-    $('next').textContent = !s.enabled ? '' : cued ? 'Plays next: ' + (cued.name || 'untitled') + ' (' + fmt.dur(cued.duration) + ')'
+    const cued = st.cued && byId[st.cued], first = st.next?.find(r => !r.left_out);
+    $('next').textContent = first ? 'Plays next: ' + (first.name || 'untitled') + ' (' + fmt.dur(first.duration) + ')'
+      : !s.enabled ? '' : cued ? 'Plays next: ' + (cued.name || 'untitled') + ' (' + fmt.dur(cued.duration) + ')'
       : view.ads.length ? 'Nothing cued: ' + (view.ads.some(a => a.enabled && a.allowed) ? 'readying the next…' : 'every ad is off or over its limit, so the break card.') : '';
+    // Skip what is on air: the next goes on at once (not once the next program is ready: it plays out).
+    const skippable = playing?.key && cls === 'on' && st.fill?.state !== 'finishing';
+    $('skip-now').hidden = !skippable;
+    if (skippable) {
+      $('skip-now').dataset.key = playing.key;
+      $('skip-now').lastChild.textContent = st.promo ? 'Skip this promo' : 'Skip this ad';
+    }
     const onAir = !!view.on_air;
     $('my-unmute').disabled = $('my-mute').disabled = !onAir || mode !== 'on';
   }
@@ -216,13 +337,17 @@
     const names = Object.fromEntries(view.ads.map(a => [a.id, a.name || 'Untitled']));
     const rows = view.recent.slice(0, 40).map(p => p.kind === 'card'
       ? h('tr', null, h('td', {class: 'when'}, fmt.when(p.at)), h('td', null, h('span', {class: 'chip warn'}, 'Break card')), h('td', {class: 'num'}, fmt.dur(p.seconds)), h('td'))
+      : p.kind === 'join'
+      ? h('tr', null, h('td', {class: 'when'}, fmt.when(p.at)), h('td', null, h('span', {class: 'chip pvw'}, 'We now join'), ' ', 'VizelVision Sports bumper'),
+        h('td', {class: 'num aired'}, fmt.dur(p.seconds) + ' of ' + fmt.dur(p.length)), h('td', {class: 'small muted'}, 'before a game in progress'))
       : p.kind === 'promo'
       ? h('tr', null, h('td', {class: 'when'}, fmt.when(p.at)), h('td', null, h('span', {class: 'chip pvw'}, 'Station promo'), ' ', p.name || p.id),
         h('td', {class: 'num aired'}, fmt.dur(p.seconds) + ' of ' + fmt.dur(p.length)), h('td', {class: 'small muted'}, p.complete ? 'complete' : 'cut short'))
       : h('tr', null, h('td', {class: 'when'}, fmt.when(p.at)), h('td', null, names[p.id] ?? h('i', {class: 'muted'}, (p.name || 'an ad') + ' (deleted)')),
         h('td', {class: 'num aired'}, fmt.dur(p.seconds) + ' of ' + fmt.dur(p.length)),
         h('td', {class: 'small muted'}, p.error ? h('span', {class: 'chip pgm', title: p.error}, 'failed') : p.complete ? 'complete'
-          : 'cut short: the programme came back', p.counted ? null : ' · didn\'t count')));
+          : p.wait ? 'cut short: the next program was ready' : 'cut short: the programme came back', p.counted ? null : ' · didn\'t count',
+          p.wait ? ' · while the next program got ready' : null)));
     VV.fill($('recent'), ...rows);
     $('recent-empty').hidden = rows.length > 0;
     $('card-today').textContent = view.card.seconds_today ? 'Break card in the last day: ' + fmt.dur(view.card.seconds_today) : '';
@@ -233,7 +358,7 @@
     for (const b of document.querySelectorAll('#enabled [data-enabled]')) b.setAttribute('aria-pressed', String(String(s.enabled) === b.dataset.enabled));
     for (const b of document.querySelectorAll('#order [data-order]')) b.setAttribute('aria-pressed', String(s.order === b.dataset.order));
     $('order-note').textContent = s.order === 'shuffle' ? 'Every ad once, in a random order, before any repeats.' : 'Top to bottom, then around again.';
-    status(); recent();
+    status(); recent(); nextUp(); queuePicker();
     const total = view.ads.reduce((t, a) => t + a.duration, 0);
     $('count-chip').textContent = view.ads.length ? `${view.ads.length} · ${fmt.dur(total)}` : 'none';
     $('my-empty').hidden = view.ads.length > 0;

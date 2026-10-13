@@ -14,6 +14,23 @@ run(async browser => {
   assert.match(await page.locator('#master-state').innerText(), /live/i);
   assert.match(await page.locator('#queue-state').innerText(), /Paused/);
 
+  // The rundown is what will air (GET /v1/playback): the game due now joins in progress, the
+  // Prime Video game queued to fill stays on until the schedule signs off (a quiet line), and
+  // what the estimates leave out is folded away. OFF AIR never shows as an entry of its own.
+  await page.waitForSelector('#queue-items .proj.off');
+  const proj = await page.locator('#queue-items .proj').evaluateAll(rows => rows.map(r => [r.dataset.id || '', r.classList.contains('off'), r.textContent.replace(/\s+/g, ' ')]));
+  assert.deepEqual(proj.slice(0, 3).map(r => [r[0], r[1]]), [[BLOCKED, false], [QUEUED, false], ['', true]]);
+  assert.match(proj[3][2], /The View/, 'then the next day\'s schedule');
+  assert.match(proj[0][2], /Philadelphia Phillies at Atlanta Braves.*until its final, about .*joins in progress/i);
+  assert.match(proj[2][2], /OFF AIR · test card.*Until/);
+  const rundown = await page.locator('#queue-items').textContent();
+  assert.doesNotMatch(rundown, /Next scheduled/);
+  const wont = page.locator('#queue-items details.wont');
+  assert.match(await wont.locator('summary').textContent(), /Won’t air · 1\s*Jeopardy/);
+  assert.equal(await wont.evaluate(d => d.open), false);
+  await wont.locator('summary').click();
+  assert.match(await wont.textContent(), /Its slot ends before Philadelphia Phillies at Atlanta Braves does/);
+
   // Up next: resume, move, retry, remove.
   await page.locator('#queue-toggle').click();
   await page.locator(`[data-id="${QUEUED}"] [data-action=movedown]`).click();
@@ -118,6 +135,23 @@ run(async browser => {
   assert.deepEqual(t.unknown, []);
   assert.deepEqual(t.errors, []);
   await t.ctx.close();
+
+  // An entry the projection leaves out is listed under Won't air, and can be removed from there.
+  const dropped = await open(browser, '/air', {api: {'DELETE /v1/queue/*': () => ({})}, edit: F => {
+    F.playback.segments = F.playback.segments.filter(s => s.item !== QUEUED);
+    F.playback.dropped.push({item: QUEUED, key: null, title: 'Thursday Night Football', kind: 'manual',
+      target: {source_id: 'thursday-night-football', channel_id: '401872964'}, due: null, why: 'Its end time passes before it could air'});
+  }});
+  const gone = dropped.page.locator('#queue-items details.wont');
+  await gone.waitFor();
+  assert.equal(await dropped.page.locator(`#queue-items .proj[data-id="${QUEUED}"]`).count(), 0);
+  assert.match(await gone.locator('summary').textContent(), /Won’t air · 2/);
+  await gone.locator('summary').click();
+  await gone.locator(`[data-id="${QUEUED}"] [data-action=remove]`).click();
+  await dropped.page.waitForTimeout(150);
+  assert.deepEqual(dropped.posts.map(p => [p.method, p.path]), [['DELETE', '/v1/queue/' + QUEUED]]);
+  assert.deepEqual(dropped.errors, []);
+  await dropped.ctx.close();
 
   // A held game in its closing stretch: the schedule's block is prepared on the Roku meanwhile.
   const held = await open(browser, '/air', {edit: F => {
