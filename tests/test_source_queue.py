@@ -16,6 +16,7 @@ from roku_stream.scheduler import ScheduledJob, utc_now, parse_time
 from roku_stream.source_queue import SourceQueue, SourceQueueItem, QueueSchedules, QueuePrograms
 
 TARGET = {'source_id': 'tv-thing-digital', 'channel_id': 'wrc'}
+OTHER = {'source_id': 'tv-thing-digital', 'channel_id': 'wjla'}
 
 
 class SourceQueueTests(unittest.TestCase):
@@ -100,6 +101,95 @@ class SourceQueueTests(unittest.TestCase):
         self.queue.action(first.id, 'retry')
         self.wait(lambda: self.queue.get(second.id).status == 'succeeded')
         self.assertEqual(len(self.calls), 2)
+
+    def test_a_blocked_entry_waits_while_nothing_behind_it_is_due(self):
+        self.queue.executor = Mock(side_effect=MasterStreamError('Bad source'))
+        first = self.queue.add_target(TARGET, 'now')
+        later = self.queue.add_target(OTHER, 'at_time', run_at=(utc_now() + timedelta(hours=1)).isoformat())
+        self.queue.resume()
+        self.wait(lambda: self.queue.get(first.id).status == 'blocked', timeout=5)
+        time.sleep(.1)
+        self.assertEqual(self.queue.get(first.id).status, 'blocked')
+        self.assertEqual(self.queue.get(later.id).status, 'queued')
+
+    def test_a_blocked_entry_is_passed_over_once_the_next_is_due(self):
+        # 2026-10-08 23:53 a failed Thursday Night Football entry held every entry behind it
+        # (The View, the news, Saturday's and Sunday's games) until Monday morning.
+        def take(item):
+            if item.target == TARGET:
+                raise MasterStreamError('This Prime Video game has ended')
+            return {'on_air': item.target}
+        self.queue.executor = take
+        first = self.queue.add_target(TARGET, 'now')
+        later = self.queue.add_scheduled({'key': 'view', 'target': OTHER, 'title': 'The View',
+                                          'run_at': (utc_now() + timedelta(seconds=2.5)).isoformat()})
+        self.queue.resume()
+        self.wait(lambda: self.queue.get(later.id).status == 'succeeded', timeout=5)
+        passed = self.queue.get(first.id)
+        self.assertEqual((passed.status, passed.gate_status), ('skipped', 'passed'))
+        self.assertIn('This Prime Video game has ended', passed.gate_detail)
+        self.assertIn('passed over at', passed.gate_detail)
+        self.assertIn('for The View', passed.gate_detail)
+
+    def test_a_blocked_game_takes_its_return_to_the_schedule_with_it(self):
+        game = {'league': 'nfl', 'game_pk': 401872980, 'game_date': '2026-10-08', 'title': 'Buccaneers at Cowboys'}
+        self.queue.game_status = lambda *_: {'finished': False, 'status': 'In progress'}
+        self.queue.executor = Mock(side_effect=[MasterStreamError('The Roku could not find it'), {'on_air': OTHER}])
+        start = utc_now() - timedelta(minutes=5)
+        tnf = self.queue.add_scheduled({'key': 'tnf', 'target': TARGET, 'title': game['title'], 'kind': 'game',
+                                        'game': game, 'run_at': start.isoformat()})
+        back = self.queue.add_scheduled({'key': 'back', 'target': {'source_id': 'off-air', 'channel_id': 'off-air'},
+                                         'title': 'OFF AIR', 'kind': 'backup', 'run_at': start.isoformat(),
+                                         'after_game': game})
+        news = self.queue.add_scheduled({'key': 'news', 'target': OTHER, 'title': 'News',
+                                         'run_at': (utc_now() + timedelta(seconds=.3)).isoformat()})
+        self.queue.resume()
+        self.wait(lambda: self.queue.get(news.id).status == 'succeeded')
+        self.assertEqual([self.queue.get(i.id).gate_status for i in (tnf, back)], ['passed', 'passed'])
+
+    def test_a_paused_queue_keeps_its_blocked_entries(self):
+        def fail(_item):
+            self.queue.pause()  # The operator pauses while it fails.
+            raise MasterStreamError('Bad source')
+        self.queue.executor = fail
+        first = self.queue.add_target(TARGET, 'now')
+        self.queue.add_target(OTHER, 'at_time', run_at=(utc_now() + timedelta(seconds=.2)).isoformat())
+        self.queue.resume()
+        self.wait(lambda: self.queue.get(first.id).status == 'blocked', timeout=5)
+        time.sleep(.4)
+        self.assertEqual(self.queue.get(first.id).status, 'blocked')
+
+    def test_a_game_already_final_is_skipped_not_aired(self):
+        # 2026-10-12 10:50: Saturday's Illinois at Michigan State went on air on Monday.
+        game = {'league': 'ncaaf', 'game_pk': 401858480, 'game_date': '2026-10-10',
+                'title': 'Illinois Fighting Illini at Michigan State Spartans'}
+        self.queue.game_status = lambda *_: {'finished': True, 'status': 'Final', 'summary': 'Illinois 24, Michigan State 21 · Final'}
+        item = self.queue.add_scheduled({'key': 'msu', 'target': TARGET, 'title': game['title'], 'kind': 'game',
+                                         'game': game, 'run_at': (utc_now() - timedelta(hours=2)).isoformat()})
+        self.queue.resume()
+        self.wait(lambda: self.queue.get(item.id).status == 'skipped')
+        self.assertEqual(self.queue.get(item.id).gate_status, 'over')
+        self.assertEqual(self.queue.get(item.id).gate_detail, 'The game is over (Illinois 24, Michigan State 21 · Final)')
+        self.assertEqual(self.calls, [])
+
+    def test_a_game_whose_status_cannot_be_read_airs_as_before(self):
+        game = {'league': 'mlb', 'game_pk': 849812, 'game_date': '2026-10-12', 'title': 'Dodgers at Brewers'}
+        self.queue.game_status = Mock(side_effect=MasterStreamError('MLB is down'))
+        item = self.queue.add_scheduled({'key': 'g', 'target': TARGET, 'title': game['title'], 'kind': 'game',
+                                         'game': game, 'run_at': (utc_now() - timedelta(minutes=1)).isoformat()})
+        self.queue.resume()
+        self.wait(lambda: self.queue.get(item.id).status == 'succeeded')
+
+    def test_a_game_entry_half_a_day_old_expires_even_while_paused(self):
+        game = {'league': 'ncaaf', 'game_pk': 401858480, 'game_date': '2026-10-10', 'title': 'Illinois at Michigan State'}
+        old = self.queue.add_scheduled({'key': 'msu', 'target': TARGET, 'title': game['title'], 'kind': 'game',
+                                        'game': game, 'run_at': (utc_now() - timedelta(hours=13)).isoformat()})
+        recent = self.queue.add_scheduled({'key': 'g', 'target': TARGET, 'title': 'Later game', 'kind': 'game',
+                                           'game': {**game, 'game_pk': 1}, 'run_at': (utc_now() - timedelta(hours=11)).isoformat()})
+        self.wait(lambda: self.queue.get(old.id).status == 'skipped')
+        self.assertEqual(self.queue.get(old.id).gate_detail, 'Its game started over 12 hours ago')
+        self.assertEqual(self.queue.get(recent.id).status, 'queued')
+        self.assertTrue(self.queue.status()['paused'])
 
     def test_busy_retries_same_head_without_failing(self):
         self.queue.executor = Mock(side_effect=[ControlBusyError('busy'), {'on_air': TARGET}])

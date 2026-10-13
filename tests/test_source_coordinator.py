@@ -778,6 +778,31 @@ class TvRokuTests(unittest.TestCase):
         self.control.lane['roku']['operation'] = {'active': True}
         self.assertFalse(self.roku.ready(TARGET), 'not while the Roku navigates')
 
+    def test_player_reads_what_tv_thing_last_saw_without_asking_the_roku(self):
+        # 2026-10-12 20:21, the Roku City screensaver on air as Dodgers–Brewers: TV Thing
+        # read YouTube TV still open, its player closed.
+        yttv = {'id': '195316', 'name': 'YouTube TV'}
+        self.control.lane['selection'] = {**TARGET, 'app': yttv}
+
+        def reading(app=yttv, state='play', age=5.1, **player):
+            self.control.lane['roku']['player'] = {
+                'data': {'app': app, 'media_player': {'state': state, 'error': 'false', 'plugin': app}},
+                'error': None, 'age_seconds': age, **player}
+            return self.roku.player()
+
+        self.assertEqual(reading(), {'playing': True, 'reason': None})
+        self.assertEqual(reading(state='close'), {'playing': False, 'reason': 'its player is close'})
+        self.assertEqual(reading(app={'id': '562859', 'name': 'Roku Dynamic Menu'}),
+                         {'playing': False, 'reason': 'the Roku is in Roku Dynamic Menu'})
+        self.assertIsNone(reading(state='close', age=45), 'an old reading says nothing')
+        self.assertIsNone(reading(state='close', error='timed out'))
+        self.control.lane['roku']['operation'] = {'active': True}
+        self.assertIsNone(reading(state='close'), 'not while the Roku navigates')
+        self.control.lane['roku']['operation'] = None
+        self.control.lane['selection']['manual'] = True
+        self.assertIsNone(reading(state='close'), 'not once someone moved it by hand')
+        self.assertNotIn('roku/check', [path for path, _ in self.control.calls])
+
 
 class RokuLeaseTests(unittest.TestCase):
     """The worker's lease: checks only; it never locks, renews or releases."""

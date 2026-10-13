@@ -32,6 +32,8 @@ CANCEL_WAIT_SECONDS = 20
 LOCK_SECONDS = 90
 RENEW_SECONDS = 30
 IDLE_RELEASE_SECONDS = 60
+# TV Thing's reading of the Roku's player older than this says nothing about it now.
+PLAYER_MAX_AGE = 30
 
 
 class RokuHold:
@@ -197,6 +199,28 @@ class TvRoku:
         if not check.get("playing"):
             logging.getLogger(__name__).warning("The Roku no longer plays it (%s)", check.get("reason"))
         return bool(check.get("playing"))
+
+    def player(self):
+        """What TV Thing last read from the Roku (it asks every few seconds), for the on-air
+        watch: {'playing': bool, 'reason'}. None when it cannot say: a navigation running, the
+        Roku moved by hand, nothing verified, or no fresh reading. Never asks the Roku itself."""
+        try:
+            lane, _lock = self.lane()
+        except MasterStreamError:
+            return None
+        roku, selection = self._roku(lane), lane.get("selection") or {}
+        want = (selection.get("app") or {}).get("id")
+        player = roku.get("player") or {}
+        data, age = player.get("data") or {}, player.get("age_seconds")
+        if ((roku.get("operation") or {}).get("active") or selection.get("manual") or not want
+                or player.get("error") or not data or type(age) not in (int, float) or age > PLAYER_MAX_AGE):
+            return None
+        app, media = data.get("app") or {}, data.get("media_player") or {}
+        if app.get("id") != want:
+            return {"playing": False, "reason": f"the Roku is in {app.get('name') or 'its home screen'}"}
+        if media.get("state") != "play" or media.get("error") == "true":
+            return {"playing": False, "reason": f"its player is {media.get('state') or 'stopped'}"}
+        return {"playing": True, "reason": None}
 
     def snapshot(self):
         """The last verified selection, in the shape the control room shows."""

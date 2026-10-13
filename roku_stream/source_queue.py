@@ -71,6 +71,8 @@ class SourceQueueItem(QueueItem):
 ROKU_SOURCES = ROKU_SOURCE_IDS
 PREPARE_FAILED = 'source_prepare_failed'
 # A game-gated backup is only superseded once its game is final; past this it is abandoned.
+# A game entry still waiting this long after its start is abandoned too: a game already
+# final is skipped at release, and this also covers one whose status cannot be read.
 GAME_EXPIRY = timedelta(hours=12)
 # A Sunday Ticket row reads "Upcoming" until its feed goes live, which can be
 # minutes after the listed start, so it keeps trying longer than a channel.
@@ -91,6 +93,13 @@ RECOVERY_LIMIT = 3
 RECOVERY_WINDOW = timedelta(minutes=15)
 # A scheduled program this close to the end of its slot is not put back: what follows is due.
 RECOVERY_MIN_LEFT = timedelta(seconds=60)
+# The Roku on air is watched for a player that stopped while its capture runs on: what TV
+# Thing last read from it is checked this often, and one that reads stopped this long gets
+# TV Thing's full check (app, player, a moving picture). Failing that, it is a failed feed.
+# 2026-10-12: YouTube TV stopped soon after 20:04 and the Roku City screensaver aired as
+# Dodgers–Brewers until 20:21, under ad mute's My ads.
+ROKU_WATCH_SECONDS = 10
+ROKU_STOPPED_SECONDS = 20
 # The station ID only plays whole: an entry queued inside its last 30 s goes without.
 IDENT_WINDOW = 3
 # An entry queued "now" releases this soon, at the head of Up next.
@@ -136,7 +145,7 @@ class SourceQueue(PlayoutQueue):
                  on_hold_end=None, hold_poll_seconds=15, ident=None, ident_seconds=IDENT_SECONDS,
                  on_air=None, game_on=None, hold_lost_seconds=HOLD_LOST_SECONDS, input_failure=None,
                  final_buffer_seconds=FINAL_BUFFER_SECONDS, ready=None, stop_preroll=None, schedule_now=None,
-                 alternates=None, upgrade=None, roku_playing=None, rank=None):
+                 alternates=None, upgrade=None, roku_playing=None, roku_player=None, rank=None):
         """preroll(item) prepares a Roku or library entry without taking it: 'prepared', or
         'skipped' when the Roku is on air; a library cue returns {'outcome', 'input_id'}.
         A failed Roku preparation is retried before blocking.
@@ -158,6 +167,9 @@ class SourceQueue(PlayoutQueue):
         first (it tunes in seconds), and the other source once one has failed too often.
         roku_playing(target) briefly checks that the Roku still plays a failed Roku program
         without navigating; its feed then goes back on from the Roku first, as fast.
+        roku_player() is what TV Thing last read from the Roku's player ({'playing', 'reason'},
+        or None when unknown): a Roku on air that stops playing, though its capture runs on (a
+        screensaver, the home screen), fails like a feed once roku_playing confirms it.
         Warm-ups (_warm_step) prepare through preroll too. ready(target) says whether the Roku
         holds a fresh preparation of target, so none is needed; stop_preroll(item_id) stops a
         warm-up still running when something else is due; schedule_now() is the schedule's
@@ -195,8 +207,17 @@ class SourceQueue(PlayoutQueue):
         self.input_failure = input_failure
         self.alternates = alternates
         self.roku_playing = roku_playing
+        self.roku_player = roku_player
+        # The Roku on air stopped playing (_roku_watch), in master's input-failure shape, until
+        # feed recovery takes it up: {'target': {'id', ...}, 'error', 'was_on_air'}.
+        self._roku_stopped = None
+        self.roku_watch_seconds, self.roku_stopped_seconds = ROKU_WATCH_SECONDS, ROKU_STOPPED_SECONDS
+        self._watch_thread = None
+        self._watch_stop = threading.Event()
         # The live entry the queue last put on air without a hold: {'item_id', 'input_id'}.
+        # Not persisted: adopted again from master's input on air at startup (_adopt_locked).
         self._airing = None
+        self._adopted = False
         # (source_id, channel_id) -> monotonic times its feed was put back on.
         self._recoveries = {}
         # What is on air has ended (a game went final, the schedule moved on): recordings may start.
@@ -228,6 +249,55 @@ class SourceQueue(PlayoutQueue):
             if self._thread is None:
                 self._thread = threading.Thread(target=self._run, name='source-queue', daemon=True)
                 self._thread.start()
+            if self._watch_thread is None and self.roku_player is not None and self.roku_playing is not None:
+                self._watch_thread = threading.Thread(target=self._roku_watch, name='roku-watch', daemon=True)
+                self._watch_thread.start()
+
+    def close(self):
+        self._watch_stop.set()
+        super().close()
+
+    def _roku_watch(self):
+        """A Roku on air whose player stopped while its capture runs on (a screensaver, the
+        home screen) shows no failure on master: watch what TV Thing reads from it, and once
+        it has read stopped for roku_stopped_seconds and the full check agrees, hand it to
+        feed recovery as a failed feed (_hold_failure, _recover_step)."""
+        log, since = logging.getLogger(__name__), None
+        while not self._watch_stop.wait(self.roku_watch_seconds):
+            try:
+                on_air = self._read_on_air()
+                if on_air is UNKNOWN or not on_air or on_air.get('source_id') not in ROKU_SOURCES:
+                    since = None
+                    continue
+                reading = self.roku_player()
+                if not reading or reading.get('playing') is not False:
+                    since = None
+                    continue
+                if since is None or since[0] != on_air.get('id'):
+                    since = (on_air.get('id'), time.monotonic())
+                    continue
+                if time.monotonic() - since[1] < self.roku_stopped_seconds:
+                    continue
+                since = None
+                target = {k: on_air[k] for k in ('source_id', 'channel_id', 'date') if on_air.get(k) is not None}
+                if self._roku_still_playing(target):
+                    continue
+                error = f"The Roku stopped playing ({reading.get('reason') or 'its player stopped'})"
+                log.warning('%s on air: %s', error, json.dumps(target))
+                with self._condition:
+                    self._roku_stopped = {'target': {'id': on_air['id'], **target}, 'error': error,
+                                          'was_on_air': True}
+                    self._condition.notify_all()
+            except Exception as exc:  # The watch must not die.
+                log.warning('Roku watch: %s', exc)
+
+    def _stopped_on_air(self, on_air, input_id):
+        """The watch's record when the Roku input on air, input_id, stopped playing."""
+        stopped = self._roku_stopped
+        if (stopped and input_id and on_air and on_air is not UNKNOWN
+                and on_air.get('id') == input_id == stopped['target']['id']):
+            return stopped
+        return None
 
     def _load(self):
         if not self.state_file.exists():
@@ -682,6 +752,12 @@ class SourceQueue(PlayoutQueue):
             return True
         return False
 
+    @staticmethod
+    def _game_stale(item, now):
+        """A game entry still waiting GAME_EXPIRY after its start."""
+        return bool(item.release_type == 'at_time' and (item.game or {}).get('game_pk') is not None
+                    and item.run_at and now - parse_time(item.run_at) >= GAME_EXPIRY)
+
     def _expire_locked(self):
         """Skip every waiting entry whose slot has ended, even while paused, so the
         queue does not fill with schedule entries that can no longer air. An entry
@@ -692,9 +768,60 @@ class SourceQueue(PlayoutQueue):
                        GAME_EXPIRY if i.release_type == 'after_game' else timedelta()))]
         for item in expired:
             self._supersede(item, now)
-        if expired:
+        stale = [i for i in self._queued_locked() if i.status == 'queued'
+                 and i.gate_status != 'preparing' and self._game_stale(i, now)]
+        for item in stale:
+            self._supersede(item, now)
+            item.gate_detail = f'Its game started over {GAME_EXPIRY.total_seconds() / 3600:g} hours ago'
+        if expired or stale:
             self._save_locked()
-        return bool(expired)
+        return bool(expired or stale)
+
+    def _pass_blocked_locked(self):
+        """A blocked entry (a failed take, a missed or changed program) waits for Retry or
+        Remove only until the timed entry behind it is due. Then it is passed over, its
+        reason kept, and the rundown carries on; a game's return to the schedule goes with
+        its game. On 2026-10-08 a Thursday Night Football entry that failed after its game
+        had ended held every entry behind it until Monday morning. True when it acted."""
+        ahead, games = [], set()
+        for item in self._lanes_locked()[0]:
+            if item.status == 'blocked':
+                ahead.append(item)
+                if (item.game or {}).get('game_pk') is not None:
+                    games.add(item.game['game_pk'])
+            elif item.release_type == 'after_game' and item.after_game_pk in games:
+                ahead.append(item)
+            else:
+                break
+        else:
+            return False  # Nothing behind them is waiting.
+        if not ahead or not item.run_at or not self._due(item):
+            return False
+        now = utc_now()
+        at = now.astimezone().strftime('%-H:%M')
+        for other in ahead:
+            reason = other.gate_detail if other.status == 'blocked' else None
+            other.status, other.gate_status, other.completed_at = 'skipped', 'passed', now.isoformat()
+            other.gate_detail = ((reason + ' · ' if reason else '')
+                                 + f'passed over at {at} for {item.title or "what follows"}')
+            other.prerolled_at = other.prepared_input_id = None
+        logging.getLogger(__name__).warning('Passed over blocked entries for %s: %s', item.title or item.channel,
+                                            json.dumps([o.title or o.channel for o in ahead]))
+        self._save_locked()
+        self._condition.notify_all()
+        return True
+
+    def _over(self, item):
+        """A game entry's game status when that game is already final (or postponed): there
+        is nothing left to join. None when it is not, or its status cannot be read."""
+        game = item.game or {}
+        if item.release_type != 'at_time' or game.get('game_pk') is None:
+            return None
+        try:
+            status = self._check_game(game.get('league'), game['game_pk'], game.get('game_date'))
+        except Exception:
+            return None  # It airs as before.
+        return status if status.get('finished') is True else None
 
     def action(self, item_id, action):
         with self._condition:
@@ -853,12 +980,13 @@ class SourceQueue(PlayoutQueue):
 
     def _hold_lost_locked(self, hold, on_air, failed=False):
         """Whether the held take has left master: master names its input as failed on air
-        (its own stall recovery is over), or the test card, read for hold_lost_seconds."""
+        (its own stall recovery is over), the Roku on air stopped playing (the watch), or the
+        test card, read for hold_lost_seconds."""
+        if failed:
+            return True
         if on_air is UNKNOWN or on_air:
             self._hold_lost = None
             return False
-        if failed:
-            return True
         if not self._hold_lost or self._hold_lost[0] != hold['id']:
             self._hold_lost = (hold['id'], time.monotonic())
         return time.monotonic() - self._hold_lost[1] >= self.hold_lost_seconds
@@ -867,6 +995,8 @@ class SourceQueue(PlayoutQueue):
         """Master's failure of the held take's input, once master has given up on it (not
         while it waits for the input on the test card), else None. Read without the lock."""
         hold = self.hold
+        if hold is not None and self._stopped_on_air(on_air, hold.get('input_id')):
+            return self._roku_stopped
         if (hold is None or not hold.get('input_id') or self.input_failure is None
                 or on_air is UNKNOWN or on_air):
             return None
@@ -894,6 +1024,8 @@ class SourceQueue(PlayoutQueue):
             ends = hold.get('ending') or any(hold.get(k) and now >= parse_time(hold[k]) for k in ('until', 'limit'))
             if not ends and self._hold_lost_locked(hold, on_air, failed):
                 hold['ending'] = hold['lost'] = ends = True
+                if failure is self._roku_stopped:
+                    self._roku_stopped = None  # Taken up: one stop, one recovery.
                 logging.getLogger(__name__).warning('Held take left master%s: %s',
                                                     f" ({failure.get('error')})" if failed else '',
                                                     json.dumps(hold['target']))
@@ -1052,27 +1184,52 @@ class SourceQueue(PlayoutQueue):
         return f" from YouTube TV ({target.get('channel_id')})" if target.get('source_id') == 'youtube-tv' \
             else f" from {target.get('source_id')}"
 
+    def _adopt_locked(self, on_air):
+        """At startup, once master can be read: the live entry still on air from before a web
+        restart is watched for a failed feed again, as when the queue put it on air. Until
+        2026-10-12 a restart left the program on air without feed recovery."""
+        if on_air is UNKNOWN:
+            return
+        self._adopted = True
+        if self._airing is not None or self.hold is not None or not (on_air or {}).get('id'):
+            return
+        item = next((i for i in self._items.values() if i.status == 'succeeded'
+                     and ((i.result or {}).get('on_air') or {}).get('id') == on_air['id']), None)
+        if item is None or not self._live(item.target):
+            return
+        antenna = (item.result or {}).get('antenna')
+        self._airing = {'item_id': item.id, 'input_id': on_air['id'],
+                        'program_target': item.program_target or (dict(item.target) if antenna and self._roku(item) else None)}
+        logging.getLogger(__name__).info('Watching %s on air for a failed feed again',
+                                         item.title or json.dumps(item.target))
+
     def _recover_step(self, on_air):
         """Feed recovery: the live program the queue put on air failed on master (the test
         card, and master names that input as failed on air). Put it back on at the head of Up
         next, unless its slot is ending or its game is over. True when it acted."""
-        if self._airing is None or self.input_failure is None:
+        if self._airing is None or (self.input_failure is None and self._roku_stopped is None):
             return False  # Nothing watched: no lock taken, so a pass reads master as it did.
         with self._condition:
             airing = self._airing
-            if (airing is None or self.input_failure is None or on_air is UNKNOWN or on_air
-                    or self.paused or self.hold is not None or self._closed):
+            if (airing is None or on_air is UNKNOWN or self.paused or self.hold is not None or self._closed):
                 return False
-        try:
-            failure = self.input_failure() or {}
-        except Exception:  # Master unavailable: try again on the next pass.
-            return False
+            # The Roku on air stopped playing (_roku_watch), or master failed the input.
+            failure = self._stopped_on_air(on_air, airing['input_id'])
+            if failure is None and (self.input_failure is None or on_air):
+                return False
+        if failure is None:
+            try:
+                failure = self.input_failure() or {}
+            except Exception:  # Master unavailable: try again on the next pass.
+                return False
         if not failure.get('was_on_air') or (failure.get('target') or {}).get('id') != airing['input_id']:
             return False
         with self._condition:
             if self._airing is not airing:
                 return False
             self._airing = None  # One failure, one recovery.
+            if failure is self._roku_stopped:
+                self._roku_stopped = None
             item = self._items.get(airing['item_id'])
             item = self._copy(item) if item else None
         if item is None:
@@ -1474,6 +1631,9 @@ class SourceQueue(PlayoutQueue):
     def _run(self):
         while True:
             on_air = self._read_on_air()
+            if not self._adopted:
+                with self._condition:
+                    self._adopt_locked(on_air)
             if self._hold_step(on_air) or self._recover_step(on_air):
                 continue
             self._warm_step(on_air)
@@ -1483,6 +1643,8 @@ class SourceQueue(PlayoutQueue):
                 if self._closed:
                     return
                 self._expire_locked()
+                if not self.paused:
+                    self._pass_blocked_locked()
                 timed, fill = self._lanes_locked()
                 if (not self.paused or self.hold is not None) and self._cut_locked(timed):
                     timed, fill = self._lanes_locked()
@@ -1554,6 +1716,7 @@ class SourceQueue(PlayoutQueue):
                 unavailable = None
             except Exception as exc:
                 detail, gate, unavailable = None, {}, str(exc)
+            over = self._over(candidate) if not detail and not unavailable and gate.get('finished') is True else None
             with self._condition:
                 if self._closed:
                     return
@@ -1580,6 +1743,14 @@ class SourceQueue(PlayoutQueue):
                     self._block_locked(item, 'missed', 'This program has ended. Skip or Tune channel anyway.')
                     continue
                 if self._superseded_locked(item):
+                    continue
+                if over:
+                    # 2026-10-12 10:50: Saturday's Illinois–Michigan State game went on air on
+                    # Monday morning, once the entry that had blocked the rundown was removed.
+                    item.status, item.gate_status, item.completed_at = 'skipped', 'over', utc_now().isoformat()
+                    item.gate_detail = f"The game is over ({over.get('summary') or over.get('status') or 'final'})"
+                    self._save_locked()
+                    self._condition.notify_all()
                     continue
                 until = (item.hold_end or {}).get('until')
                 if until and utc_now() >= parse_time(until):

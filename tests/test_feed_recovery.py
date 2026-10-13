@@ -259,6 +259,19 @@ class FeedRecoveryTests(unittest.TestCase):
         self.settle()
         self.assertEqual(self.master.aired, [TV, NEWS])
 
+    def test_a_restart_keeps_watching_the_program_on_air(self):
+        self.scheduled()
+        self.queue.close()
+        self.queue = SourceQueue(Path(self.tmp.name) / 'queue.json', self.master.take, lambda *_: dict(self.game),
+                                 poll_seconds=.01, on_air=lambda: self.master.on_air,
+                                 input_failure=lambda: self.master.failure)
+        self.addCleanup(self.queue.close)
+        self.queue.resume()  # A restart starts paused for review.
+        self.settle()
+        self.master.fail()
+        self.wait(lambda: self.master.aired == [TV, TV])
+        self.assertTrue(self.queue.list()[0].recovery)
+
     def test_a_held_take_goes_back_on_once_through_its_hold_even_if_it_had_barely_aired(self):
         self.queue.hold_lost_seconds = .05
         self.queue.add_target(TV, 'now', hold_end={'until': soon(3600)})
@@ -305,6 +318,97 @@ class FeedRecoveryTests(unittest.TestCase):
         self.wait(lambda: self.ended)
         self.settle()
         self.assertEqual(self.master.aired, [TV])
+
+
+class RokuWatchTests(unittest.TestCase):
+    """A Roku on air whose player stops while its capture runs on fails like a feed.
+
+    2026-10-12: after Dodgers–Brewers went back to YouTube TV at 20:04, YouTube TV stopped
+    and the Roku City screensaver aired as the game until 20:21, under ad mute's My ads:
+    master saw a healthy capture, so nothing put the game back on."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.master = FakeMaster()
+        self.reading = {'playing': True, 'reason': None}
+        self.still_playing = False
+        self.checks = []
+        self.queue = SourceQueue(Path(self.tmp.name) / 'queue.json', self.master.take,
+                                 lambda *_: {'finished': False, 'status': 'Top 9th'},
+                                 poll_seconds=.01, hold_poll_seconds=.01, start_worker=False,
+                                 on_air=lambda: self.master.on_air, input_failure=lambda: self.master.failure,
+                                 alternates=lambda *_: {'antenna': FOX5},
+                                 roku_player=lambda: self.reading, roku_playing=self.check)
+        self.queue.roku_watch_seconds, self.queue.roku_stopped_seconds = .02, .1
+        self.queue.start()
+        self.addCleanup(self.queue.close)
+
+    def check(self, target):
+        self.checks.append(dict(target))
+        return self.still_playing
+
+    def wait(self, check):
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            if check():
+                return
+            time.sleep(.01)
+        self.fail(repr([(i.title, i.status, i.gate_detail) for i in self.queue.list()]))
+
+    def on_air(self, **kwargs):
+        self.queue.add_target(NFLN, 'now', **kwargs)
+        self.queue.resume()
+        self.wait(lambda: self.master.aired == [NFLN])
+
+    def test_a_held_game_whose_roku_stopped_goes_back_on_from_the_antenna(self):
+        self.on_air(hold_end={'until': soon(3600)})
+        self.wait(lambda: self.queue.status()['hold'])
+        self.reading = {'playing': False, 'reason': 'its player is close'}
+        self.wait(lambda: self.master.aired == [NFLN, FOX5])
+        again = self.queue.list()[0]
+        self.assertTrue(again.recovery)
+        self.assertIn('from the antenna', again.gate_detail)
+        self.assertEqual(self.queue.status()['hold']['until'], again.hold_end['until'])
+
+    def test_a_scheduled_program_whose_roku_stopped_goes_back_on(self):
+        self.queue.add_scheduled({'target': NFLN, 'title': 'Colts at Commanders', 'kind': 'show',
+                                  'run_at': soon(.02), 'skip_after': soon(3600), 'key': f'{soon(0)}|show|s|NFLN'})
+        self.queue.resume()
+        self.wait(lambda: self.master.aired == [NFLN])
+        self.reading = {'playing': False, 'reason': 'the Roku is in Roku Dynamic Menu'}
+        self.wait(lambda: self.master.aired == [NFLN, FOX5])
+        self.assertIn('The Roku stopped playing (the Roku is in Roku Dynamic Menu)', self.queue.list()[0].gate_detail)
+
+    def test_a_brief_stop_is_ridden_out(self):
+        self.on_air(hold_end={'until': soon(3600)})
+        self.queue.roku_stopped_seconds = 60
+        self.reading = {'playing': False, 'reason': 'its player is buffer'}
+        time.sleep(.2)
+        self.reading = {'playing': True, 'reason': None}
+        time.sleep(.1)
+        self.assertEqual(self.master.aired, [NFLN])
+        self.assertEqual(self.checks, [])
+
+    def test_a_roku_the_full_check_finds_playing_stays_on(self):
+        self.on_air(hold_end={'until': soon(3600)})
+        self.still_playing = True
+        self.reading = {'playing': False, 'reason': 'its player is pause'}
+        self.wait(lambda: self.checks)
+        time.sleep(.1)
+        self.assertEqual(self.master.aired, [NFLN])
+        self.assertEqual(self.checks[0], NFLN)
+
+    def test_an_unknown_reading_and_other_sources_are_left_alone(self):
+        self.on_air()
+        self.reading = None  # A navigation running, the Roku moved by hand, no fresh reading.
+        time.sleep(.2)
+        self.queue.add_target(TV, 'now')
+        self.wait(lambda: self.master.aired == [NFLN, TV])
+        self.reading = {'playing': False, 'reason': 'its player is close'}
+        time.sleep(.2)
+        self.assertEqual(self.master.aired, [NFLN, TV])
+        self.assertEqual(self.checks, [])
 
 
 if __name__ == '__main__':

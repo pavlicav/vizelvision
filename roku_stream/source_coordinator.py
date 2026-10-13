@@ -395,6 +395,10 @@ class SourceCoordinator:
         and in the better picture. Never navigates."""
         return self.roku_enabled and self.roku.playing({k: v for k, v in target.items() if k != 'antenna'})
 
+    def roku_player(self):
+        """The on-air watch: what TV Thing last read from the Roku's player, or None."""
+        return self.roku.player() if self.roku_enabled else None
+
     def _resume_roku(self, target):
         """The Roku still plays target, though its verification lapsed or the capture
         restarted. A feed that failed is nearly always a blip in the capture card, not the

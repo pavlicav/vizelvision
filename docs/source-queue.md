@@ -67,9 +67,34 @@ Use **+ Queue channel** or **+ Queue program** beside a listing. Upcoming progra
 
 Only the head can release. Reorder or **Remove** waiting entries; Pause/Resume applies to all sources and legacy schedules. A release time starts preparation, so the actual cut follows tuning and verification. Same-resource transitions use fallback while retuning/navigating. This version does not prepare independent sources early.
 
-A failed take blocks progression until Retry or Remove. A program past its saved end becomes Missed. **Tune channel anyway** explicitly waives that entry's program requirement and keeps its release condition. Listings are checked again before preparation and take; a changed/missing target program blocks, and unavailable fresh listings keep the head waiting. Live MLB status is checked through its catalog. A title, start-time or end-time change requires review. The scheduled-end *release gate* remains the estimate captured when added; target-program validation is separate.
+A failed take blocks progression until Retry or Remove, but only until the timed entry behind it is due (see *A failure never stops the station*, below). A program past its saved end becomes Missed. **Tune channel anyway** explicitly waives that entry's program requirement and keeps its release condition. Listings are checked again before preparation and take; a changed/missing target program blocks, and unavailable fresh listings keep the head waiting. Live MLB status is checked through its catalog. A title, start-time or end-time change requires review. The scheduled-end *release gate* remains the estimate captured when added; target-program validation is separate.
 
 Manual master actions and application-controlled Roku navigation pause queue release. A pause during preparation prevents a subsequent take; the entry requires Retry or Skip. A cut already submitted when Pause returns may finish. Cancel preparation or Return to fallback provides the explicit stop action. These controls remain serialized with queue operations.
+
+## A failure never stops the station (October 12)
+
+At 23:53 on Thursday, October 8, the Thursday Night Football entry (Buccaneers at Cowboys)
+was released late, after a held TBS game, and failed: "This Prime Video game has ended". It
+blocked, and everything behind it waited. That included Friday's and Saturday's shows,
+Saturday's Illinois at Michigan State, and all of Sunday's NFL. Nothing aired from the
+queue until the entry was removed at 10:50 on Monday. One second later the Michigan State
+game, two days old, went on air.
+
+- **A blocked entry waits only until the timed entry behind it is due**
+  (`_pass_blocked_locked`). Until then it stays blocked for Retry or Remove. Once that
+  entry is due (its early preparation, its station ID or its time), the blocked entry is
+  skipped as `passed`. Its reason is kept: *… · passed over at 20:15 for The View*. A
+  blocked game's own return to the schedule (its `after_game` entry) is passed over with
+  it. Entries without a time (recordings, an entry queued after a game) never force this.
+  A paused queue changes nothing.
+- **A game that is over never airs** (`_over`). At release, a game entry's game is checked.
+  If it is final (or postponed), the entry is skipped as `over`: *The game is over
+  (<score line> · Final)*. If the status cannot be read, the game airs
+  as before.
+- **A game entry still waiting 12 hours after its start expires**, even while paused
+  (`_expire_locked`): *Its game started over 12 hours ago*.
+
+Tests: `tests/test_source_queue.py`.
 
 ## Manual takes end on time
 
@@ -247,6 +272,31 @@ Logs: `The Roku still plays …; its feed goes back on without navigating (the c
 last stalled 1.8 s, at 13:39:14)`, or `The Roku no longer plays … (its player is pause);
 putting it back on from the Roku means navigating`. Tests: `tests/test_source_coordinator.py`
 (`StillPlayingTests`), `tests/test_feed_recovery.py`, `tests/test_input_stalls.py`.
+
+### A Roku that stops playing on air (October 12)
+
+At 20:04 Dodgers–Brewers went back to YouTube TV from the antenna. YouTube TV stopped soon
+after. The Roku's capture ran on, showing the Roku City screensaver, so master saw a
+healthy feed and nothing failed. Ad mute muted it and played My ads over it until it was
+put back by hand at 20:21.
+
+- **The Roku on air is watched** (`SourceQueue._roku_watch`, every 10 s). It reads what
+  TV-Thing last read from the Roku (`TvRoku.player`): the app, and ECP's player state. TV-Thing
+  polls those every few seconds, so the watch never queries the Roku itself. A reading
+  counts only when it is fresh (30 s), no navigation is running, and nobody has moved the
+  Roku by hand.
+- **Stopped means**: another app is open (the home screen), or the player state is not
+  `play` (`close`, `pause`, `buffer`, …).
+- **20 s stopped, then the full check.** TV-Thing's still-playing check runs next (same app,
+  `play`, a moving picture). If that fails too, the input counts as failed on air, the same
+  as a master input failure. A held take goes back on through its hold, a scheduled program
+  as itself. Both follow the usual order (the antenna first, since the Roku no longer plays
+  it) and the usual budgets.
+
+Log: `The Roku stopped playing (its player is close) on air: …`, then the usual
+`Held take left master` / `Feed failed on air` and `Feed recovery` lines. Tests:
+`tests/test_feed_recovery.py` (`RokuWatchTests`), `tests/test_source_coordinator.py`
+(`TvRokuTests`).
 
 ## YouTube TV or the antenna (October 3)
 
