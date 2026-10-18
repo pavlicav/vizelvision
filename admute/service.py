@@ -363,15 +363,20 @@ class Session:
     def _picture_job(self, edge):
         """Whether to show Haiku the newest pictures (admute/judge.py): where the detector
         is unsure of the newest second, or a black frame just went by (a new spot it has
-        not heard yet). Under the lock; the files are read and sent outside it."""
+        not heard yet). Not inside a muted break that still looks like one: an answer
+        changes nothing there (on 10/8's TBS game 79 of the first 137 asks were such).
+        Under the lock; the files are read and sent outside it."""
         det, svc = self.det, self.service
         if J.PICTURE not in det.image_features or not svc.judge_ok or svc.quiet(self.title, self.key):
             return None
         s = min(int(edge), len(det.lp_ad)) - 1
         if s < 0 or s - self.picture_at < J.PICTURE_EVERY:
             return None
+        z = det.lp_ad[s] - det.lp_show[s]
+        if self.pol.muted and z >= 0:
+            return None
         black = any(sm.kind == "black" and sm.t > edge - J.AFTER_BLACK for sm in det.pending + det.seams[-3:])
-        if abs(det.lp_ad[s] - det.lp_show[s]) >= J.UNSURE and not black:
+        if abs(z) >= J.UNSURE and not black:
             return None
         self.picture_at = s
         self.judging[("picture", s)] = s
@@ -447,10 +452,11 @@ class Session:
                 self.det.text.known = None       # no words coming: nothing waits for them
             self.det.judge_off = not self.service.judge_ok
             self.det.overlays.game = bool(self.game)
+            self.det.lookahead = self.lookahead      # a late answer counts until its second airs
             self.det.update(self.src, edge)
             picture = self._picture_job(edge)
             self.sig.trim(edge - 20)
-            self.sig.trim_seconds(edge - 10)
+            self.sig.trim_seconds(edge - max(D.TEXT_HOLD, self.lookahead))
             self.lookahead = self.service.lookahead(self.info)
             self.pol.cfg = self.service.policy_config(self.lookahead, game=bool(self.game), engine=self.engine)
             a = edge - self.lookahead

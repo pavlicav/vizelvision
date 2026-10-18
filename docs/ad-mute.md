@@ -44,10 +44,14 @@ there). The two quick fixes are also on
   - colour 224x224 once a second
   - 16 kHz mono sound
 - **Lookahead:** the detector judges the moment about to air `lookahead` seconds (3 s by
-  default, at most 8 s; this station runs 8 s) behind its newest frame, or at least 5 s
-  with captions on. So it has seen and heard what follows a seam before that sound
-  reaches anyone. Words come 2–7 s after they are said, so only a long lookahead lets
-  them count at a break's first seconds.
+  default, at most 12 s; this station ran 8 s until 10/18) behind its newest frame, or at
+  least 5 s with captions on. So it has seen and heard what follows a seam before that
+  sound reaches anyone. Words come 7–10 s after they are said, and Haiku's verdict on them
+  about a second later, so only a long lookahead lets them count at a break's first
+  seconds: at 12 s they land before the black frame airs (at 8 s, often just after).
+  Late evidence is waited for as long as the lookahead (at least 10 s). Master holds the
+  programme lookahead + 1 s in raw frames: at 720p60 about 83 MB a second, 1.1 GB at 13 s
+  (`programme_delay.py`: at most 13 s and 1.5 GiB).
 - **Fail-safe:** if that were ever wrong, master's lease would lapse and the sound
   come back.
 - **Keeping up:** the lookahead only helps while every signal reaches the newest
@@ -178,13 +182,16 @@ Claude Haiku 5.5 reads what is said and calls each new piece an ad or the progra
 - **Pictures (`llm_picture`):** a new spot has no words for ~10 s after its black frame
   (the transcript lags), but its pictures are there at once. So where the detector is
   unsure of the newest second (P(ad) 0.1-0.9 on that second alone), or a black frame went
-  by in the last 10 s, Haiku also gets the page's last three pictures of the input (2 s
+  by in the last 10 s (not inside a muted break that still looks like one: an answer
+  changes nothing there), Haiku also gets the page's last three pictures of the input (2 s
   apart) and calls the newest one ad or programme, at low effort, at most once every 2 s
   per input. Same switch, key and budget as the transcript judge; the page counts these
   calls separately. Its weight is set by hand (0.85 x the answer's logit: 95 is +2.5),
   not learnt yet. On 32 frames from 10/8 (TBS and NBC, labelled by eye) it got 26 of the
-  27 clear ones right; $0.00012 a call, 1.3 s typical. The detector is unsure in 5-24% of
-  seconds, so about 2-5 cents an hour, at most 22.
+  27 clear ones right; $0.00012 a call, 1.3 s typical. Live on 10/8's TBS game it asked
+  about once every 4 s (11 cents an hour) until muted breaks were left out, which cut 58%
+  of the asks: about 5 cents an hour, at most 22. It was fooled by a highlights ad (MLB
+  Shop, game footage and a QR code) like the rest of the detector.
 
 #### Overlays (`admute/overlays.py`)
 
@@ -302,6 +309,13 @@ counted (the score bug wins).
 - **After any unmute,** only a new black frame, or a hard cut into something clearly an
   ad, can mute again (black only until 10/3: that left TBS audible for the rest of a
   break).
+  - Outside games, a black frame up to 10 s before also counts (Haiku hears a new spot
+    ~10 s late).
+  - In an inning break the feed knows about, for 20 s after an unmute, the seconds that
+    followed turning out clearly an ad (the same test as the 130 s rule, once the late
+    evidence is in) mute again without a seam. On 10/7 and 10/8 that would have undone 8
+    unmutes, all into ads or MLB's logo bumper (a TNT football promo for 15 s, an MLB Shop
+    highlights spot for 12 s), and none of 22 into the game (at most 1.9 against 4).
 - **Caps:** a mute ends after 300 s, or 240 s with a sports feed.
 - **MLB gate:** with a game held on air, MLB's live feed vetoes mutes while play is
   live, and ends a mute still running.

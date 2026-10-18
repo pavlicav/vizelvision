@@ -274,6 +274,14 @@ class SessionTests(unittest.TestCase):
             det.lp_show += [0.0] * 4
             det.pending = [D.Seam(118.0, "black")]
             self.assertEqual(s._picture_job(124.0)[1], 123)
+            # Inside a muted break: only where it starts to look like the programme.
+            s.picture_at = -math.inf
+            s.pol.current = SimpleNamespace(start=100.0)
+            det.lp_ad[123], det.lp_show[123] = 0.0, -1.0                    # ad-like, a black frame just now
+            self.assertIsNone(s._picture_job(124.0), "muted and still an ad: an answer changes nothing")
+            det.lp_ad[123] = -2.0                                          # leaning to the programme
+            self.assertEqual(s._picture_job(124.0)[1], 123)
+            s.pol.current = None
             s.service.judge_ok = False
             s.picture_at = -math.inf
             self.assertIsNone(s._picture_job(124.0), "not with the judge off or over budget")

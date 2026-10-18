@@ -141,6 +141,17 @@ class DetectorTextTests(unittest.TestCase):
             det.update(src, float(edge))
         self.assertGreaterEqual(det.frozen_to, 199 - D.TEXT_HOLD - 1)
 
+    def test_with_a_longer_lookahead_late_words_are_waited_for_until_they_air(self):
+        # At 12 s of lookahead, words (and Haiku's verdict on them) that come 10-12 s late
+        # still count: the second has not aired yet.
+        det = D.Detector()
+        det.lookahead = 12.0
+        src = FakeSource(self.chunks(60))
+        for edge in range(1, 200):
+            det.update(src, float(edge))
+        self.assertLessEqual(det.frozen_to, 199 - 12 + 1e-9)
+        self.assertGreaterEqual(det.frozen_to, 199 - 12 - 1)
+
     def test_text_features_change_the_evidence_only_through_the_model(self):
         # With no weight on the text, decisions are those of a detector without words.
         a, b = D.Detector(D.DEFAULT_MODEL), D.Detector(D.DEFAULT_MODEL)   # visual features only

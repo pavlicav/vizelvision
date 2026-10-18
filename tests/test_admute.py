@@ -26,9 +26,13 @@ class SettingsTests(unittest.TestCase):
     def test_strict_rejects_unknown_and_bad_values(self):
         for bad in ({'mode': 'loud'}, {'nope': 1}, {'lookahead': 0.2}, {'sources': {'tv_thing': 'yes'}},
                     {'exceptions': [''] }, {'sound': 'tone'}, {'sensitivity': True}, {'speech_model': 'large'},
-                    {'lookahead': 8.5}):
+                    {'lookahead': 12.5}):
             with self.subTest(bad=bad), self.assertRaises(ConfigError):
                 validate(bad)
+
+    def test_lookahead_up_to_twelve_seconds(self):
+        # 12 s lets Haiku's verdicts land before a break's first black frame airs (10/8).
+        self.assertEqual(validate({'lookahead': 12})['lookahead'], 12)
 
     def test_whisper_model(self):
         self.assertEqual(validate({})['speech_model'], 'base.en')
@@ -287,6 +291,29 @@ class PolicyTests(unittest.TestCase):
                 + [Seg(150, 151, .05, 'black', post_z=-3.5)] + secs(151, 160, .05))   # the game
         p = run_seen(Policy(PolicyConfig(), gate=gate), segs)
         self.assertEqual([(s.start, s.end, s.end_reason) for s in p.spans], [(100, 150, 'show')])
+
+    def test_in_an_inning_break_a_wrong_unmute_is_undone_once_the_evidence_is_in(self):
+        # 2026-10-08 23:12:21: 135 s in, the black frame into a TNT football promo was judged
+        # before Haiku and the known wording had come (what followed looked only a bit like an
+        # ad); the promo then played 15 s at P(ad) 1.00 with no seam to mute at again.
+        gate = lambda t: 'break'                         # noqa: E731
+        promo = ([Seg(100, 101, .999, 'black')] + secs(101, 235, .999)
+                 + [Seg(235, 236, 1.0, 'black', post_z=2.0)] + secs(236, 238, 1.0))
+        for s in promo[-2:]:
+            s.post_z = 2.5                               # still coming in
+        late = [Seg(t, t + 1, 1.0, post_z=6.0) for t in range(238, 245)]
+        p = run(Policy(PolicyConfig(), gate=gate), promo + late)
+        self.assertEqual((p.spans[0].end, p.spans[0].end_reason), (235, 'show'))
+        self.assertEqual(p.current.start, 238, 'muted again once it is clearly an ad')
+        # The game back: what follows is the programme, so it stays audible.
+        game = [Seg(t, t + 1, 1.0, post_z=-3.0) for t in range(236, 250)]
+        self.assertIsNone(run(Policy(PolicyConfig(), gate=gate), promo[:-2] + game).current)
+        # Only for reopen_window, and only in a break the feed knows about.
+        later = [Seg(t, t + 1, 1.0, post_z=6.0) for t in range(260, 265)]
+        self.assertIsNone(run(Policy(PolicyConfig(), gate=gate), promo[:-2] + secs(236, 260, .3) + later).current)
+        p = run(Policy(PolicyConfig()), [Seg(100, 101, .999, 'black'), Seg(101, 102, .1)]
+                + [Seg(t, t + 1, 1.0, post_z=6.0) for t in range(102, 110)])
+        self.assertIsNone(p.current, 'no feed: a seam, as before')
 
     def test_late_in_an_inning_break_the_detector_is_trusted_again(self):
         gate = lambda t: 'break'

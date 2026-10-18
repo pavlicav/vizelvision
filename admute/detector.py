@@ -69,7 +69,7 @@ MIN_MEMORY = 120          # seconds of memory before recurrence says anything
 FINAL_LAG = 60.0          # a second's label is settled (for the memories) this long after
 BLACK_PER_HOUR = 6
 RECENTER = 300            # seconds between re-centring the embedding memory
-TEXT_HOLD = 10.0          # evidence waits at most this long behind the edge for its words
+TEXT_HOLD = 10.0          # evidence waits at most this long behind the edge for its words (or the lookahead, if longer)
 SCRIPT_MEMORY = 1800.0    # words kept this long, for the scripts of breaks learnt later
 TEXT_FEATURES = tuple("txt_" + n for n in T.NAMES)
 PRINT_FEATURES = ("fp_known", "fp_repeat", "fp_show")
@@ -120,7 +120,7 @@ class Segment:
     end: float
     p_ad: float
     seam: str | None       # the kind of seam at its start, if any
-    post_z: float | None = None  # at a seam: mean per-second ad logit of what follows it
+    post_z: float | None = None  # mean per-second ad logit from its start to the edge (what follows it)
     known: bool = False    # a known ad's sound, clearly (audio fingerprints)
     overlay: str | None = None   # a trusted score bug up as it begins (its name)
     ad_overlay: str | None = None   # a trusted ad label up as it begins (YouTube TV's "Sponsored")
@@ -250,6 +250,7 @@ class Detector:
         # per-second evidence
         self.image_features = tuple(k for k in self.m["features"] if k.startswith(EXTRA_PREFIXES))
         self.judge_off = False        # the transcript judge cannot be asked: score without it (weights())
+        self.lookahead = 0.0          # the session's: late evidence is waited for at least this long (TEXT_HOLD)
         self.feats: dict[str, list[float]] = {k: [] for k in ("bug", "cut_rate", "recurrence", "colour", "ad_match")
                                               + TEXT_FEATURES + PRINT_FEATURES + OVERLAY_FEATURES + self.image_features}
         self.src = None
@@ -647,7 +648,7 @@ class Detector:
         if self.image_features and getattr(src, "late_extras", lambda: False)():
             waits.append(src.extras_pending(self.image_features, edge))     # LLM answers still coming
         if waits:
-            freeze = min(freeze, max(float(min(waits)), edge - TEXT_HOLD))
+            freeze = min(freeze, max(float(min(waits)), edge - max(TEXT_HOLD, self.lookahead)))
         keep = []
         for s in self.pending:
             (self.seams if s.t <= freeze else keep).append(s)
@@ -727,10 +728,8 @@ class Detector:
             a, b = max(cuts[j], frm), min(cuts[j + 1], to)
             if b > a:
                 kind = kinds[j] if kinds[j] in SEAM_RANK and cuts[j] >= frm else None
-                post = None
-                if kind:
-                    zs = [self.lp_ad[k] - self.lp_show[k] for k in range(int(math.ceil(a)), min(len(self.lp_ad), int(self.edge_t)))]
-                    post = float(np.mean(zs)) if zs else None
+                zs = [self.lp_ad[k] - self.lp_show[k] for k in range(int(math.ceil(a)), min(len(self.lp_ad), int(self.edge_t)))]
+                post = float(np.mean(zs)) if zs else None
                 known = self.known_ad(a)
                 inside = int(a) < len(self.lp_ad)
                 over = self.overlays.showing(int(a), "score") if inside else None

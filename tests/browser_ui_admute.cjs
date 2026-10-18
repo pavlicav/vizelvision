@@ -235,6 +235,19 @@ run(async browser => {
   assert.match(await t.page.locator('#judge-note').textContent(), /looks at the picture when the detector is unsure.*600 calls today \(188 on pictures\), \$0\.04/);
   await t.ctx.close();
 
+  // Lookahead: up to 12 s (Haiku's verdicts land before a break's first black frame airs).
+  t = await open(browser, '/ads#admute', {api: {'POST /v1/admute': (body, F) => (F.admute = view(F, body))}});
+  await t.page.waitForTimeout(800);
+  await t.page.locator('summary', {hasText: 'Lookahead'}).click();
+  await t.page.locator('#lookahead').fill('12');
+  assert.equal(await t.page.locator('#lookahead').evaluate(e => e.checkValidity()), true);
+  await t.page.locator('#save').click();
+  await t.page.waitForTimeout(300);
+  assert.equal(t.posts.at(-1).body.lookahead, 12);
+  await t.page.locator('#lookahead').fill('12.5');
+  assert.equal(await t.page.locator('#lookahead').evaluate(e => e.checkValidity()), false, 'past 12: the page refuses it');
+  await t.ctx.close();
+
   // With the detector down, the page says nothing is muted.
   t = await open(browser, '/ads#admute', {edit: F => { F.admute.detector_stale = true; }});
   await t.page.waitForTimeout(800);

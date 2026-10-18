@@ -59,6 +59,21 @@ class ProgrammeDelayTests(unittest.TestCase):
             self.fail('Real media was never released')
         self.assertEqual(delay.dropped, 0)
 
+    def test_room_for_ad_mutes_longest_lookahead(self):
+        # Ad mute's 12 s lookahead plus its 1 s margin; never more.
+        delay = self.delay()
+        delay.require(13)
+        self.assertEqual(delay.delay_ns, 13 * SECOND)
+        delay.require(30)
+        self.assertEqual(delay.delay_ns, 13 * SECOND)
+        for index in range(140):                   # 14 s of frames queued before any airs
+            delay.put('video', Buffer(), index * 100_000_000, 'source')
+        self.assertEqual(delay.dropped, 0)
+
+    def test_the_byte_bound_holds_thirteen_seconds_of_720p60(self):
+        frame = 1280 * 720 * 3 // 2                # I420
+        self.assertGreater(ProgrammeDelay.MAX_BYTES, 13 * 60 * frame + 13 * 48000 * 8)
+
     def test_hard_memory_bound_keeps_recent_media(self):
         delay = self.delay()
         delay.MAX_BYTES = 250
