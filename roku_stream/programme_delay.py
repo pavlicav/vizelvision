@@ -26,7 +26,10 @@ def retimable(gst, buffer):
 
 class ProgrammeDelay:
     LEAD = 80_000_000
-    MAX_BYTES = 1024 * 1024 * 1024
+    # Ad mute's longest lookahead (12 s) plus its 1 s margin. The queue holds raw frames:
+    # 720p60 I420 is ~83 MB a second, so 13 s is ~1.1 GB (1 GiB dropped frames past ~12.5 s).
+    MAX_SECONDS = 13
+    MAX_BYTES = 1536 * 1024 * 1024
 
     def __init__(self, output):
         self.output, self.gst = output, output.gst
@@ -45,7 +48,7 @@ class ProgrammeDelay:
 
     def require(self, seconds):
         with self.lock:
-            self.delay_ns = max(self.delay_ns, int(min(10, max(0, seconds)) * SECOND))
+            self.delay_ns = max(self.delay_ns, int(min(self.MAX_SECONDS, max(0, seconds)) * SECOND))
 
     def start(self):
         self.thread.start()
@@ -67,7 +70,7 @@ class ProgrammeDelay:
             self.queues[kind].append((due, duration, pts, route, copy))
             self.bytes += copy.get_size()
             # Hard bounds even if a source goes wild or downstream stops consuming.
-            while self.bytes > self.MAX_BYTES or (self.queues[kind] and due - self.queues[kind][0][0] > 11 * SECOND):
+            while self.bytes > self.MAX_BYTES or (self.queues[kind] and due - self.queues[kind][0][0] > (self.MAX_SECONDS + 1) * SECOND):
                 oldest = min((k for k in self.queues if self.queues[k]), key=lambda k: self.queues[k][0][0])
                 self.bytes -= self.queues[oldest].popleft()[-1].get_size()
                 self.dropped += 1

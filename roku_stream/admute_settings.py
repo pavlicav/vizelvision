@@ -72,7 +72,7 @@ DEFAULTS = {
     'paused_until': None,
     'paused_input': None,
 }
-LIMITS = {'lookahead': (1.0, 8.0), 'sensitivity': (0.0, 1.0), 'max_mute': (60, 600), 'radio_db': (-30.0, 6.0),
+LIMITS = {'lookahead': (1.0, 12.0), 'sensitivity': (0.0, 1.0), 'max_mute': (60, 600), 'radio_db': (-30.0, 6.0),
           'judge_budget': (0.0, 20.0)}
 EXCEPTIONS_LIMIT = 50
 

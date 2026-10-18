@@ -26,9 +26,13 @@ class SettingsTests(unittest.TestCase):
     def test_strict_rejects_unknown_and_bad_values(self):
         for bad in ({'mode': 'loud'}, {'nope': 1}, {'lookahead': 0.2}, {'sources': {'tv_thing': 'yes'}},
                     {'exceptions': [''] }, {'sound': 'tone'}, {'sensitivity': True}, {'speech_model': 'large'},
-                    {'lookahead': 8.5}):
+                    {'lookahead': 12.5}):
             with self.subTest(bad=bad), self.assertRaises(ConfigError):
                 validate(bad)
+
+    def test_lookahead_up_to_twelve_seconds(self):
+        # 12 s lets Haiku's verdicts land before a break's first black frame airs (10/8).
+        self.assertEqual(validate({'lookahead': 12})['lookahead'], 12)
 
     def test_whisper_model(self):
         self.assertEqual(validate({})['speech_model'], 'base.en')

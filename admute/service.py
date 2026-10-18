@@ -452,10 +452,11 @@ class Session:
                 self.det.text.known = None       # no words coming: nothing waits for them
             self.det.judge_off = not self.service.judge_ok
             self.det.overlays.game = bool(self.game)
+            self.det.lookahead = self.lookahead      # a late answer counts until its second airs
             self.det.update(self.src, edge)
             picture = self._picture_job(edge)
             self.sig.trim(edge - 20)
-            self.sig.trim_seconds(edge - 10)
+            self.sig.trim_seconds(edge - max(D.TEXT_HOLD, self.lookahead))
             self.lookahead = self.service.lookahead(self.info)
             self.pol.cfg = self.service.policy_config(self.lookahead, game=bool(self.game), engine=self.engine)
             a = edge - self.lookahead

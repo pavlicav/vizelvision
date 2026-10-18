@@ -317,7 +317,7 @@ dialog.preview video{width:100%;max-height:70vh;background:#000;border-radius:va
             <option value="distil-large-v3">distil-large-v3 (too heavy for this box; must be cached)</option></select></label>
           <label class="field"><span>Longest mute (seconds)</span><input type="number" id="max-mute" min="60" max="600" step="10"></label>
           <details class="more"><summary>Lookahead</summary>
-            <label class="field" style="margin-top:6px"><span>Seconds the programme plays behind the detector</span><input type="number" id="lookahead" min="1" max="8" step="0.5"></label>
+            <label class="field" style="margin-top:6px"><span>Seconds the programme plays behind the detector</span><input type="number" id="lookahead" min="1" max="12" step="0.5"></label>
             <p class="tiny muted">More lookahead lets it judge each seam before the sound gets there. Applies to sources prepared after saving; the programme runs this much later than live.</p></details></div></section>
         <section class="panel"><div class="head"><h2>What it learns</h2></div><div class="body stack tight">
           <label class="switch"><input type="checkbox" id="known-ads"><span>Recognise ads heard before (audio fingerprints)</span></label>

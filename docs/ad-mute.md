@@ -44,10 +44,14 @@ there). The two quick fixes are also on
   - colour 224x224 once a second
   - 16 kHz mono sound
 - **Lookahead:** the detector judges the moment about to air `lookahead` seconds (3 s by
-  default, at most 8 s; this station runs 8 s) behind its newest frame, or at least 5 s
-  with captions on. So it has seen and heard what follows a seam before that sound
-  reaches anyone. Words come 2–7 s after they are said, so only a long lookahead lets
-  them count at a break's first seconds.
+  default, at most 12 s; this station ran 8 s until 10/18) behind its newest frame, or at
+  least 5 s with captions on. So it has seen and heard what follows a seam before that
+  sound reaches anyone. Words come 7–10 s after they are said, and Haiku's verdict on them
+  about a second later, so only a long lookahead lets them count at a break's first
+  seconds: at 12 s they land before the black frame airs (at 8 s, often just after).
+  Late evidence is waited for as long as the lookahead (at least 10 s). Master holds the
+  programme lookahead + 1 s in raw frames: at 720p60 about 83 MB a second, 1.1 GB at 13 s
+  (`programme_delay.py`: at most 13 s and 1.5 GiB).
 - **Fail-safe:** if that were ever wrong, master's lease would lapse and the sound
   come back.
 - **Keeping up:** the lookahead only helps while every signal reaches the newest
