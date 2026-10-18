@@ -76,7 +76,8 @@ PICTURE_SYSTEM = ("You watch a live US TV channel through a few low-resolution f
                   "a news tease from the programme's own anchors count as the programme. Reply with only an integer "
                   "from 0 to 100, where 0 means the newest frame is certainly the programme and 100 means it is "
                   "certainly an advertisement.")
-SHOWS = {"mlb": "a live Major League Baseball game broadcast", "nfl": "a live NFL football broadcast"}
+SHOWS = {"mlb": "a live Major League Baseball game broadcast", "nfl": "a live NFL football broadcast",
+         "nba": "a live NBA basketball broadcast", "wnba": "a live WNBA basketball broadcast"}
 
 
 def show(game: dict | None, title: str | None) -> str:

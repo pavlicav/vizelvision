@@ -48,6 +48,7 @@ class PromptTests(unittest.TestCase):
 
     def test_what_is_on(self):
         self.assertEqual(J.show({"league": "nfl"}, "x"), "a live NFL football broadcast")
+        self.assertEqual(J.show({"league": "wnba"}, "x"), "a live WNBA basketball broadcast")
         self.assertEqual(J.show(None, "The View"), "the TV programme The View")
         self.assertEqual(J.show(None, None), "a US TV channel")
 
