@@ -72,7 +72,7 @@ def vibes(midi, length=1.8, vel=1.0):
 def pizz(midi, vel=1.0, length=0.6):
     """A plucked string (Karplus-Strong), short and woody."""
     n = int(length * SR)
-    period = max(2, int(round(SR / float(J.hz(midi)))))
+    period = max(2, int(round(SR / float(J.hz(midi)) - 0.5)))   # the averaging adds half a sample
     buf = rng.uniform(-1, 1, period)
     out = np.empty(n)
     for i in range(n):
@@ -1734,13 +1734,647 @@ def cairo_1894(voice):
     return mixdown(desk, voice, length, end, grit=1.3)
 
 
+# ---------------------------------------------------------------- 18 October: the church, the band, the painter...
+
+def cat_field_goal(voice):
+    """The documentary goes to the game: the hushed pad and the sneaking pizzicato; a tap
+    on each of the open logo's first three notes (a knock on the leather, vibes); the swat
+    on the fourth with a kick drum and brass, a slide whistle up as the ball tumbles across
+    the room, a swish of bells through the rabbit ears, the referee's whistle and the set's
+    crowd for IT'S GOOD!; a purr; behind the set, the mug's KRSSH; then the closed logo with
+    a soft choir, a mrrp and a harp of bells."""
+    P = hits('cat-field-goal')
+    length, end = 10.0, 9.6
+    desk = S.Desk(length)
+    desk.wide(lambda: J.pad_voice((48, 55, 64, 71), 3.0, 1.0, 1.0), 0.0, 0.06, hall=0.4)
+    tiptoe(desk, 0.25, 2.9)
+    for (when, look), note in zip(P.LOOKS, (88, 84, 91)):          # its glances
+        desk.add(vibes(note, 0.8, 0.6), when, 0.1, 0.3, hall=0.35)
+    desk.wide(lambda: J.pad_voice((50, 57, 62, 69), 1.5, 0.4, 0.8), 2.5, 0.05, hall=0.4)
+    for when, note in zip(P.TAPS, OPEN):                             # tap, tap, tap
+        desk.add(J.tom(50, 0.55), when, 0.3, -0.1, room=0.3)
+        desk.add(vibes(note, 1.6, 0.9), when, 0.3, -0.2, hall=0.35)
+        desk.add(pizz(note - 12, 0.8), when, 0.3, 0.1, hall=0.2)
+    desk.add(J.kick(1.0), P.KICK, 0.8, hall=0.1)                     # and the kick, on the A
+    desk.add(J.tom(43, 1.0), P.KICK, 0.45, room=0.4)
+    desk.add(vibes(OPEN[3], 2.0, 1.0), P.KICK, 0.3, -0.2, hall=0.4)
+    for i, note in enumerate((OPEN[3] - 24, OPEN[3] - 12, OPEN[3] - 5)):
+        desk.add(J.brass(note, 0.45, 0.9), P.KICK, 0.1, -0.4 + 0.4 * i, hall=0.25)
+    desk.add(glide(420, 1500, P.FLIGHT[1] - P.FLIGHT[0]), P.FLIGHT[0], 0.3, 0.3, hall=0.25)
+    desk.add(J.whoosh(0.7), P.FLIGHT[0], 0.15, 0.4, hall=0.2)
+    for i, note in enumerate((84, 88, 91, 96, 100)):                # through the ears
+        desk.add(J.bell(note, 1.2, 0.7), P.THROUGH + i * 0.04, 0.08, 0.6, hall=0.5)
+    desk.add(ref_whistle(), P.GOOD + 0.05, 0.22, 0.5, hall=0.3)
+    desk.add(J.butter(S.crowd(2.4, swell=(0.0, 0.2)), 'band', [400, 3500]), P.GOOD, 0.3, 0.55, hall=0.1)
+    for i, note in enumerate((60, 64, 67, 72)):                      # ta-da, paws up
+        desk.add(pizz(note, 0.8), P.ARMS[0] + i * 0.03, 0.4, -0.3 + 0.2 * i, hall=0.3)
+    desk.add(purr(P.CRASH - P.ARMS[0] + 0.3), P.ARMS[0], 0.3, -0.2, hall=0.05)
+    desk.add(ceramic(0.9), P.CRASH, 0.4, 0.75, hall=0.35)
+    desk.add(J.bell(93, 0.4, 0.5), P.GLANCE[0], 0.06, 0.4, hall=0.3)
+    tiptoe(desk, 6.0, 6.9, notes=(48, 52, 55, 52), step=0.25, gain=0.25)
+    S.logo(desk, P.BANNER, CLOSED, organ_=False, choir=True, gain=0.85)
+    for when, note in zip(at_logo(P.BANNER), CLOSED):
+        desk.add(vibes(note, 2.0, 0.8), when, 0.25, -0.2, hall=0.35)
+        for i, n in enumerate((note - 24, note - 12)):
+            desk.add(J.brass(n, 0.3, 0.8), when, 0.06, -0.3 + 0.6 * i, hall=0.3)
+    desk.wide(lambda: J.pad_voice((62, 66, 69, 74), 2.0, 0.3, 1.2), P.BANNER, 0.07, hall=0.4)
+    desk.add(meow(), P.MRRP, 0.5, -0.1, hall=0.15)
+    for i, note in enumerate((74, 78, 81, 86, 90, 93)):
+        desk.add(J.bell(note, 1.6, 0.55), P.BLINK[0] + i * 0.05, 0.07, -0.4 + 0.15 * i, hall=0.5)
+    return mixdown(desk, voice, length, end, grit=0.5)
+
+
+def pluck(midi, length=1.6, vel=1.0, bright=0.5):
+    """A nylon string, plucked (Karplus-Strong, a period at a time)."""
+    period = max(2, int(round(SR / float(J.hz(midi)) - 0.5)))   # the averaging adds half a sample
+    n = int(length * SR)
+    y = np.zeros(n + period + 1)
+    burst = rng.uniform(-1, 1, period)
+    width = max(2, int(period * (1 - bright) / 3))     # a softer pluck: a smoother burst (a fingertip)
+    window = np.hanning(width + 2)[1:-1]
+    burst = np.convolve(np.concatenate([burst, burst]), window / window.sum(), 'same')[period // 2:period // 2 + period]
+    y[1:period + 1] = burst - burst.mean()
+    decay = 0.996 ** (440 / float(J.hz(midi)))
+    for start in range(period + 1, len(y), period):
+        stop = min(start + period, len(y))
+        y[start:stop] = decay * 0.5 * (y[start - period:stop - period] + y[start - period - 1:stop - period - 1])
+    x = J.butter(y[1:n + 1], 'high', 60)
+    t = J.times(n)
+    return x * np.clip((length - t) / 0.08, 0, 1) * vel * 0.6
+
+
+def dab(vel=1.0):
+    """A fan brush tapped on canvas: a soft, papery tick."""
+    n = int(0.06 * SR)
+    t = J.times(n)
+    return J.butter(J.noise(n), 'band', [400, 3000]) * np.exp(-t / 0.012) * vel * 0.6
+
+
+def stroke(length, vel=1.0):
+    """A brush drawn across canvas: a breathy swish, swelling and fading."""
+    n = int(length * SR)
+    t = J.times(n)
+    x = J.butter(J.noise(n), 'band', [700, 5000]) * np.sin(np.pi * t / length) ** 1.5
+    return x * vel * 0.4
+
+
+def thwack(vel=1.0):
+    """A wet brush beaten against an easel's leg: a wooden knock, a slap, a spray."""
+    n = int(0.45 * SR)
+    t = J.times(n)
+    knock = np.sin(2 * np.pi * np.cumsum(170 + 140 * np.exp(-t / 0.008)) / SR) * np.exp(-t / 0.07)
+    slap = J.butter(J.noise(n), 'band', [500, 3500]) * np.exp(-t / 0.02)
+    spray = J.butter(J.noise(n), 'band', [2000, 8000]) * np.exp(-np.clip(t - 0.025, 0, None) / 0.09) * (t > 0.02)
+    return (knock + 0.7 * slap + 0.3 * spray) * vel * 0.8
+
+
+def fingerpick(desk, chord, start, stop, gain=0.35):
+    """The guitar under the painter: a gentle arpeggio on the eighths (bass, then up and down)."""
+    order = (0, 2, 1, 3, 2, 1, 3, 2)
+    k = 0
+    while start + k * 0.25 < stop - 1e-9:
+        desk.add(pluck(chord[order[k % 8]], 1.4, 0.9 if k % 8 == 0 else 0.6), start + k * 0.25, gain,
+                 -0.25 + 0.15 * (order[k % 8]), hall=0.3)
+        k += 1
+
+
+def happy_little(voice):
+    """The painting show: a fingerpicked nylon guitar under a warm pad; the open logo on
+    vibes as each happy little tree is tapped in (a flurry of fan-brush dabs); little
+    swishes as the friend is painted, a boing for its hop and a sparkle; then the closed
+    logo, a thwack of the brush on the easel's leg on each note, with vibes and the guitar
+    strummed in D; one long stroke for the signature."""
+    P = hits('happy-little')
+    length, end = 10.0, 9.6
+    desk = S.Desk(length)
+    for i, (chord, start) in enumerate((((48, 55, 60, 64), 0.0), ((45, 52, 57, 60), 2.0), ((41, 48, 53, 57), 4.0),
+                                        ((43, 50, 55, 59), 6.0))):
+        fingerpick(desk, chord, start, min(start + 2.0, 7.0))
+        desk.wide(lambda c=chord: J.pad_voice(tuple(n + 12 for n in c), 2.1, 0.6, 0.9), start, 0.04, hall=0.45)
+    for when, grow, note in zip(P.TREES, P.GROW, OPEN):            # happy little trees
+        desk.add(vibes(note, 1.8, 0.9), when, 0.3, -0.15, hall=0.4)
+        for k in range(int(grow / 0.035)):
+            desk.add(dab(0.7 + 0.3 * rng.random()), when + k * 0.035, 0.35, 0.2, hall=0.05)
+    for k in range(9):                                              # the friend, painted
+        desk.add(stroke(0.2, 0.8), P.FRIEND[0] + k * (P.FRIEND[1] - P.FRIEND[0]) / 9, 0.4, -0.1 + 0.03 * k, hall=0.05)
+    desk.add(boing(0.5, 0.8), P.HOP, 0.3, hall=0.15)
+    for i, note in enumerate((84, 88, 91, 96)):
+        desk.add(J.bell(note, 1.2, 0.6), P.HOP + 0.4 + i * 0.05, 0.07, 0.3, hall=0.5)
+    desk.add(J.whoosh(0.5), P.BRUSH_OUT[0], 0.08, 0.5, hall=0.2)
+    for when, note in zip(P.WHACKS, CLOSED):                        # beat the devil out of it
+        desk.add(thwack(1.0), when, 0.55, 0.0, hall=0.15)
+        desk.add(vibes(note, 2.0, 0.9), when, 0.28, -0.2, hall=0.4)
+    for when in (P.WHACKS[0], P.WHACKS[3]):                         # the guitar, strummed in D
+        for i, note in enumerate((50, 57, 62, 66, 69, 74)):
+            desk.add(pluck(note, 2.0, 0.8, bright=0.7), when + i * 0.018, 0.3, -0.3 + 0.12 * i, hall=0.35)
+    desk.wide(lambda: J.pad_voice((62, 66, 69, 74), 2.2, 0.4, 1.0), P.WHACKS[0], 0.05, hall=0.45)
+    desk.add(stroke(P.SIGN[1] - P.SIGN[0], 1.0), P.SIGN[0], 0.4, -0.2, hall=0.1)
+    desk.add(pluck(86, 1.2, 0.7, bright=0.9), P.SIGN[1], 0.3, 0.2, hall=0.5)
+    return mixdown(desk, voice, length, end, grit=0.4)
+
+
+def kernel_pop(midi=None, vel=1.0):
+    """A kernel popping: a dry crack in the bag, and, for the first four, a note in it."""
+    n = int(0.16 * SR)
+    t = J.times(n)
+    crack = J.butter(J.noise(n), 'band', [700, 5000]) * np.exp(-t / 0.006)
+    body = np.sin(2 * np.pi * np.cumsum(220 + 500 * np.exp(-t / 0.01)) / SR) * np.exp(-t / 0.03) * 0.5
+    x = crack + body
+    if midi is not None:
+        x += np.sin(2 * np.pi * float(J.hz(midi)) * t) * np.exp(-t / 0.08) * 0.6
+    return x * vel
+
+
+def hum(length, vel=1.0):
+    """A microwave running: the transformer's hum, the fan, the turntable's rattle."""
+    n = int(length * SR)
+    t = J.times(n)
+    x = 0.5 * np.sin(2 * np.pi * 120 * t) + 0.25 * np.sin(2 * np.pi * 240 * t) + 0.1 * np.sin(2 * np.pi * 360 * t)
+    x += 0.6 * J.butter(J.noise(n), 'band', [200, 1500])
+    x *= 1 + 0.08 * np.sin(2 * np.pi * 1.4 * t)
+    return x * np.clip(t / 0.05, 0, 1) * np.clip((length - t) / 0.03, 0, 1) * vel * 0.4
+
+
+def popcorn(voice):
+    """The microwave: its hum, a lounge groove (walking bass, brushes, vibes) as the
+    display counts down; the first four kernels pop the open logo; the frenzy, every pop
+    as the picture has it, over a snare roll and a riser; the hum stops and the beeper
+    plays the closed logo, BEEP BEEP BEEP BEEEP; the door bangs, the bag bursts, the
+    popcorn patters down and the band says ta-da."""
+    P = hits('popcorn')
+    length, end = 10.0, 9.65
+    desk = S.Desk(length)
+    desk.add(J.butter(hum(P.DONE), 'low', 2000), 0.0, 0.25, hall=0.05)
+    bass = (36, 40, 43, 45, 33, 36, 40, 43, 41, 45, 48, 50, 43, 47, 50, 53)
+    for k in range(int(P.DONE / BEAT)):                                  # walking bass and brushes
+        desk.add(pizz(bass[k % len(bass)], 0.8), k * BEAT, 0.4, -0.15, hall=0.15)
+        desk.add(brush(0.25, 0.6 if k % 2 else 0.4), k * BEAT + BEAT / 2, 0.4, 0.2, hall=0.1)
+    for (at, chord) in ((0.0, (64, 67, 71, 74)), (2.0, (60, 64, 67, 71)), (4.0, (65, 69, 72, 76)),
+                        (6.0, (67, 71, 74, 77))):
+        desk.wide(lambda c=chord: J.pad_voice(c, 2.0, 0.3, 0.6), at, 0.035, hall=0.4)
+    pops = beats.popcorn_pops()
+    for when, note in zip(pops[:4], OPEN):                              # the first four: the open logo
+        desk.add(kernel_pop(note + 12, 1.0), when, 0.5, 0.1, hall=0.15)
+        desk.add(vibes(note, 1.6, 0.9), when, 0.25, -0.2, hall=0.35)
+    for k, when in enumerate(pops[4:]):                                 # the frenzy
+        desk.add(kernel_pop(None, 0.5 + 0.5 * rng.random()), when, 0.3, rng.uniform(-0.5, 0.5), hall=0.1)
+    for k in range(int((beats.POPCORN_FRENZY[1] - 4.5) / 0.0625)):         # a roll as it peaks
+        desk.add(J.snare(0.15 + 0.5 * k / 32), 4.5 + k * 0.0625, 0.25, hall=0.1, room=0.3)
+    desk.add(J.riser(P.DONE - 4.5, 6000), 4.5, 0.12, hall=0.3)
+    for when, note in zip(P.BEEPS, CLOSED):                             # 0:00: the beeper
+        gate = 0.5 if when == P.BEEPS[-1] else 0.18
+        desk.add(square(note + 12, gate, 0.5, 1.0), when, 0.2, 0.1, hall=0.1)
+        desk.add(vibes(note, 1.4, 0.7), when, 0.12, -0.2, hall=0.35)
+    desk.add(clunk(1.0), P.DOOR, 0.45, -0.3, hall=0.2)
+    desk.add(J.kick(1.0), P.BURST, 0.7, hall=0.2)
+    desk.add(J.crash(1.0, 2.0), P.BURST, 0.35, hall=0.3)
+    desk.add(J.whoosh(0.6), P.BURST, 0.25, hall=0.3)
+    for k in range(40):                                                 # the popcorn landing
+        when = P.LAND[0] + 0.3 + rng.uniform(0, P.LAND[1] - P.LAND[0])
+        desk.add(dab(0.6 + 0.4 * rng.random()), when, 0.25, rng.uniform(-0.8, 0.8), hall=0.1)
+    for i, note in enumerate((50, 57, 62, 66, 69, 74)):                 # ta-da
+        desk.add(J.brass(note, 0.9, 0.9), P.BURST + 0.02, 0.07, -0.4 + 0.16 * i, hall=0.3)
+    for when, note in ((P.BURST + 0.02, 38), (P.BURST + 0.02, 50)):
+        desk.add(pizz(note, 1.0), when, 0.5, 0.0, hall=0.2)
+    for i, note in enumerate((86, 90, 93, 98)):
+        desk.add(J.bell(note, 1.4, 0.6), P.LAND[1] + i * 0.05, 0.07, -0.2 + 0.15 * i, hall=0.5)
+    return mixdown(desk, voice, length, end, grit=0.4)
+
+
+def sonar(vel=1.0):
+    """The Doppler's ping: a pure tone with a long, watery tail."""
+    n = int(1.4 * SR)
+    t = J.times(n)
+    x = np.sin(2 * np.pi * 1320 * t) * np.exp(-t / 0.35) * (1 + 0.3 * np.sin(2 * np.pi * 7 * t))
+    return x * np.clip(t / 0.004, 0, 1) * vel * 0.5
+
+
+def smooth_jazz(desk, start, stop, gain=1.0):
+    """The weather's bed: e-piano on a slow two-chord vamp, a fretless-ish bass, a soft
+    kick, a rim on the backbeat and a shaker on the sixteenths."""
+    vamp = (((64, 67, 71, 74), 40), ((65, 69, 72, 76), 41))       # Em9-ish, Fmaj9-ish over E, F
+    bar = 2.0
+    k = 0
+    while start + k * bar < stop - 1e-9:
+        at = start + k * bar
+        chord, root = vamp[k % 2]
+        for i, n in enumerate(chord):
+            desk.add(J.epiano(n, min(bar, stop - at) * 0.95, 0.5), at + 0.02 * i, 0.12 * gain, -0.2 + 0.13 * i,
+                     hall=0.35)
+        desk.add(J.bass(root, 0.9, 0.7), at, 0.3 * gain, hall=0.1)
+        desk.add(J.bass(root + 7, 0.4, 0.6), at + 1.25, 0.25 * gain, hall=0.1)
+        for b in range(4):
+            when = at + b * BEAT
+            if when >= stop:
+                break
+            if b in (0, 2):
+                desk.add(J.kick(0.5), when, 0.3 * gain, hall=0.05)
+            else:
+                desk.add(rim(0.6), when, 0.15 * gain, 0.2, hall=0.2)
+            for s in range(4):
+                desk.add(shaker(0.4 + 0.3 * (s % 2)), when + s * BEAT / 4, 0.12 * gain, 0.35, hall=0.1)
+        k += 1
+
+
+def forecast(voice):
+    """Local on the eights: a smooth-jazz bed under the forecaster; the icons arrive on the
+    open logo, a bloop and a glass bell each; the sports rain bounces in; the Doppler pings
+    and sweeps round; a stab for 100%; the extended forecast's tiles, one on each note of
+    the closed logo, on bells and the e-piano, the band resolving to D."""
+    P = hits('forecast')
+    length, end = 10.0, 9.6
+    desk = S.Desk(length)
+    desk.add(J.whoosh(0.5), P.TITLE[0], 0.15, -0.3, hall=0.2)
+    smooth_jazz(desk, 0.0, P.TILES[0])
+    for when, note in zip(P.ICONS, OPEN):
+        desk.add(pop(0.9), when, 0.22, 0.2, hall=0.2)
+        desk.add(glass(note + 12, 1.6, 0.9), when, 0.2, -0.2, hall=0.4)
+        desk.add(vibes(note, 1.4, 0.7), when, 0.15, 0.1, hall=0.3)
+    for k in range(22):                                              # scattered sports
+        when = P.RAIN[0] + 0.6 + (P.RAIN[1] - P.RAIN[0]) * k / 22 + rng.uniform(0, 0.05)
+        desk.add(tap(0.4 + 0.3 * rng.random()), when, 0.2, 0.6, hall=0.15)
+    desk.add(sonar(1.0), P.SWEEP[0], 0.3, -0.1, hall=0.4)
+    desk.add(sonar(0.7), P.SWEEP[0] + (P.SWEEP[1] - P.SWEEP[0]) * 0.67, 0.25, 0.1, hall=0.4)
+    n = int((P.SWEEP[1] - P.SWEEP[0]) * SR)
+    swish = J.sweep(J.noise(n), 600 + 2400 * (0.5 + 0.5 * np.sin(2 * np.pi * J.times(n) / ((P.SWEEP[1] - P.SWEEP[0]) / 1.5))),
+                    'bp', q=4)
+    desk.add(swish * 0.15, P.SWEEP[0], 0.3, hall=0.3)
+    for i, note in enumerate((62, 66, 69, 73)):                     # 100%
+        desk.add(J.brass(note, 0.3, 0.9), P.HUNDRED, 0.08, -0.3 + 0.2 * i, hall=0.3)
+    desk.add(J.crash(0.6, 1.5), P.HUNDRED, 0.15, 0.3, hall=0.3)
+    for when, note in zip(P.TILES, CLOSED):                         # the extended forecast
+        desk.add(glass(note + 12, 2.0, 0.9), when, 0.22, -0.2, hall=0.4)
+        desk.add(J.epiano(note - 12, 0.4, 0.8), when, 0.18, 0.2, hall=0.3)
+        desk.add(pop(0.7), when, 0.12, 0.3, hall=0.2)
+    for i, n_ in enumerate((50, 57, 62, 66, 69, 73, 76)):          # D, resolved, smooth
+        desk.add(J.epiano(n_, 2.2, 0.55), P.TILES[0] + 0.02 * i, 0.12, -0.3 + 0.1 * i, hall=0.4)
+    desk.add(J.bass(38, 2.0, 0.8), P.TILES[0], 0.3, hall=0.1)
+    desk.add(J.bass(38, 1.0, 0.7), P.TILES[3], 0.3, hall=0.1)
+    desk.add(J.kick(0.6), P.TILES[0], 0.3, hall=0.05)
+    desk.wide(lambda: J.pad_voice((62, 66, 69, 74), 2.2, 0.3, 1.0), P.TILES[0], 0.06, hall=0.45)
+    return mixdown(desk, voice, length, end, grit=0.4)
+
+
+def sousaphone(midi, gate, vel=1.0):
+    """The marching tuba: dark brass, a puff of breath on the attack."""
+    x = J.butter(J.brass(midi, gate, vel, attack=0.03), 'low', 900)
+    n = len(x)
+    t = J.times(n)
+    return x * 1.6 + J.butter(J.noise(n), 'band', [150, 700]) * np.exp(-t / 0.04) * 0.2 * vel
+
+
+# The fight song, between the hits and the closed logo: the logo, worked into a march in C
+# that climbs to D for the closed logo. (when, midi, length in seconds)
+FIGHT_SONG = ((2.5, 72, 0.25), (2.75, 76, 0.25), (3.0, 79, 0.5), (3.5, 81, 0.5), (4.0, 79, 0.25), (4.25, 76, 0.25),
+              (4.5, 72, 0.5), (5.0, 74, 0.25), (5.25, 77, 0.25), (5.5, 81, 0.5), (6.0, 79, 0.25), (6.25, 77, 0.25),
+              (6.5, 76, 0.25), (6.75, 73, 0.25))
+PA_CLEAR = 3.4                       # the band waits for "...marching band!" to finish
+FIGHT_BASS = ((2.5, 36), (3.0, 43), (3.5, 36), (4.0, 43), (4.5, 36), (5.0, 43), (5.5, 38), (6.0, 43), (6.5, 45),
+              (6.75, 45))
+
+
+def halftime(voice):
+    """The band from the blimp: the crowd, a drumline roll-off as the band comes on, the PA
+    with the stadium's echo; the whole band hits the open logo, cymbals on each; the fight
+    song (the logo worked into a march) over the cadence as the word is written, the tubas
+    oom-pahing; then the closed logo, a sousaphone's oom and the crowd's roar for each i as
+    it is dotted, and the band, the horn and the crowd on the bow."""
+    P = hits('halftime')
+    length, end = 10.0, 9.6
+    desk = S.Desk(length)
+    voice = pa(voice)
+    desk.add(S.crowd(length, swell=(P.DOTS[0] - 0.3, P.BOW)), 0.0, 0.2, hall=0.2)
+    for k in range(12):                                              # the roll-off
+        desk.add(J.snare(0.3 + 0.5 * k / 12), 0.2 + k * 0.0625, 0.35, -0.1, hall=0.1, room=0.4)
+    drumline(desk, 0.95, P.HITS[0], gain=0.6)
+    for when, note in zip(P.HITS, OPEN):                             # the band hits the open logo
+        for i, n in enumerate((note - 24, note - 12, note - 5, note)):    # short, so the PA comes through
+            desk.add(J.brass(n, 0.3, 1.0), when, 0.11, -0.45 + 0.3 * i, hall=0.2)
+        desk.add(sousaphone(note - 36, 0.3, 1.0), when, 0.35, hall=0.2)
+        desk.add(J.crash(0.7, 0.6), when, 0.14, 0.3, hall=0.15)
+        desk.add(J.tom(33, 1.0), when, 0.4, hall=0.25)
+    drumline(desk, PA_CLEAR, 7.0, gain=0.55)
+    for when, note, gate in FIGHT_SONG:                              # the fight song, once the PA is done
+        if when < PA_CLEAR:
+            continue
+        for i, n in enumerate((note, note - 12, note - 5 if note % 12 in (0, 5, 7) else note - 4)):
+            desk.add(J.brass(n, gate * 0.9, 0.85), when, 0.09 - 0.02 * i, -0.3 + 0.3 * i, hall=0.3)
+        desk.add(glass(note + 12, 0.3, 0.6), when, 0.04, 0.4, hall=0.3)  # the glockenspiel
+    for when, root in FIGHT_BASS:                                    # oom-pah
+        if when < PA_CLEAR:
+            continue
+        desk.add(sousaphone(root - 12, 0.22, 0.9), when, 0.3, hall=0.15)
+        desk.add(J.brass(root + 16, 0.12, 0.6), when + 0.25, 0.05, 0.3, hall=0.2)
+    for when, note in zip(P.DOTS, CLOSED[:3]):                       # each i, dotted
+        desk.add(sousaphone(note - 36, 0.22, 1.0), when, 0.5, hall=0.25)
+        desk.add(J.bell(note + 12, 1.4, 0.9), when, 0.15, 0.2, hall=0.4)
+        desk.add(J.crash(0.6, 1.4), when, 0.12, -0.3, hall=0.3)
+    J.hit(desk, 62, P.BOW, big=True)                                 # and the bow
+    S.logo(desk, P.DOTS[0], CLOSED, organ_=False, gain=0.9)
+    for i, n in enumerate((50, 57, 62, 66, 69, 74)):
+        desk.add(J.brass(n, 1.2, 0.95), P.BOW, 0.08, -0.4 + 0.16 * i, hall=0.35)
+    desk.add(sousaphone(26, 1.0, 1.0), P.BOW, 0.5, hall=0.2)
+    desk.add(S.horn(1.4), P.BOW, 0.35, hall=0.3)
+    for k in range(8):
+        desk.add(J.snare(0.5 + 0.06 * k), P.BOW - 0.5 + k * 0.0625, 0.3, hall=0.1, room=0.4)
+    desk.add(S.crowd(1.8, claps=S.claps(0.2, 1)), P.BOW, 0.3, hall=0.2)
+    return mixdown(desk, voice, length, end, grit=0.5)
+
+
+def church_bell(midi, length=3.5, vel=1.0):
+    """A cast bronze bell: the hum an octave down, the prime, the minor-third tierce, the
+    quint and the nominal, each dying away at its own rate, and the clapper's strike."""
+    n = int(length * SR)
+    t = J.times(n)
+    f = float(J.hz(midi))
+    x = np.zeros(n)
+    for ratio, gain, decay in ((0.5, 0.7, 3.2), (1.0, 0.8, 2.4), (1.19, 0.55, 1.8), (1.5, 0.35, 1.4), (2.0, 0.6, 1.2),
+                               (2.52, 0.25, 0.8), (3.0, 0.2, 0.6), (4.07, 0.12, 0.4)):
+        x += gain * np.sin(2 * np.pi * f * ratio * t + rng.random() * 6) * np.exp(-t / decay)
+    x += J.butter(J.noise(n), 'high', 2500) * np.exp(-t / 0.008) * 0.5
+    return x * np.clip((length - t) / 0.2, 0, 1) * vel * 0.35
+
+
+def pipe_organ(midi, gate, vel=1.0):
+    """A church's pipe organ: principals at 8', 4', 2 2/3' and 2' with a quiet mixture,
+    the ranks a hair apart, a breath of chiff as the pipes speak, the room's long release."""
+    n = int((gate + 0.35) * SR)
+    t = J.times(n)
+    f = float(J.hz(midi))
+    x = np.zeros(n)
+    for harmonic, gain, cents in ((1, 1.0, 0), (2, 0.6, 1.5), (3, 0.25, -1), (4, 0.3, 2), (6, 0.12, -2), (8, 0.08, 3)):
+        x += gain * np.sin(2 * np.pi * f * harmonic * float(J.cents(cents)) * t + rng.random() * 6)
+    x += J.butter(J.noise(n), 'band', [1500, 5000]) * np.exp(-t / 0.025) * 0.25            # the chiff
+    env = np.clip(t / 0.05, 0, 1) * np.clip((gate + 0.3 - t) / 0.3, 0, 1)
+    return np.tanh(0.7 * x * env * vel) * 0.45
+
+
+def hail_mary(voice):
+    """The beer ad, sent up and played straight. Outside: a strummed guitar and strings at
+    golden hour, birdsong, and the church bell ringing the open logo, the swallows taking
+    off. Inside: the pipe organ's hymn under "Some say football is a religion"; as the pastor winds up, a timpani roll and the
+    choir rising; the throw, an organ run up; the catch, the full organ, the choir's AH!
+    and the congregation; then the closed logo: the choir, the organ, the bells, and the
+    strings under the slogan."""
+    P = hits('hail-mary')
+    length, end = 10.0, 9.65
+    desk = S.Desk(length)
+    birds = np.random.default_rng(7)
+    for k in range(7):                                               # outside: the birds
+        desk.add(chirp(birds), 0.2 + k * 0.33 + birds.uniform(0, 0.1), 0.06, birds.uniform(-0.8, 0.8), hall=0.2)
+    desk.add(flutter(1.2), P.BIRDS + 0.05, 0.25, 0.3, hall=0.2)
+    for k, (chord, at) in enumerate((((48, 55, 60, 64, 67), 0.0), ((53, 57, 60, 65, 69), 1.5))):   # the guitar
+        for i, note in enumerate(chord):
+            desk.add(pluck(note, 2.0, 0.7, bright=0.6), at + 0.25 + i * 0.03, 0.22, -0.3 + 0.12 * i, hall=0.35)
+    desk.wide(lambda: J.pad_voice((60, 64, 67, 72), 2.8, 0.8, 1.0), 0.0, 0.06, hall=0.5)
+    for when, note in zip(P.BELL, OPEN):                             # the bell rings the open logo
+        desk.add(church_bell(note - 12, 3.0, 1.0), when, 0.55, -0.1, hall=0.6)
+    chords = (((48, 60, 64, 67, 72), 2.75, 1.0), ((53, 60, 65, 69, 72), 3.75, 0.5), ((55, 59, 62, 67, 71), 4.25, 1.05))
+    for chord, at, gate in chords:                                   # inside: the organ's hymn
+        for note in chord:
+            desk.add(pipe_organ(note, gate, 0.9), at, 0.13, -0.2 + 0.1 * (note % 5), hall=0.7)
+    for k in range(int((P.CATCH - P.WIND_UP[0]) / 0.0625)):          # the wind-up and the flight
+        desk.add(J.timpani(43, 0.3 + 0.6 * k / 22), P.WIND_UP[0] + k * 0.0625, 0.18, hall=0.4)
+    desk.add(J.choir(67, P.CATCH - P.WIND_UP[0], 0.6), P.WIND_UP[0], 0.25, -0.3, hall=0.6)
+    desk.add(J.choir(71, P.CATCH - P.WIND_UP[0], 0.5), P.WIND_UP[0] + 0.2, 0.2, 0.3, hall=0.6)
+    for k, note in enumerate((60, 62, 64, 65, 67, 69, 71, 72, 74, 76, 77, 79)):    # the throw: a run up
+        desk.add(pipe_organ(note, 0.12, 0.8), P.THROW + k * 0.05, 0.12, -0.3 + 0.05 * k, hall=0.6)
+    desk.add(J.whoosh(P.FLIGHT[1] - P.FLIGHT[0]), P.FLIGHT[0], 0.15, 0.2, hall=0.4)
+    for note in (48, 55, 60, 64, 67, 72, 76, 79):                    # the catch: everything
+        desk.add(pipe_organ(note, 1.4, 1.0), P.CATCH, 0.12, -0.25 + 0.06 * (note % 9), hall=0.7)
+    for note in (72, 76, 79):
+        desk.add(J.choir(note, 1.1, 1.0), P.CATCH, 0.3, -0.3 + 0.3 * (note % 3), hall=0.6)
+    desk.add(J.crash(1.0, 2.2), P.CATCH, 0.3, 0.2, hall=0.5)
+    desk.add(J.timpani(36, 1.0), P.CATCH, 0.5, hall=0.4)
+    desk.add(J.butter(S.crowd(1.6, swell=(0.0, 0.15), claps=(0.5, 0.75, 1.0, 1.25)), 'band', [300, 3000]),
+             P.CATCH + 0.02, 0.35, 0.3, hall=0.5)
+    for chord, at, gate in (((53, 60, 65, 69), 6.0, 0.5), ((55, 62, 67, 71), 6.5, 0.45)):   # back to the hymn
+        for note in chord:
+            desk.add(pipe_organ(note, gate, 0.8), at, 0.1, hall=0.7)
+    S.logo(desk, P.CLOSED, CLOSED, organ_=False, choir=True, gain=0.9)   # the closed logo
+    for when, note in zip(at_logo(P.CLOSED), CLOSED):
+        desk.add(church_bell(note - 12, 2.5, 0.9), when, 0.35, 0.2, hall=0.6)
+        desk.add(pipe_organ(note - 12, 0.4, 0.8), when, 0.12, -0.2, hall=0.6)
+    for note in (38, 50, 57, 62, 66, 69):
+        desk.add(pipe_organ(note, 2.2, 0.85), P.CLOSED, 0.09, -0.3 + 0.1 * (note % 7), hall=0.7)
+    desk.wide(lambda: J.pad_voice((62, 66, 69, 74, 78), 2.6, 0.5, 1.0), P.CLOSED, 0.07, hall=0.5)
+    for i, note in enumerate((50, 57, 62, 66, 69)):
+        desk.add(pluck(note, 2.0, 0.7, bright=0.6), P.TAGLINE + 0.5 + i * 0.03, 0.2, -0.3 + 0.12 * i, hall=0.4)
+    return mixdown(desk, voice, length, end, grit=0.6)
+
+
+# ---------------------------------------------------------------- the cutdowns
+
+# ---------------------------------------------------------------- the République
+
+def harpsichord(midi, length=0.9, vel=1.0):
+    """Two plucked choirs an octave apart, bright and quick to die."""
+    low, high = pluck(midi, length, vel, 0.95), pluck(midi + 12, length, vel, 1.0)
+    n = min(len(low), len(high))
+    return (low[:n] + 0.5 * high[:n]) * 0.8
+
+
+def heure_decimale(voice):
+    """A tricolour whoosh and a drum flam; a clock
+that ticks every decimal second (0.864 s), never quite with the band; the open logo on
+harpsichord, vibes and bells as the labels and numbers flip in, its A the first "Al-" of La
+Marseillaise, which brass and fife carry on in D over a field drum, under DJ Low Tide ("...lons
+en-fants de la Pa-tri-e"); the bells answer with the logo under "tri-"; "Le jour de" runs into
+the closed logo, which ends the anthem's line over its own cadence, with a fife, church bells
+and a choir; silence."""
+    P = hits('heure-decimale')
+    length, end = P.DURATION, P.FADE[1]
+    desk = S.Desk(length)
+    desk.add(J.whoosh(P.WIPE[1]), 0.0, 0.3, 0.4, hall=0.3)
+    desk.add(J.snare(0.4), 0.02, 0.25, room=0.3)
+    desk.add(J.snare(0.8), 0.06, 0.35, room=0.3)
+    desk.add(J.crash(0.5, 1.6), 0.06, 0.15, -0.3, hall=0.3)
+    desk.wide(lambda: J.pad_voice((48, 55, 60, 64), 7.0, 1.0, 1.0), 0.2, 0.05, hall=0.45)
+    k = 0
+    while 0.6 + k * 0.864 < P.FADE[0]:                              # the decimal second
+        desk.add(clack(0.45 if k % 2 == 0 else 0.3), 0.6 + k * 0.864, 0.14, 0.5, hall=0.1)
+        k += 1
+    # The logo and La Marseillaise, one tune: the open logo (C E G A) on harpsichord, vibes and bells;
+    # its A is the anthem's first "Al-", where brass and fife take over in D: "...lons en-fants de
+    # la Pa-tri-e". While "tri-" is held the bells answer with the logo, in D. "Le jour de" runs
+    # straight into the closed logo, which ends the line in the anthem's place ("...est ar-ri-ve!"),
+    # over its own cadence: D, D, A7, D.
+    notes = (P.LABELS[0], P.LABELS[1], P.TIME_IN, P.TEMP_IN)
+    for when, note in zip(notes, OPEN):
+        desk.add(harpsichord(note, 1.2, 1.0), when, 0.28, -0.2, hall=0.3)
+        desk.add(vibes(note + 12, 1.6, 0.8), when, 0.18, 0.25, hall=0.35)
+        desk.add(J.bell(note + 24, 1.2, 0.5), when, 0.06, 0.1, hall=0.4)
+    for when in (P.TIME_IN, P.TEMP_IN):                              # the flips
+        desk.add(glide(700, 1600, 0.12), when - 0.1, 0.06, 0.0)
+        desk.add(clack(0.9), when, 0.2, 0.0)
+    al = P.TEMP_IN                                                   # the logo's A is "Al-"
+    anthem = ((57, 0, 0.75), (57, 0.75, 0.25), (57, 1, 1), (62, 2, 1), (62, 3, 1), (64, 4, 1), (64, 5, 1),
+              (69, 6, 1.5), (66, 7.5, 0.5), (62, 8, 1),            # Al-lons en-fants de la Pa-tri-e
+              (62, 9.5, 0.75), (66, 10.25, 0.25), (62, 10.5, 0.5))  # Le jour de... (the closed logo)
+    for note, beat, beats in anthem:
+        when, gate = al + beat * BEAT, beats * BEAT * 0.9
+        desk.wide(lambda n=note, g=gate: J.brass(n, g, 1.0), when, 0.17, 0.25, hall=0.3)
+        desk.add(fife(note + 12, gate, 0.9), when, 0.18 if beat else 0.1, -0.3, hall=0.35)
+    for k, note in enumerate((74, 78, 81, 83)):                      # the bells answer under "tri-"
+        desk.add(J.bell(note + 12, 0.9, 0.6), al + (6.25 + 0.25 * k) * BEAT, 0.09, 0.4 - 0.2 * k, hall=0.45)
+        desk.add(vibes(note, 0.8, 0.6), al + (6.25 + 0.25 * k) * BEAT, 0.1, 0.4 - 0.2 * k, hall=0.35)
+    harmony = ((1, 3, (50, 57, 62, 66)), (3, 4, (50, 57, 62, 66)), (4, 6, (45, 57, 61, 64)),
+               (6, 8, (45, 55, 61, 64)), (8, 9, (50, 57, 62, 66)), (9, 11, (43, 55, 59, 62)))
+    for b0, b1, chord in harmony:
+        when = al + b0 * BEAT
+        for i, note in enumerate(chord[1:]):
+            desk.add(harpsichord(note, (b1 - b0) * BEAT, 0.6), when + 0.02 * i, 0.1, 0.35 - 0.2 * i, hall=0.3)
+        desk.add(pizz(chord[0] - 12, 0.9), when, 0.26, -0.1, hall=0.25)
+    for beat in range(1, 11):                                        # the drum, the anthem's march
+        when = al + beat * BEAT
+        desk.add(J.snare(0.6 if beat % 2 else 0.4), when, 0.26, 0.1, hall=0.15, room=0.3)
+        desk.add(J.snare(0.3), when + BEAT * 0.75, 0.2, 0.1, room=0.3)
+        if beat % 2:
+            desk.add(J.timpani(38 if beat % 4 == 1 else 33, 0.7), when, 0.3, hall=0.35)
+    field_roll(desk, P.LOGO[0] - 0.5, 0.48, 0.3, 0.9, gain=0.3)
+    desk.wide(lambda: J.pad_voice((50, 57, 62, 66), 2.0, 0.4, 1.0), P.LOGO[0], 0.07, hall=0.45)
+    S.logo(desk, P.LOGO[0], CLOSED, organ_=False, choir=True, gain=0.8)
+    cadence = ((50, 57, 62, 66), (50, 57, 62, 66), (45, 55, 61, 64), (38, 57, 62, 66))   # D, D, A7, D
+    for i, (when, note) in enumerate(zip(at_logo(P.LOGO[0]), CLOSED)):
+        gate = RHYTHM[i][1] * BEAT * 0.92
+        desk.add(fife(note + 12, gate, 0.9), when, 0.2, -0.3, hall=0.4)
+        desk.add(church_bell(note, 2.0, 0.7), when, 0.15, 0.3, hall=0.5)
+        for k, chord_note in enumerate(cadence[i]):
+            desk.wide(lambda n=chord_note, g=gate: J.brass(n, g, 0.9), when, 0.07, hall=0.3)
+    desk.add(J.timpani(38, 0.9), P.LOGO[3], 0.35, hall=0.4)
+    return mixdown(desk, voice, length, end, grit=0.5)
+
+
+
+# ---------------------------------------------------------------- Halloween
+
+def theremin(f0, f1, length, vel=1.0):
+    """A theremin: a pure tone sliding between pitches with a slow, wide vibrato."""
+    n = int(length * SR)
+    t = J.times(n)
+    f = np.geomspace(f0, f1, n) * (1 + 0.012 * np.sin(2 * np.pi * 5.2 * t) * np.clip(t / 0.3, 0, 1))
+    x = np.sin(2 * np.pi * np.cumsum(f) / SR) + 0.08 * np.sin(4 * np.pi * np.cumsum(f) / SR)
+    return x * np.clip(t / 0.25, 0, 1) * np.clip((length - t) / 0.4, 0, 1) * vel * 0.4
+
+
+def thunder(length=2.6, vel=1.0):
+    """A crack and a long low rumble that rolls about."""
+    n = int(length * SR)
+    t = J.times(n)
+    crack = J.butter(J.noise(n), 'high', 1500) * np.exp(-t / 0.05)
+    rumble = J.butter(J.noise(n), 'low', 160) * np.exp(-t / 0.9) * (1 + 0.6 * np.sin(2 * np.pi * 3.1 * t) * np.sin(2 * np.pi * 0.7 * t))
+    return np.tanh((0.5 * crack + 3.0 * rumble) * vel) * 0.7
+
+
+def music_box(midi, vel=1.0):
+    """A music box's comb: a bright, short tine, detuned a hair against itself."""
+    return (J.bell(midi, 1.6, vel) + 0.6 * J.bell(midi + 0.18, 1.6, vel * 0.8)) * 0.6
+
+
+def wind(length, vel=1.0):
+    n = int(length * SR)
+    t = J.times(n)
+    x = J.butter(J.noise(n), 'band', [250, 900]) * (0.6 + 0.4 * np.sin(2 * np.pi * 0.23 * t) * np.sin(2 * np.pi * 0.11 * t + 1))
+    rain = J.butter(J.noise(n), 'high', 3500) * 0.35
+    return (x + rain) * np.clip(t / 0.8, 0, 1) * vel * 0.5
+
+
+
+def cat_witching_hour(voice):
+    """Halloween, after dark: wind and rain at the window, a low drone,
+a heartbeat; a glassy shiver and a theremin when the eyes open in the corner; the open logo
+on a music box, a little out of tune, with a flare, thunder on the second note, a deep swell
+when the shadow opens its eyes and a floorboard's creak as the cat turns; the closed logo on a
+haunted pipe organ and choir with a tolling bell and thunder on the last note; silence."""
+    P = hits('cat-witching-hour')
+    length, end = P.DURATION, P.IRIS_CLOSE[1]
+    desk = S.Desk(length)
+    desk.wide(lambda: wind(length - 0.2, 1.0), 0.0, 0.18, hall=0.2)
+    desk.wide(lambda: J.pad_voice((38, 45, 50, 53), P.LOGO[0] - 0.2, 1.5, 1.2), 0.0, 0.07, hall=0.5)   # D minor, low
+    for k in range(9):                                               # a heartbeat
+        when = 1.2 + k * 0.92
+        if when > P.LOGO[0] - 0.3:
+            break
+        desk.add(J.kick(0.5), when, 0.25, hall=0.2)
+        desk.add(J.kick(0.35), when + 0.22, 0.2, hall=0.2)
+    for i, note in enumerate((93, 94, 99)):                          # the eyes in the corner
+        desk.add(glass(note, 1.6, 0.4), P.CORNER_EYES[0] + 0.05 * i, 0.05, -0.8, hall=0.6)
+    desk.add(theremin(440, 330, 1.4), P.CORNER_EYES[0] + 0.2, 0.12, -0.6, hall=0.5)
+    desk.add(click(0.6), 2.85, 0.1, -0.8, hall=0.4)                # it blinks
+    for when, note in zip(P.NOTES, OPEN):                            # the open logo, on a music box
+        desk.add(music_box(note + 24, 0.9), when, 0.22, 0.2, hall=0.6)
+        desk.add(vibes(note + 12, 1.8, 0.5), when, 0.08, -0.2, hall=0.5)
+    desk.add(J.whoosh(0.4), P.FLARE - 0.1, 0.12, 0.6, hall=0.3)
+    desk.wide(lambda: thunder(2.6, 1.0), P.LIGHTNING[0], 0.55, hall=0.3)
+    desk.add(sub(38, 1.6, 0.8), P.SHADOW_EYES, 0.3, hall=0.3)      # the shadow opens its eyes
+    desk.wide(lambda: J.pad_voice((37, 44, 49), 1.4, 0.3, 0.8), P.SHADOW_EYES, 0.1, hall=0.5)
+    desk.add(squeak(P.TURN[1] - P.TURN[0] + 0.2, 0.6, seed=3), P.TURN[0], 0.18, 0.1, hall=0.4)   # the floorboard
+    desk.add(theremin(330, 523, 1.6), P.TURN[0], 0.12, 0.3, hall=0.5)
+    desk.wide(lambda: J.pad_voice((38, 45, 50, 53, 57), P.LOGO[0] - P.TURN[1], 0.8, 0.8), P.TURN[1], 0.06, hall=0.5)
+    for k, when in enumerate(at_logo(P.LOGO[0])):                    # the closed logo, a haunted organ
+        note = CLOSED[k]
+        gate = RHYTHM[k][1] * BEAT * 0.95
+        desk.add(pipe_organ(note, gate + 0.2, 0.9), when, 0.3, -0.2, hall=0.6)
+        desk.add(pipe_organ(note - 12, gate + 0.2, 0.8), when, 0.22, 0.2, hall=0.6)
+        desk.add(J.choir(note, gate, 0.9), when, 0.35, 0.3, hall=0.6)
+        desk.add(music_box(note + 24, 0.7), when, 0.1, 0.4, hall=0.6)
+    desk.add(church_bell(50, 3.5, 1.0), P.LOGO[0], 0.35, -0.3, hall=0.6)
+    desk.add(church_bell(50, 3.0, 0.8), P.LOGO[3], 0.3, -0.3, hall=0.6)
+    desk.wide(lambda: thunder(2.0, 0.9), P.LOGO[3], 0.45, hall=0.3)
+    desk.wide(lambda: J.pad_voice((50, 54, 57, 62), 1.6, 0.3, 0.6), P.LOGO[3], 0.07, hall=0.5)
+    desk.add(theremin(587, 440, 1.0), P.BLINK[0], 0.08, 0.4, hall=0.6)
+    return mixdown(desk, voice, length, end, grit=0.6)
+
+
+
+def excerpt(cut):
+    """A 5-second cutdown's sound (promos/cutdown.py): its source's music without the voice,
+    cut into the same pieces as the picture (a short fade at each splice, and in, when the
+    cut starts mid-cue), the lines it keeps laid back over it, and silence by the end."""
+    P = hits(cut)
+    music = render(P.SOURCE, voiced=False)
+    length = sum(b - a for a, b in P.PIECES)
+    out = np.zeros((2, int(round(length * SR))))
+    edge = int(0.008 * SR)
+    at = 0
+    for k, (a, b) in enumerate(P.PIECES):
+        piece = music[:, int(round(a * SR)):int(round(b * SR))].copy()
+        piece = piece[:, :out.shape[1] - at]
+        fade_in = int(0.06 * SR) if k == 0 and a > 0 else edge if k else 0
+        if fade_in:
+            piece[:, :fade_in] *= np.sin(np.linspace(0, np.pi / 2, fade_in)) ** 2
+        if k < len(P.PIECES) - 1:
+            piece[:, -edge:] *= np.cos(np.linspace(0, np.pi / 2, edge)) ** 2
+        out[:, at:at + piece.shape[1]] += piece
+        at += piece.shape[1]
+    voice = np.zeros(out.shape[1])
+    for line_id, when in P.LINES:
+        x = load_line(line_id)
+        start = int(when * SR)
+        end = min(len(voice), start + len(x))
+        voice[start:end] += x[:end - start]
+        print(f'  voice: {line_id} {when:.2f}-{end / SR:.2f} s')
+    if voice.any():
+        out *= J.duck(voice, 7.0)
+        plate = J.impulse(1.2, 0.7, 0.012, 6000)
+        wet = np.array([signal.fftconvolve(voice * 0.12, plate[c])[:len(voice)] for c in range(2)])
+        out = J.limiter(out + np.array([voice, voice]) * 1.6 + wet)
+    t = J.times(out.shape[1])
+    return out * np.sin(np.clip((length - 0.06 - t) / 0.15, 0, 1) * np.pi / 2) ** 2
+
+
 CUES = {'time-temp': (10.0, time_temp), 'watching': (10.0, watching), 'only-on': (10.0, only_on),
         'legal': (5.0, legal), 'press-start': (5.0, press_start), 'metro': (10.0, metro), 'dupont': (10.0, dupont),
         'meridian-hill': (10.0, meridian_hill), 'now-in-hd': (10.0, now_in_hd), 'cat-remote': (10.0, cat_remote),
         'cat-laser': (10.0, cat_laser), 'baseball': (10.0, baseball), 'football': (10.0, football),
         'eighty-six': (10.0, eighty_six), 'seventy-six': (10.0, seventy_six),
         'ninety-six': (10.0, ninety_six), 'twenty-sixteen': (10.0, twenty_sixteen),
-        'the-cairo': (10.0, the_cairo), 'cairo-1894': (10.0, cairo_1894)}
+        'the-cairo': (10.0, the_cairo), 'cairo-1894': (10.0, cairo_1894),
+        'cat-field-goal': (10.0, cat_field_goal), 'happy-little': (10.0, happy_little), 'popcorn': (10.0, popcorn),
+        'forecast': (10.0, forecast), 'halftime': (10.0, halftime), 'hail-mary': (10.0, hail_mary),
+        'metro-5': (5.0, lambda voice: excerpt('metro-5')), 'baseball-5': (5.0, lambda voice: excerpt('baseball-5')),
+        'cat-remote-5': (5.0, lambda voice: excerpt('cat-remote-5')),
+        'heure-decimale': (10.0, heure_decimale), 'cat-witching-hour': (10.0, cat_witching_hour)}
 
 
 def render(promo_id, voiced=True):

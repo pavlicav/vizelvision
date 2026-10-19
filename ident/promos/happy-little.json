@@ -1,0 +1,20 @@
+{
+  "id": "happy-little",
+  "version": 1,
+  "name": "Happy Little Channel",
+  "kind": "ident",
+  "order": 25,
+  "description": "A painting show: four happy little trees tapped in on the notes of the logo, a happy little TV for a friend, the brush beaten against the easel on the closed logo, and a red signature. Orion, softly.",
+  "duration": 10.0,
+  "file": "happy-little.mp4",
+  "still": "happy-little.png",
+  "still_at": 8.95,
+  "overlays": [],
+  "voice": null,
+  "leagues": [],
+  "loudness": {
+    "input": "-14.53",
+    "target": -20.0
+  },
+  "built_at": "2026-10-18T13:06:05-0400"
+}

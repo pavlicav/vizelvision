@@ -1,0 +1,23 @@
+{
+  "id": "hail-mary",
+  "version": 1,
+  "name": "Now With More God",
+  "kind": "ident",
+  "order": 22,
+  "description": "Only during football, a send-up of the old beer ads: a country church, a sermon on the offensive line, the spread on the hymn board, a Hail Mary down the aisle caught by Doris, and a label whose fine print says God has not endorsed this channel. \"Now with more God.\" Pluto.",
+  "duration": 10.0,
+  "file": "hail-mary.mp4",
+  "still": "hail-mary.png",
+  "still_at": 8.8,
+  "overlays": [],
+  "voice": null,
+  "leagues": [
+    "nfl",
+    "ncaaf"
+  ],
+  "loudness": {
+    "input": "-14.15",
+    "target": -20.0
+  },
+  "built_at": "2026-10-18T13:10:51-0400"
+}

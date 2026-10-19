@@ -235,5 +235,133 @@
         "text": "Football... on Vizzle Vision."
       }
     ]
+  },
+  "hail-mary": {
+    "host": "The Beer-Ad Voice",
+    "model": "aura-2-pluto-en",
+    "lines": [
+      {
+        "id": "promo-hail-mary-1",
+        "at": 2.7,
+        "text": "Some say football... is a religion."
+      },
+      {
+        "id": "promo-hail-mary-2",
+        "at": 5.7,
+        "text": "Doris has never dropped one."
+      },
+      {
+        "id": "promo-hail-mary-3",
+        "at": 7.7,
+        "text": "Now with more God."
+      }
+    ]
+  },
+  "cat-field-goal": {
+    "host": "The Narrator",
+    "model": "aura-2-draco-en",
+    "lines": [
+      {
+        "id": "promo-cat-field-goal-1",
+        "at": 0.55,
+        "text": "The orange cat... attempts the field goal."
+      },
+      {
+        "id": "promo-cat-field-goal-2",
+        "at": 4.45,
+        "text": "It is good."
+      }
+    ]
+  },
+  "halftime": {
+    "host": "The PA",
+    "model": "aura-2-jupiter-en",
+    "lines": [
+      {
+        "id": "promo-halftime",
+        "at": 0.3,
+        "text": "Ladies and gentlemen... the Vizzle Vision marching band!"
+      }
+    ]
+  },
+  "happy-little": {
+    "host": "The Painter",
+    "model": "aura-2-orion-en",
+    "lines": [
+      {
+        "id": "promo-happy-little-1",
+        "at": 0.35,
+        "text": "Let's put some happy little trees in here."
+      },
+      {
+        "id": "promo-happy-little-2",
+        "at": 3.1,
+        "text": "And everybody needs a friend."
+      }
+    ]
+  },
+  "forecast": {
+    "host": "The Weather",
+    "model": "aura-2-asteria-en",
+    "lines": [
+      {
+        "id": "promo-forecast-1",
+        "at": 0.35,
+        "text": "Here's your Vizzle Vision forecast."
+      },
+      {
+        "id": "promo-forecast-2",
+        "at": 2.8,
+        "text": "Scattered sports... with a hundred percent chance of Vizzle Vision."
+      }
+    ]
+  },
+  "popcorn": {
+    "host": "Janus",
+    "model": "aura-2-janus-en",
+    "lines": [
+      {
+        "id": "promo-popcorn",
+        "at": 8.3,
+        "text": "Popcorn's ready!"
+      }
+    ]
+  },
+  "heure-decimale": {
+    "host": "DJ Low Tide",
+    "model": "aura-2-orpheus-en",
+    "lines": [
+      {
+        "id": "promo-heure-decimale-1",
+        "at": 2.1,
+        "text": "Vizzle Vision decimal time, and temperature."
+      },
+      {
+        "id": "promo-heure-decimale-2",
+        "at": 5.1,
+        "text": "In Celsius. Naturellement."
+      }
+    ]
+  },
+  "cat-witching-hour": {
+    "host": "The Narrator",
+    "model": "aura-2-draco-en",
+    "lines": [
+      {
+        "id": "promo-cat-witching-hour-1",
+        "at": 0.5,
+        "text": "The orange cat... is watching something."
+      },
+      {
+        "id": "promo-cat-witching-hour-2",
+        "at": 4.8,
+        "text": "It is no longer watching the corner."
+      },
+      {
+        "id": "promo-cat-witching-hour-3",
+        "at": 8.25,
+        "text": "Happy Halloween."
+      }
+    ]
   }
 }

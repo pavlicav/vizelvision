@@ -1,0 +1,55 @@
+{
+  "id": "baseball-5",
+  "version": 1,
+  "name": "Baseball on VizelVision (5 s)",
+  "kind": "ident",
+  "order": 31,
+  "description": "Only during baseball, five seconds: the pitch, the crack, and a home run into the scoreboard on the closed logo, with fireworks. The ribbon board shows the game on air.",
+  "duration": 5.0,
+  "file": "baseball-5.mp4",
+  "still": "baseball-5.png",
+  "still_at": 3.9,
+  "overlays": [
+    {
+      "field": "programme",
+      "box": [
+        440,
+        195,
+        400,
+        28
+      ],
+      "from": 0.0,
+      "to": 4.75,
+      "style": {
+        "font": "Nimbus Sans Narrow",
+        "bold": true,
+        "size": 26,
+        "min_size": 13,
+        "color": [
+          1.0,
+          0.72,
+          0.2
+        ],
+        "upper": true,
+        "tracking": 0.08
+      },
+      "enter": {
+        "kind": "fade",
+        "seconds": 0.3
+      },
+      "exit": {
+        "kind": "fade",
+        "seconds": 0.3
+      }
+    }
+  ],
+  "voice": null,
+  "leagues": [
+    "mlb"
+  ],
+  "loudness": {
+    "input": "-13.87",
+    "target": -20.0
+  },
+  "built_at": "2026-10-18T13:07:30-0400"
+}

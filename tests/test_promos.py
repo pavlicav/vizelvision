@@ -176,9 +176,15 @@ class OverlayTests(unittest.TestCase):
 
     def test_field_text(self):
         at = time.mktime((2026, 10, 4, 22, 5, 0, 0, 0, -1))
-        values = {'temperature': {'f': 61, 'place': 'Reagan National'}, 'programme': {'title': 'Jeopardy!'}}
+        values = {'temperature': {'f': 61, 'c': 16.1, 'place': 'Reagan National'}, 'programme': {'title': 'Jeopardy!'}}
         self.assertEqual([promo_overlay.field_text(f, values, at) for f in promo_overlay.FIELDS],
-                         ['10:05', 'PM', '61°', 'Jeopardy!', 'Reagan National'])
+                         ['10:05', 'PM', '61°', 'Jeopardy!', 'Reagan National', '9:20:13', '16°C'])
+        noon = time.mktime((2026, 10, 4, 12, 0, 0, 0, 0, -1))
+        self.assertEqual(promo_overlay.field_text('decimal_time', {}, noon), '5:00:00')
+        self.assertEqual(promo_overlay.field_text('decimal_time', {}, noon - 12 * 3600), '0:00:00')
+        self.assertEqual(promo_overlay.field_text('decimal_time', {}, noon + 12 * 3600 - 0.5), '9:99:99')
+        self.assertEqual(promo_overlay.field_text('celsius', {'temperature': {'f': 50}}), '10°C')
+        self.assertIsNone(promo_overlay.field_text('celsius', {}))
         self.assertEqual(promo_overlay.field_text('time', {}, time.mktime((2026, 10, 4, 0, 30, 0, 0, 0, -1))), '12:30')
         self.assertIsNone(promo_overlay.field_text('temperature', {}))
 

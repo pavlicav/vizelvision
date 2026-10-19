@@ -1,0 +1,128 @@
+{
+  "id": "heure-decimale",
+  "version": 1,
+  "name": "L'Heure D\u00e9cimale",
+  "kind": "promo",
+  "order": 29,
+  "description": "Time & Temperature for the R\u00e9publique: navy and gold, a ten-hour dial turning behind, the decimal time (ticking by the decimal second) and the temperature in Celsius as they are when it airs. Voiced by DJ Low Tide.",
+  "duration": 10.0,
+  "file": "heure-decimale.mp4",
+  "still": "heure-decimale.png",
+  "still_at": 6.0,
+  "overlays": [
+    {
+      "field": "decimal_time",
+      "box": [
+        120,
+        282,
+        470,
+        150
+      ],
+      "from": 1.5,
+      "to": 9.55,
+      "style": {
+        "font": "P052",
+        "bold": false,
+        "size": 132,
+        "min_size": 60,
+        "color": [
+          0.96,
+          0.93,
+          0.85
+        ],
+        "shadow": [
+          0,
+          4,
+          0.02,
+          0.03,
+          0.08,
+          0.8
+        ]
+      },
+      "enter": {
+        "kind": "flip",
+        "seconds": 0.35
+      },
+      "exit": {
+        "kind": "fade",
+        "seconds": 0.3500000000000014
+      }
+    },
+    {
+      "field": "celsius",
+      "box": [
+        690,
+        282,
+        470,
+        150
+      ],
+      "from": 2.0,
+      "to": 9.55,
+      "style": {
+        "font": "P052",
+        "bold": false,
+        "size": 132,
+        "min_size": 60,
+        "color": [
+          0.96,
+          0.93,
+          0.85
+        ],
+        "shadow": [
+          0,
+          4,
+          0.02,
+          0.03,
+          0.08,
+          0.8
+        ]
+      },
+      "enter": {
+        "kind": "flip",
+        "seconds": 0.35
+      },
+      "exit": {
+        "kind": "fade",
+        "seconds": 0.3500000000000014
+      }
+    },
+    {
+      "field": "place",
+      "box": [
+        690,
+        440,
+        470,
+        38
+      ],
+      "from": 2.3,
+      "to": 9.55,
+      "style": {
+        "font": "P052",
+        "bold": false,
+        "italic": true,
+        "size": 28,
+        "min_size": 14,
+        "color": [
+          0.86,
+          0.72,
+          0.42
+        ]
+      },
+      "enter": {
+        "kind": "fade",
+        "seconds": 0.4
+      },
+      "exit": {
+        "kind": "fade",
+        "seconds": 0.3500000000000014
+      }
+    }
+  ],
+  "voice": null,
+  "leagues": [],
+  "loudness": {
+    "input": "-13.88",
+    "target": -20.0
+  },
+  "built_at": "2026-10-18T15:10:11-0400"
+}

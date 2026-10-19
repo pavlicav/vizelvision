@@ -371,7 +371,9 @@ def striped(ctx, colour, width):
     ctx.set_dash([])
 
 
-def sitting(ctx, t, x, y, look, reach, eyes, blink, mouth, squash=0.0):
+def sitting(ctx, t, x, y, look, reach, eyes, blink, mouth, squash=0.0, arms=0.0):
+    """Sitting, facing you. reach (0..1) puts the right paw out to the side; arms (0..1)
+    raises both front legs, out and up past the ears: a referee's "it's good"."""
     ctx.save()
     ctx.translate(x, y)
     ctx.scale(SIZE * (1 + 0.12 * squash), SIZE * (1 - 0.18 * squash))
@@ -412,6 +414,11 @@ def sitting(ctx, t, x, y, look, reach, eyes, blink, mouth, squash=0.0):
             ctx.curve_to(side * 44, -32 - i * 24, side * 40, -24 - i * 24, side * 34, -16 - i * 24)
     ctx.stroke()
     ctx.restore()
+    if arms > 0:
+        raised(ctx, arms)
+        head(ctx, 0, -150 + 8 * squash, look, eyes, blink, mouth, ear=pulse(t, 1.9, 0.3))
+        ctx.restore()
+        return
     # Front legs: the left down to its paw; the right reaching out to the mug.
     ctx.move_to(-18, -70)
     ctx.line_to(-18, -10)
@@ -437,6 +444,26 @@ def sitting(ctx, t, x, y, look, reach, eyes, blink, mouth, squash=0.0):
     inked(ctx, BELLY, 4, (3, 3))
     head(ctx, 0, -150 + 8 * squash, look, eyes, blink, mouth, ear=pulse(t, 1.9, 0.3))
     ctx.restore()
+
+
+def raised(ctx, arms):
+    """Both front legs swinging out from the paws to straight up beside the head (drawn
+    before it, so the paws show past the ears)."""
+    for side in (-1, 1):
+        sx, sy = side * 22, -78
+        angle = TAU / 4 + side * -arms * (TAU / 2 - 0.32)
+        length = 64 + 76 * arms
+        px, py = sx + math.cos(angle) * length, sy + math.sin(angle) * length
+        ctx.move_to(sx, sy)
+        ctx.line_to(px, py)
+        inked_stroke(ctx, FUR, 16, (4, 4))
+        ctx.save()
+        ctx.translate(px, py)
+        ctx.rotate(angle - TAU / 4)
+        ctx.scale(13, 9)
+        ctx.arc(0, 0, 1, 0, TAU)
+        ctx.restore()
+        inked(ctx, BELLY, 4, (3, 3))
 
 
 def leaping(ctx, t, x, y, angle):

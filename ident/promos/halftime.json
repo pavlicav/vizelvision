@@ -1,0 +1,56 @@
+{
+  "id": "halftime",
+  "version": 1,
+  "name": "Halftime",
+  "kind": "ident",
+  "order": 24,
+  "description": "Only during football: the VizelVision marching band from the blimp. It hits the logo, writes VizelVision across the field, and on the closed logo three sousaphones high-step out to dot its i's. The bug carries the game on air. Jupiter on the PA.",
+  "duration": 10.0,
+  "file": "halftime.mp4",
+  "still": "halftime.png",
+  "still_at": 8.7,
+  "overlays": [
+    {
+      "field": "programme",
+      "box": [
+        212,
+        18,
+        420,
+        40
+      ],
+      "from": 0.6,
+      "to": 9.4,
+      "style": {
+        "font": "Nimbus Sans",
+        "bold": true,
+        "size": 26,
+        "min_size": 13,
+        "color": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "upper": true,
+        "tracking": 0.04
+      },
+      "enter": {
+        "kind": "fade",
+        "seconds": 0.3
+      },
+      "exit": {
+        "kind": "fade",
+        "seconds": 0.3
+      }
+    }
+  ],
+  "voice": null,
+  "leagues": [
+    "nfl",
+    "ncaaf"
+  ],
+  "loudness": {
+    "input": "-14.06",
+    "target": -20.0
+  },
+  "built_at": "2026-10-18T13:13:53-0400"
+}

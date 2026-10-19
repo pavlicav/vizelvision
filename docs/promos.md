@@ -6,7 +6,7 @@ as breaks allow.** The settings are on the **Promos** tab of the Presentation pa
 (`/presentation#promos`; `/production` redirects there). **Ads › Idents** (`/ads#idents`)
 shows them beside the station ID and the Sports ID, with what is cued and what aired.
 
-## The nineteen
+## The thirty
 
 VizelVision is said **"VIZZLE-VISION"** ([README](../README.md)). The newer lines write it
 "Vizzle Vision" so the voices say it that way; the first nine promos' lines spell it "Vizel Vision".
@@ -32,6 +32,17 @@ VizelVision is said **"VIZZLE-VISION"** ([README](../README.md)). The newer line
 | **The Cairo, 1894** (`cairo-1894`) | 10 s | A sepia silent film at sixteen frames a second, scratched and weaving: a horse-drawn ladder wagon on Q Street; its ladder runs up The Cairo a section a note and stops at the seventh floor, and the fireman shrugs. Title cards: "TOO TALL!" said the Fire Chief. / And so, in 1899, Congress capped the city. A mast sprouts from the roof, and on the closed logo: VIZELVISION, still on top since 1894. Ragtime piano and the projector. | none |
 | **Baseball on VizelVision** (`baseball`) | 10 s | **Only during an MLB game.** A night ballpark from high behind home plate: the light banks bang on, the organ plays the open logo, the board spells NOW BATTING, No. 19, VIZELVISION; the pitch (97 MPH), the crack, and a high fly into the scoreboard on the closed logo: HOME RUN!, fireworks, the crowd up. The ribbon board under the scoreboard carries **the game on air** (live text). | Jupiter (`aura-2-jupiter-en`) on the ballpark PA, with the stands' echo: "Now batting... number nineteen... Vizzle Vision!" |
 | **Football on VizelVision** (`football`) | 10 s | **Only during an NFL or college game.** A coach's chalkboard: PLAY 19, the O's and X's tapped on with the drumline, the four routes drawn on the open logo, the pass, TD! circled, the whistle; an eraser clears the middle and the wordmark drops in on the closed logo over FOOTBALL in chalk. **The game on air** is chalked in the top corner (live text). | Zeus (`aura-2-zeus-en`): "Football... on Vizzle Vision." |
+| **Now With More God** (`hail-mary`) | 10 s | **Only during an NFL or college game.** A send-up of the old Sunday-football beer ads (the Wisconsin brewery's, with its church, its golden light and "God's Country"), played completely straight. Golden hour over farm country: a white clapboard church with a gilt football for a weathervane, and the letter board on the lawn: SUNDAY 1 PM SERMON: / WHY HAS THE O-LINE / FORSAKEN US. The bell swings the open logo. Inside: a cheese wedge, a helmet, foam fingers in the pews, the station's TV in the rose window, a haloed St. Referee in the stained glass, the spread and the over/under on the hymn board. The pastor, in a referee-striped stole, throws a Hail Mary down the aisle; Doris, in a flowered hat in the back pew, pulls it in, and everyone's up, arms high. The closed logo on a brewery label: VizelVision in red script, SUNDAY FOOTBALL on a blue ribbon, *Pure Broadcast in God's Country\**, CHANNEL 19 · FULLY KRAEUSENED\*\*, and the fine print: \*GOD HAS NOT ENDORSED THIS CHANNEL. \*\*NOBODY KNOWS WHAT THIS MEANS. A guitar and the bell outside, a pipe organ and a choir inside. | Pluto (`aura-2-pluto-en`), a beer-ad baritone, deadpan: "Some say football... is a religion." / "Doris has never dropped one." / "Now with more God." |
+| **Orange Cat Behavior: The Field Goal** (`cat-field-goal`) | 10 s | **Only during an NFL or college game.** No. 4. A football on its tee beside the cat; across the room the TV's rabbit ears make the uprights. It taps the ball on each of the open logo's first three notes (it rocks on the tee) and on the fourth swats it end over end between the ears and down behind the set: IT'S GOOD! on the screen, and the cat sits up with both paws raised, a referee's signal. Something behind the TV breaks (the mug's KRSSH). VIZELVISION FOOTBALL on the closed logo, a mrrp, a slow blink. | Draco: "The orange cat... attempts the field goal." / "It is good." |
+| **Halftime** (`halftime`) | 10 s | **Only during an NFL or college game.** The VizelVision marching band from the blimp, under the lights: on from the near sideline in a block (pink jackets, white plumes), it hits the open logo, then files up into the letters, left to right behind the drum major, and spells VizelVision across the field with its three i's undotted. On the closed logo three sousaphones high-step out and dot them, one a note, and on the last all three bow. A HALFTIME bug carries **the game on air** (live text). A roll-off, the band, a fight song made of the logo, oom-pah. | Jupiter on the stadium PA, with its echo: "Ladies and gentlemen... the Vizzle Vision marching band!" |
+| **Happy Little Channel** (`happy-little`) | 10 s | A public-television painting show: a canvas on an easel in the dark studio (sky, snowy peaks, a still lake). The brush taps in four happy little trees, one on each note of the open logo, tip to trunk; "And everybody needs a friend": a happy little TV (the emblem) on the shore, which gives a little hop. On the closed logo the brush is beaten against the easel's leg, a thwack a note, paint flying; signed in red, VizelVision. A fingerpicked nylon guitar. | The Painter, Orion (`aura-2-orion-en`), softly: "Let's put some happy little trees in here." / "And everybody needs a friend." |
+| **The VizelVision Forecast** (`forecast`) | 10 s | A nineties weather map of the Washington area (the Potomac, the Bay, the Beltway). On the open logo: a sun in sunglasses, a cloud, a grey cloud over Annapolis, and **the temperature now** by the city's star, with its place (live text). The grey cloud rains baseballs and footballs ("scattered sports"); the Doppler sweeps round and paints a storm the shape of the emblem's V, 100% CHANCE OF; on the closed logo the extended forecast, a tile a note: TODAY, TONIGHT, TOMORROW, FOREVER, each a little TV at 19°. Smooth jazz. | Asteria (`aura-2-asteria-en`): "Here's your Vizzle Vision forecast." / "Scattered sports... with a hundred percent chance of Vizzle Vision." |
+| **Popcorn** (`popcorn`) | 10 s | A microwave at night, its window glowing, the display counting 0:07 to 0:00. The first four kernels pop the open logo, the bag puffing at each; then the popping runs away (every pop, picture and sound, from `beats.popcorn_pops()`) and the bag swells to a balloon. At 0:00 the beeper plays the closed logo, BEEP BEEP BEEP BEEEP; the door bangs open, the bag bursts, and the popcorn lands across the screen spelling VIZELVISION over butter-gold letters. A lounge groove, a snare roll, the band's ta-da. | Janus (`aura-2-janus-en`), from the next room: "Popcorn's ready!" |
+| **The VizelVision Line (5 s)** (`metro-5`) | 5 s | A cutdown of The VizelVision Line (4.55 to 9.55 s of it): "Step back, doors closing," the closed logo on the chime, the train out and the name on the wall. | Mars (the source's line) |
+| **Baseball on VizelVision (5 s)** (`baseball-5`) | 5 s | **Only during an MLB game.** A cutdown of Baseball (4.6 to 9.6 s): the pitch, the crack, the home run into the board on the closed logo, fireworks; the ribbon board's live text re-timed to the cut. | none (the PA's line is in the part cut out) |
+| **Orange Cat Behavior: The Remote (5 s)** (`cat-remote-5`) | 5 s | A cutdown of The Remote in two pieces (2.0 to 4.5 s and 7.0 to 9.5 s, cut on the beat): the hop, Channel Up on each note of the open logo to 19, then the closed logo's banner, a mrrp, a slow blink. | Draco (the source's line): "A fine choice." |
+| **L'Heure Décimale** (`heure-decimale`) | 10 s | Time & Temperature for the République, in the Horloge Républicaine's navy and gold: a tricolour wipe, LIBERTÉ · ÉGALITÉ · FRATERNITÉ, a ten-hour dial turning faintly behind; on the open logo **the decimal time** (ten hours a day, a hundred minutes an hour, a hundred seconds a minute: 14:17:13 is 5:95:28) flips in and ticks by the decimal second as it airs, then **the temperature in Celsius** and its place, a cockade between them; VizelVision · CANAL XIX letter by letter on the closed logo. The music weaves the logo into La Marseillaise: the open logo's A is the anthem's first "Al-", and brass and fife carry on in D ("...lons en-fants de la Pa-tri-e") over a field drum; under the held "tri-" the bells answer with the logo; "Le jour de" runs into the closed logo, which ends the anthem's line over its own cadence; a clock ticks every decimal second (0.864 s) under it all. | DJ Low Tide (`aura-2-orpheus-en`): "Vizzle Vision decimal time, and temperature." / "In Celsius. Naturellement." |
+| **Orange Cat Behavior: The Witching Hour** (`cat-witching-hour`) | 10 s | No. 6, for Halloween, and creepy. A dark room lit by a jack-o'-lantern on the floor, rain and a full moon at the window, cobwebs in the corner. The cat stares hard at the far corner, where two pale eyes open in the dark and blink. On the open logo (on a music box, a little out of tune): the candle flares, lightning and thunder (the eyes are gone), the cat's huge shadow on the wall opens glowing eyes of its own, and the cat turns, slowly, to look at you, its eyes catching the light. On the closed logo (a haunted pipe organ, choir and a tolling bell) VIZELVISION glows onto the wall like carved pumpkin light, dripping, HAPPY HALLOWEEN, thunder on the last note. The cat gives you a slow blink. Its shadow does not; the iris closes on the shadow's eyes. Wind, a heartbeat, a theremin. | Draco: "The orange cat... is watching something." / "It is no longer watching the corner." / "Happy Halloween." |
 
 All of them use the [sonic identity](sonic-identity.md): the open logo (C E G A) for "there's
 more", the closed logo (D F# A D, a whole step up) for the answer, 120 BPM, −20 LUFS, a
@@ -39,8 +50,17 @@ silent tail. They also share the ID's Memphis look, chrome and TV emblem, except
 2006 gloss on purpose. The neighbourhood idents (Dupont Circle, Meridian Hill) share a place tag
 and the wordmark lockup (`ident/promos/neighborhood.py`); From atop The Cairo uses them too. The
 two Orange Cat Behavior idents share the documentary's caption, the banner and the TV set
-(`ident/promos/cats.py`) and draw only_on.py's cat. '76, '86, '96, '16 and The Cairo, 1894
-dress in their own periods.
+(`ident/promos/cats.py`) and draw only_on.py's cat (since 18 October it can also sit up with
+both paws raised, `sitting(..., arms=1)`). '76, '86, '96, '16 and The Cairo, 1894 dress in their own
+periods, as do the 18 October batch: the beer-ad send-up, the painting show, the nineties weather map.
+
+**The 5-second cutdowns** (`metro-5`, `baseball-5`, `cat-remote-5`) are pieces of a 10-second
+promo, not new pictures: a module names its `SOURCE`, its `PIECES` (stretches of the source's
+seconds, cut on the beat, adding up to 5) and `LINES` (the source's voice lines it keeps, at their
+new times). `ident/promos/cutdown.py` draws the source's frames re-timed (faded up if the cut
+starts mid-scene) and re-times its live text; `music.excerpt()` cuts the source's music without
+its voice the same way, a short fade at each splice, and lays the kept lines back over it. A
+rebuilt source needs its cutdown rebuilt too.
 
 The Cairo is 1615 Q Street NW: twelve storeys and 164 feet of brown brick over rock-faced
 limestone, built in 1894 by Thomas Franklin Schneider. Its height brought the city's 1894 limits
@@ -71,8 +91,9 @@ they changed the law". The fire chiefs of the day said they could not fight a fi
   timing puts it. Skip it there for another. Any promo can be queued by hand: it then airs as a
   break's item, before a due one, and counts as the break's promo. Skipping a promo on air
   counts it too.
-- **Sports idents follow the game.** A promo whose manifest names `leagues` (Baseball: `mlb`;
-  Football: `nfl`, `ncaaf`) airs only while a game of one of them is on air; otherwise it sits
+- **Sports idents follow the game.** A promo whose manifest names `leagues` (Baseball and its
+  cutdown: `mlb`; Football, Now With More God, The Field Goal and Halftime: `nfl`,
+  `ncaaf`) airs only while a game of one of them is on air; otherwise it sits
   out ("only during MLB games"). The web app's desk writes the league of the game on air into
   `promos-now.json` (`programme.league`, from the playback projection's game) whenever an
   enabled promo needs it, and master and the page both check it (`promos.readiness`). A
@@ -84,12 +105,13 @@ they changed the law". The fire chiefs of the day said they could not fight a fi
 
 ## Live text
 
-Time & Temperature, Only on VizelVision, Baseball and Football carry text that is true when they
-air (the last three, the programme on air). Master
+Time & Temperature, L'Heure Décimale (the decimal time, the temperature in Celsius and its place), The VizelVision Forecast (the temperature and its place), Only on
+VizelVision, Baseball (and its cutdown), Football and Halftime (the programme on air) carry text
+that is true when they air. Master
 draws it over the promo's frames as they decode, so the video itself is built once.
 
 - **Which text** comes from the promo's manifest (`ident/promos/<id>.json`, `overlays`):
-  a field (`time`, `ampm`, `temperature`, `place`, `programme`), a box, when it shows, its
+  a field (`time`, `ampm`, `temperature`, `place`, `programme`, and since 18 October `decimal_time`, H:MM:SS in French Revolutionary time, a decimal second being 0.864 s, and `celsius`, the same reading as `temperature`, rounded, with °C), a box, when it shows, its
   style (font, size, colour, shadow, alignment, up to two lines), and how it enters (`flip`,
   `pop`, `fade`) and leaves (`fade`).
 - **The pictures** come from `roku_stream/promo_overlay.py` (pycairo). It fits the text to its
@@ -142,14 +164,17 @@ Vision!", and the name on the TV.
   referee's whistle, a drumline, a fife and field drum, laser zaps and a neon buzz, gated eighties
   pop, a dial-up modem (DTMF, the handshake), a record scratch, a breakbeat, vocal chops and
   tropical house, a stone elephant's trumpet, a gavel, a beacon, an upright ragtime piano and a
-  silent-film projector.
+  silent-film projector; since 18 October a church bell, a pipe organ, a plucked nylon string,
+  a fan brush's dabs and strokes, a brush thwacked on an easel, a kernel popping, a microwave's
+  hum, a sonar ping, a smooth-jazz bed and a sousaphone.
 - `ident/promos/<id>.py` (pycairo): each picture. Hit points are constants at the top, and
   `music.py` follows the same times. The newer cues read them straight from the picture's
   source (`music.hits('<id>')`: its top-level constants that are plain literals, so the music
   never imports pycairo, which miniconda's Python lacks); keep a hit point the music uses a
   literal. A sports ident's `LEAGUES` goes into its manifest as `leagues`. Where there are many hits, both read them from
   `ident/promos/beats.py` (plain Python): the drum circle's every stroke, and the Metro
-  train's motion (its wheels clack where the picture's axles cross the rail joints).
+  train's motion (its wheels clack where the picture's axles cross the rail joints), and every
+  kernel Popcorn pops.
 - `ident/promos/common.py`: grain, the iris, fades, a 5×7 pixel face, and the ID's kit.
 
 Everything runs at the lowest priority. The build writes `<id>.mp4` (60 fps, H.264 CRF 21

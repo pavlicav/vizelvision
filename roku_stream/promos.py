@@ -68,7 +68,7 @@ EVERY_CHOICES = (EVERY_BREAK, 5, 10, 15, 20, 30, 45, 60, 90, 120)
 FRESH_VALUES = 300
 # Weather stations report hourly; the crawl's weather goes stale after the same.
 FRESH_TEMPERATURE = 3 * 3600
-NEEDS = {'temperature': 'temperature', 'place': 'temperature', 'programme': 'programme'}
+NEEDS = {'temperature': 'temperature', 'celsius': 'temperature', 'place': 'temperature', 'programme': 'programme'}
 _ID = re.compile(r'^[a-z0-9][a-z0-9-]{0,39}$')
 _VARIANT = re.compile(r'^([a-z0-9][a-z0-9-]{0,39})-([0-9a-f]{16})\.mp4$')
 LOG = logging.getLogger(__name__)

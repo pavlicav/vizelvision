@@ -110,3 +110,26 @@ def clacks(step=0.0005):
                         hits.append((t, joint, abs(x - previous) / step))
             previous = x
     return sorted(hits)
+
+
+# ---------------------------------------------------------------- Popcorn's kernels
+
+POPCORN_FIRST = (1.0, 1.25, 1.5, 2.0)    # the open logo: the first four
+POPCORN_FRENZY = (2.6, 6.6)              # then it runs away: sparse, a roar, sparse again
+
+
+def popcorn_pops():
+    """Every kernel's pop, in order: the first four on the logo, then the frenzy (a rate
+    that swells to about 50 a second and dies away)."""
+    import math
+    import random
+    rand = random.Random(5)
+    start, end = POPCORN_FRENZY
+    out, at = [], start
+    while True:
+        p = (at - start) / (end - start)
+        at += rand.expovariate(4 + 46 * math.sin(math.pi * p) ** 1.5)
+        if at >= end:
+            break
+        out.append(at)
+    return tuple(POPCORN_FIRST) + tuple(out)

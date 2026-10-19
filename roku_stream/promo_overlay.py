@@ -25,7 +25,8 @@ import time
 
 import cairo
 
-FIELDS = ('time', 'ampm', 'temperature', 'programme', 'place')
+FIELDS = ('time', 'ampm', 'temperature', 'programme', 'place', 'decimal_time', 'celsius')
+DECIMAL_SECOND = 0.864         # a day of ten hours, a hundred minutes each, a hundred seconds each
 ENTERS = ('none', 'fade', 'flip', 'pop')
 EXITS = ('none', 'fade')
 STYLE = {
@@ -124,10 +125,20 @@ def field_text(field, values, now=None):
         if field == 'ampm':
             return 'AM' if local.tm_hour < 12 else 'PM'
         return f'{local.tm_hour % 12 or 12}:{local.tm_min:02d}'
-    if field in ('temperature', 'place'):
+    if field == 'decimal_time':       # French Revolutionary time, to the decimal second: 5:95:30
+        local = time.localtime(now)
+        seconds = local.tm_hour * 3600 + local.tm_min * 60 + local.tm_sec + now % 1
+        hours, rest = divmod(min(99999, int(seconds / DECIMAL_SECOND)), 10000)
+        return f'{hours}:{rest // 100:02d}:{rest % 100:02d}'
+    if field in ('temperature', 'place', 'celsius'):
         reading = values.get('temperature') or {}
         if field == 'place':
             return reading.get('place') or None
+        if field == 'celsius':
+            c = reading.get('c')
+            if not isinstance(c, (int, float)) and isinstance(reading.get('f'), (int, float)):
+                c = (reading['f'] - 32) * 5 / 9
+            return f'{round(c)}°C' if isinstance(c, (int, float)) else None
         return f"{reading['f']}°" if isinstance(reading.get('f'), (int, float)) else None
     if field == 'programme':
         return (values.get('programme') or {}).get('title') or None

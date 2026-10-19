@@ -33,7 +33,12 @@ def picture(promo_id):
 
 
 NEW = ('watching', 'metro', 'dupont', 'meridian-hill', 'now-in-hd', 'cat-remote', 'cat-laser', 'seventy-six',
-       'eighty-six', 'ninety-six', 'twenty-sixteen', 'the-cairo', 'cairo-1894', 'baseball', 'football')
+       'eighty-six', 'ninety-six', 'twenty-sixteen', 'the-cairo', 'cairo-1894', 'baseball', 'football',
+       'hail-mary', 'cat-field-goal', 'halftime', 'happy-little', 'forecast', 'popcorn',
+       'metro-5', 'baseball-5', 'cat-remote-5')
+SPORTS = {'baseball': {'mlb'}, 'football': {'nfl', 'ncaaf'}, 'hail-mary': {'nfl', 'ncaaf'},
+          'cat-field-goal': {'nfl', 'ncaaf'}, 'halftime': {'nfl', 'ncaaf'}, 'baseball-5': {'mlb'}}
+CUTDOWNS = ('metro-5', 'baseball-5', 'cat-remote-5')
 
 
 def literal_constants(promo_id):
@@ -64,7 +69,8 @@ def music_hit_reads():
         promo_id = None
         for node in ast.walk(fn):
             if (isinstance(node, ast.Assign) and isinstance(node.value, ast.Call)
-                    and getattr(node.value.func, 'id', None) == 'hits'):
+                    and getattr(node.value.func, 'id', None) == 'hits'
+                    and isinstance(node.value.args[0], ast.Constant)):
                 promo_id = node.value.args[0].value
         if promo_id:
             reads[promo_id] = {n.attr for n in ast.walk(fn) if isinstance(n, ast.Attribute)
@@ -118,8 +124,9 @@ class PromoShapeTests(unittest.TestCase):
         for promo_id in built_promos():
             with self.subTest(promo_id):
                 leagues = getattr(picture(promo_id), 'LEAGUES', ())
-                if promo_id in ('baseball', 'football'):
-                    self.assertTrue(leagues and set(leagues) <= set(LEAGUES))
+                if promo_id in SPORTS:
+                    self.assertEqual(set(leagues), SPORTS[promo_id])
+                    self.assertTrue(set(leagues) <= set(LEAGUES))
                 else:
                     self.assertEqual(leagues, ())
 
@@ -129,6 +136,40 @@ class PromoShapeTests(unittest.TestCase):
         for promo_id in NEW[5:]:
             for line in script.get(promo_id, {'lines': []})['lines']:
                 self.assertNotIn('Vizel Vision', line['text'], line['id'])
+
+
+class CutdownTests(unittest.TestCase):
+    """The 5-second cutdowns (cutdown.py): pieces of a 10-second promo, cut on the beat."""
+
+    def test_pieces_fill_five_seconds_inside_the_source_on_the_beat(self):
+        for promo_id in CUTDOWNS:
+            with self.subTest(promo_id):
+                module, source = picture(promo_id), picture(picture(promo_id).SOURCE)
+                self.assertAlmostEqual(sum(b - a for a, b in module.PIECES), module.DURATION)
+                for a, b in module.PIECES:
+                    self.assertTrue(0 <= a < b <= source.DURATION)
+                for (_, b), (a, _) in zip(module.PIECES, module.PIECES[1:]):    # splices on the beat
+                    self.assertAlmostEqual(b * 2, round(b * 2))
+                    self.assertAlmostEqual(a * 2, round(a * 2))
+
+    def test_kept_lines_are_the_sources_and_fit(self):
+        script = json.loads((PROMOS_DIR / 'script.json').read_text())
+        for promo_id in CUTDOWNS:
+            module = picture(promo_id)
+            source_lines = {line['id'] for line in script.get(module.SOURCE, {'lines': []})['lines']}
+            for line_id, at in module.LINES:
+                with self.subTest(promo_id, line=line_id):
+                    self.assertIn(line_id, source_lines)
+                    self.assertLess(at, module.DURATION - 1.0)
+
+    def test_live_text_is_retimed_into_the_cut(self):
+        import cutdown
+        module = picture('baseball-5')
+        (overlay,) = module.OVERLAYS
+        self.assertEqual((overlay['from'], overlay['to']), (0.0, round(picture('baseball').FADE[0] + 0.1 - 4.6, 3)))
+        self.assertEqual(cutdown.source_time(((2.0, 4.5), (7.0, 9.5)), 2.6), 7.1)
+        self.assertEqual(cutdown.cut_time(((2.0, 4.5), (7.0, 9.5)), 5.0), 2.5)
+        self.assertIsNone(cutdown.cut_time(((2.0, 4.5),), 6.0))
 
 
 class BeatsTests(unittest.TestCase):
@@ -164,6 +205,13 @@ class BeatsTests(unittest.TestCase):
         self.assertLess(end + 2 * beats.CAR + beats.GAP, 0)
         self.assertIsNone(beats.train_x(0.0))
         self.assertIsNone(beats.train_x(beats.TRAIN_DEPART[1]))
+
+    def test_popcorn_pops_start_on_the_logo_and_stay_inside_the_frenzy(self):
+        pops = beats.popcorn_pops()
+        self.assertEqual(pops[:4], beats.POPCORN_FIRST)
+        self.assertEqual(list(pops[4:]), sorted(pops[4:]))
+        self.assertTrue(all(beats.POPCORN_FRENZY[0] <= p < beats.POPCORN_FRENZY[1] for p in pops[4:]))
+        self.assertGreater(len(pops), 60)
 
     def test_wheels_clack_only_while_the_train_moves(self):
         clacks = beats.clacks()
