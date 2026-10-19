@@ -81,6 +81,16 @@ SLOW_START_ATTEMPTS = {'sunday-ticket': 10}
 HOLD_LIMIT = timedelta(hours=12)
 HOLD_REASON = 'On air until its end time'
 RETURNING = 'Manual take ended · returning to the schedule'
+STARTUP_REASON = 'Review the queue and resume after startup'
+STOPPING = 'Service stopping'
+# Pauses that lift by themselves once the service is back after a restart: all but the
+# operator's. Until 2026-10-12 every restart left Up next paused until someone pressed Resume.
+AUTO_RESUME = (None, STARTUP_REASON, STOPPING, HOLD_REASON, RETURNING)
+# Finished entries are kept in Up next's history (and queue.json) this long.
+HISTORY_KEEP = timedelta(days=7)
+# What an entry keeps of master's answer to its take: the rest is master's whole status
+# (the crawl, My ads...), which was half of a 2 MB queue.json written every few seconds.
+RESULT_KEYS = ('state', 'on_air', 'operation', 'antenna', 'error')
 # A held take whose feed dropped (the test card this long, past master's own 8 s recovery)
 # has left master, and goes straight back on at the head of Up next. When master names its
 # input as failed, it goes back on at once (2026-10-04 12:11: 22 s of test card otherwise).
@@ -215,7 +225,7 @@ class SourceQueue(PlayoutQueue):
         self._watch_thread = None
         self._watch_stop = threading.Event()
         # The live entry the queue last put on air without a hold: {'item_id', 'input_id'}.
-        # Not persisted: adopted again from master's input on air at startup (_adopt_locked).
+        # Not persisted: adopted again from master's input on air at startup (_startup_locked).
         self._airing = None
         self._adopted = False
         # (source_id, channel_id) -> monotonic times its feed was put back on.
@@ -228,9 +238,13 @@ class SourceQueue(PlayoutQueue):
         self.final_buffer_seconds = final_buffer_seconds
         self._finals = {}
         self.paused = True
-        self.pause_reason = 'Review the queue and resume after startup'
-        # A manual take's end. Not persisted: a restart always pauses for review.
+        self.pause_reason = STARTUP_REASON
+        # A manual take's end. Saved, and held again after a restart while its input is on air.
         self.hold = None
+        # From the saved state, for the startup step (_startup_locked): {'resume', 'hold'}.
+        self._before = None
+        # Set when the service stops: whether Up next ran, so it carries on after the restart.
+        self._resume_at_start = None
         self._hold_checked = 0.0
         self.hold_lost_seconds = hold_lost_seconds
         self._hold_lost = None  # (hold id, monotonic time master was first seen on the test card)
@@ -312,12 +326,17 @@ class SourceQueue(PlayoutQueue):
         elif isinstance(raw, dict) and raw.get('version') == 2:
             values = raw['items']
             self.imported_schedules = set(raw.get('imported_schedules', []))
+            # A clean stop says whether Up next ran; after a crash the last save does.
+            resume = (raw['resume_at_start'] if 'resume_at_start' in raw
+                      else not raw.get('paused') or raw.get('pause_reason') in AUTO_RESUME)
+            self._before = {'resume': bool(resume), 'hold': raw.get('hold')}
         else:
             raise ConfigError('Unsupported source queue state')
         items = {}
         for value in values:
             item = SourceQueueItem(**value)
             item.target = item.target or {'source_id': 'youtube-tv', 'channel_id': item.channel}
+            item.result = self._slim(item.result)
             if self._library(item):
                 item.prerolled_at = item.prepared_input_id = None  # The worker restarts on fallback.
             if item.status == 'running':
@@ -347,10 +366,33 @@ class SourceQueue(PlayoutQueue):
     def _save_locked(self):
         self.state_file.parent.mkdir(parents=True, exist_ok=True)
         temporary = self.state_file.with_suffix('.tmp')
-        temporary.write_text(json.dumps({'version': 2, 'paused': self.paused,
-            'pause_reason': self.pause_reason, 'imported_schedules': sorted(self.imported_schedules),
-            'items': [asdict(item) for item in self._ordered_locked()]}, indent=2) + '\n')
+        state = {'version': 2, 'paused': self.paused, 'pause_reason': self.pause_reason, 'hold': self.hold,
+                 'imported_schedules': sorted(self.imported_schedules),
+                 'items': [asdict(item) for item in self._ordered_locked()]}
+        if self._resume_at_start is not None:
+            state['resume_at_start'] = self._resume_at_start
+        temporary.write_text(json.dumps(state, indent=2) + '\n')
         temporary.replace(self.state_file)
+
+    @staticmethod
+    def _slim(result):
+        return {k: v for k, v in result.items() if k in RESULT_KEYS} if isinstance(result, dict) else result
+
+    def _prune_locked(self, now):
+        """Forget finished entries older than HISTORY_KEEP (never the one on air). True if any went."""
+        keep = {(self._airing or {}).get('item_id'), (self.hold or {}).get('item_id')}
+        old = [i.id for i in self._items.values() if i.status not in ('queued', 'blocked', 'running')
+               and i.id not in keep and now - parse_time(i.completed_at or i.created_at) > HISTORY_KEEP]
+        for item_id in old:
+            del self._items[item_id]
+        return bool(old)
+
+    def stop(self):
+        """The service is stopping: pause, keeping whether Up next ran and any held take,
+        so both carry on after the restart (_startup_locked)."""
+        with self._condition:
+            self._resume_at_start = not self.paused or self.pause_reason in AUTO_RESUME
+        return self.pause(STOPPING, keep_hold=True)
 
     @staticmethod
     def _copy(item):
@@ -773,7 +815,8 @@ class SourceQueue(PlayoutQueue):
         for item in stale:
             self._supersede(item, now)
             item.gate_detail = f'Its game started over {GAME_EXPIRY.total_seconds() / 3600:g} hours ago'
-        if expired or stale:
+        pruned = self._prune_locked(now)
+        if expired or stale or pruned:
             self._save_locked()
         return bool(expired or stale)
 
@@ -1184,13 +1227,28 @@ class SourceQueue(PlayoutQueue):
         return f" from YouTube TV ({target.get('channel_id')})" if target.get('source_id') == 'youtube-tv' \
             else f" from {target.get('source_id')}"
 
-    def _adopt_locked(self, on_air):
-        """At startup, once master can be read: the live entry still on air from before a web
-        restart is watched for a failed feed again, as when the queue put it on air. Until
-        2026-10-12 a restart left the program on air without feed recovery."""
+    def _startup_locked(self, on_air):
+        """At startup, once master can be read. A take held before a web restart is held
+        again while its input is still on air; Up next carries on unless an operator had
+        paused it; and the live entry still on air is watched for a failed feed again, as
+        when the queue put it on air. Until 2026-10-12 a restart left Up next paused until
+        someone pressed Resume, and the program on air without feed recovery."""
         if on_air is UNKNOWN:
             return
         self._adopted = True
+        log, before = logging.getLogger(__name__), self._before or {}
+        if self.paused and self.pause_reason == STARTUP_REASON:  # Nobody has acted since startup.
+            hold = before.get('hold')
+            if (isinstance(hold, dict) and hold.get('input_id') and not hold.get('ending')
+                    and (on_air or {}).get('id') == hold['input_id']):
+                self.hold, self._hold_checked = hold, 0.0
+                self.pause_reason = HOLD_REASON
+                log.warning('Held take kept across the restart: %s', json.dumps(hold.get('target')))
+            elif before.get('resume'):
+                self.paused, self.pause_reason = False, None
+                log.warning('Up next carries on after the restart')
+            self._save_locked()
+            self._condition.notify_all()
         if self._airing is not None or self.hold is not None or not (on_air or {}).get('id'):
             return
         item = next((i for i in self._items.values() if i.status == 'succeeded'
@@ -1633,7 +1691,7 @@ class SourceQueue(PlayoutQueue):
             on_air = self._read_on_air()
             if not self._adopted:
                 with self._condition:
-                    self._adopt_locked(on_air)
+                    self._startup_locked(on_air)
             if self._hold_step(on_air) or self._recover_step(on_air):
                 continue
             self._warm_step(on_air)
@@ -1808,7 +1866,7 @@ class SourceQueue(PlayoutQueue):
             if game:
                 end = {'game': dict(game)}
             with self._condition:
-                item.result, item.error = result, error
+                item.result, item.error = self._slim(result), error
                 item.completed_at = utc_now().isoformat()
                 if error:
                     self._block_locked(item, 'failed', error['message'])

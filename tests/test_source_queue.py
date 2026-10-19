@@ -274,7 +274,7 @@ class SourceQueueTests(unittest.TestCase):
             with self.queue.take_guard(item.id):
                 self.fail('Must not submit a cut')
 
-    def test_restart_blocks_ambiguous_running_and_stays_paused(self):
+    def test_restart_blocks_ambiguous_running_and_starts_paused(self):
         self.queue.close()
         item = self.add()
         with self.queue._condition:
@@ -309,6 +309,101 @@ class SourceQueueTests(unittest.TestCase):
         self.assertEqual(self.queue.list()[0].schedule_id, job.id)
         self.assertEqual(schedules.cancel(job.id).status, 'cancelled')
         self.assertEqual(self.queue.list()[0].status, 'skipped')
+
+
+class RestartTests(unittest.TestCase):
+    """Up next across a web restart. Until 2026-10-12 every restart left it paused until
+    someone pressed Resume, and a game held until its final lost its hold."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.path = Path(self.tmp.name) / 'queue.json'
+        self.on_air = None
+
+    def open(self):
+        queue = SourceQueue(self.path, lambda item: {'on_air': item.target}, lambda *_: {'finished': False},
+                            poll_seconds=.01, on_air=lambda: self.on_air)
+        self.addCleanup(queue.close)
+        return queue
+
+    def wait(self, check):
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            if check():
+                return
+            time.sleep(.005)
+        self.fail('Timed out')
+
+    def test_a_running_queue_carries_on_after_a_clean_restart(self):
+        queue = self.open()
+        queue.resume()
+        queue.stop()
+        self.assertTrue(queue.status()['paused'], 'paused while stopping')
+        queue.close()
+        queue = self.open()
+        self.wait(lambda: not queue.status()['paused'])
+
+    def test_a_crash_carries_on_from_the_last_save(self):
+        queue = self.open()
+        queue.resume()
+        queue.close()
+        queue = self.open()
+        self.wait(lambda: not queue.status()['paused'])
+
+    def test_an_operators_pause_survives_the_restart(self):
+        queue = self.open()
+        queue.resume()
+        queue.pause()
+        queue.stop()
+        queue.close()
+        queue = self.open()
+        time.sleep(.1)
+        self.assertTrue(queue.status()['paused'])
+
+    def test_a_held_take_is_held_again_while_its_input_is_on_air(self):
+        queue = self.open()
+        until = (utc_now() + timedelta(hours=1)).isoformat()
+        queue.hold_for({'id': 'in-1', **TARGET}, {'until': until})
+        queue.stop()
+        queue.close()
+        self.on_air = {'id': 'in-1', **TARGET}
+        queue = self.open()
+        self.wait(lambda: queue.status()['hold'])
+        status = queue.status()
+        self.assertEqual((status['paused'], status['pause_reason'], status['hold']['until']),
+                         (True, 'On air until its end time', until))
+
+    def test_a_held_take_gone_from_air_hands_back_to_up_next(self):
+        queue = self.open()
+        queue.hold_for({'id': 'in-1', **TARGET}, {'until': (utc_now() + timedelta(hours=1)).isoformat()})
+        queue.stop()
+        queue.close()
+        self.on_air = {'id': 'something-else', **OTHER}
+        queue = self.open()
+        self.wait(lambda: not queue.status()['paused'])
+        self.assertIsNone(queue.status()['hold'])
+
+    def test_entries_keep_only_masters_answer_about_their_take(self):
+        queue = self.open()
+        queue.executor = lambda item: {'state': 'live', 'on_air': {'id': 'x', **TARGET},
+                                       'crawl': {'items': ['...'] * 50}, 'my_ads': {'next': []}}
+        item = queue.add_target(TARGET, 'now')
+        queue.resume()
+        self.wait(lambda: queue.get(item.id).status == 'succeeded')
+        self.assertEqual(set(queue.get(item.id).result), {'state', 'on_air'})
+
+    def test_history_older_than_a_week_is_forgotten(self):
+        queue = self.open()
+        old, recent = queue.add_target(TARGET, 'now'), queue.add_target(OTHER, 'now')
+        with queue._condition:
+            for item, days in ((old, 8), (recent, 6)):
+                queue._items[item.id].status = 'skipped'
+                queue._items[item.id].completed_at = (utc_now() - timedelta(days=days)).isoformat()
+        queue.status()
+        self.assertIsNone(queue.get(old.id))
+        self.assertIsNotNone(queue.get(recent.id))
+        self.assertEqual([i['id'] for i in json.loads(self.path.read_text())['items']], [recent.id])
 
 
 class ProgramTests(unittest.TestCase):

@@ -2,12 +2,21 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import os
 import sys
 
 from .api import build_roku, serve
 from .config import load_config
 from .errors import RokuStreamError
+
+
+def _log_events() -> None:
+    """The services' own INFO lines (the station ID's end card, early preparations, the join
+    bumper...) were dropped: with no logging set up only warnings reached the journal.
+    Other libraries stay at warnings; lines keep their bare format."""
+    logging.basicConfig(format="%(message)s")
+    logging.getLogger("roku_stream").setLevel(logging.INFO)
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -46,6 +55,7 @@ def main() -> None:
         config = load_config(args.config)
         if args.command == "master-worker":
             from .master_worker import serve_worker
+            _log_events()
             serve_worker(config)
             return
         if args.command == "master-status":
@@ -53,6 +63,7 @@ def main() -> None:
             print(json.dumps(MasterClient(config.master).request(), indent=2, sort_keys=True))
             return
         if args.command == "serve":
+            _log_events()
             serve(config)
             return
         if args.command == "roku-status":

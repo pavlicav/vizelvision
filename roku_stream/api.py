@@ -56,6 +56,7 @@ from . import crawl_feeds
 from .production_monitor import ProductionMonitor
 from . import playback
 from .continuity import Continuity, Voice
+from .station_watch import StationWatch
 from .sports_join import SportsJoin
 from .ident import ident_file
 from .programming import Programming
@@ -148,6 +149,7 @@ def handler_factory(
     continuity: Continuity | None = None,
     crawl_desk: CrawlDesk | None = None,
     promo_desk: PromoDesk | None = None,
+    station_watch: StationWatch | None = None,
 ) -> type[BaseHTTPRequestHandler]:
     master = coordinator or MasterClient(config.master)
     master_preview = MasterPreview(config.master)
@@ -451,6 +453,12 @@ def handler_factory(
 
     class ApiHandler(BaseHTTPRequestHandler):
         server_version = "VizelVisionRokuStream/0.1"
+
+        def log_request(self, code="-", size="-") -> None:
+            # Page loads and polls (about 3 a second) were 99.9% of the web log; actions and errors stay.
+            if self.command in ("GET", "HEAD") and isinstance(code, int) and code < 400:
+                return
+            super().log_request(code, size)
 
         def _roku_moved(self) -> None:
             self._json(HTTPStatus.GONE, {"error": {
@@ -884,6 +892,10 @@ def handler_factory(
                     query = parse_qs(parsed.query)
                     requested_date = query.get("date", [None])[0]
                     self._json(HTTPStatus.OK, baseball.games(requested_date))
+                elif path == "/v1/alerts":
+                    # The station watch: what is stuck now, and whether alerts are pushed.
+                    self._json(HTTPStatus.OK, station_watch.view() if station_watch
+                               else {"problems": [], "push": False})
                 elif path == "/v1/queue":
                     if playout is None:
                         raise ConfigError("Playout queue is not configured")
@@ -1356,8 +1368,11 @@ def serve(config: AppConfig) -> None:
         # ...and is prepared on the Roku while the take finishes (a warm-up).
         playout.schedule_now = programming.on_now
         coordinator.programs = QueuePrograms(sources)
+        # Someone is told when the station is stuck (station_watch.py).
+        station_watch = StationWatch(playout.status, coordinator.on_air, programming.on_now,
+                                     config.state_file.with_name('alerts.json'))
     else:
-        programming = None
+        programming = station_watch = None
         # Without master control, a legacy job or queue entry only puts the channel on the Roku.
         def play(channel):
             if roku is None:
@@ -1424,7 +1439,7 @@ def serve(config: AppConfig) -> None:
     server = ThreadingHTTPServer(
         (config.server.host, config.server.port),
         handler_factory(config, roku, scheduler, baseball, playout, sources, coordinator, programming, sports,
-                        production_monitor, projector, continuity, crawl_desk, promo_desk),
+                        production_monitor, projector, continuity, crawl_desk, promo_desk, station_watch),
     )
     if roku is not None:
         roku.hold.start()
@@ -1445,6 +1460,8 @@ def serve(config: AppConfig) -> None:
         crawl_desk.start()
     if promo_desk:
         promo_desk.start()
+    if station_watch:
+        station_watch.start()
     print(
         f"Roku Stream listening on http://{config.server.host}:{config.server.port}",
         flush=True,
@@ -1456,7 +1473,9 @@ def serve(config: AppConfig) -> None:
     finally:
         production_monitor.close()
         if isinstance(playout, SourceQueue):
-            playout.pause('Service stopping')
+            playout.stop()  # Paused while stopping; Up next carries on after the restart.
+        if station_watch:
+            station_watch.stop()
         if programming:
             programming.close()
         if continuity:

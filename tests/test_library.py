@@ -261,6 +261,7 @@ class LibraryQueueTests(unittest.TestCase):
 
     def test_live_channel_on_air_holds_the_recording_until_master_is_free(self):
         self.master.state.update(state='live', on_air={'id': 'tv', 'source_id': 'tv-thing-digital', 'channel_id': 'wrc'})
+        time.sleep(.05)  # The queue's pass already under way read the test card: let it look again.
         item = self.add('a.mp4')
         self.queue.resume()
         self.wait(lambda: 'what is on air ends' in (self.queue.get(item.id).gate_detail or ''))

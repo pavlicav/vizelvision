@@ -109,7 +109,7 @@ Since September 30 only API clients take directly; the page's **Change end time*
 
 The default is the game when one is matched, then the listed program, then the half hour. Until the end, the queue stays paused, and Up next shows *Manual take on air until …*. At the end, the queue resumes. If Up next already has an entry due, or one waiting on the same game, that entry follows. Otherwise the current schedule block goes to the head of Up next, or OFF AIR does when the schedule is off. **Return to schedule now** ends the take early, and **Change end time** sets a new end for whatever is on air.
 
-Preparing or cancelling another source keeps the end. Return to fallback, the operator's **Pause queue**, and manual Roku navigation away from an on-air Roku feed clear it, and the queue then stays paused as before. A take without an end (API clients that omit `until`) also pauses the queue indefinitely. The end is not saved across a web restart: startup always pauses for review.
+Preparing or cancelling another source keeps the end. Return to fallback, the operator's **Pause queue**, and manual Roku navigation away from an on-air Roku feed clear it, and the queue then stays paused as before. A take without an end (API clients that omit `until`) also pauses the queue indefinitely. Since October 12 the end is saved, and it holds again after a web restart while its input is still on air (see *Persistence*).
 
 ## Priority: a show that outranks what is on air cuts in (October 4)
 
@@ -384,7 +384,15 @@ game on the antenna, and taken without navigating again.
 
 With master enabled, `queue.json` uses a version-2 object containing items and pause state. The original array is backed up as `queue.pre-master.json` on first migration. Legacy entries become YouTube TV targets without losing order, conditions or history. Existing `jobs.json` schedules are imported once, in time order after the existing queue. Their original file is preserved; stable import IDs prevent duplicate execution. `/v1/schedules` and `/v1/jobs` now adapt to the same queue; there is no independent scheduler thread in master mode.
 
-Every service start pauses automation for review. An entry saved as running becomes blocked with an interrupted/unknown-outcome message. It is never replayed automatically. Check the actual master and choose Retry or Skip, then Resume. This is operator reconciliation; automatic restart reconciliation has not been implemented.
+**After a restart Up next carries on by itself** (since October 12). Before, every start left it paused until someone pressed Resume. Nobody does that on an unattended station, and the web service also restarts itself after a crash. Startup still begins paused, then acts once master can be read (`_startup_locked`):
+
+- A held take (a game until its final, a show until its end) is held again if its input is still on air. The hold is saved in `queue.json`.
+- Otherwise Up next resumes, unless an operator had paused it. On a clean stop the service saves whether Up next was running (`resume_at_start`, written by `SourceQueue.stop()`). After a crash, the last saved pause state decides.
+- The live entry still on air is watched for a failed feed again.
+
+An entry saved as running still becomes blocked with an interrupted/unknown-outcome message, and it is never replayed automatically. Like any blocked entry, it is passed over once the next timed entry is due.
+
+`queue.json` keeps finished entries for 7 days (`HISTORY_KEEP`). For each take it keeps only master's on-air part of the answer (`RESULT_KEYS`). On October 12 the file was 2.1 MB with 320 entries back to September 13, half of it whole copies of master's status, and it was rewritten every couple of seconds.
 
 With master disabled, the existing Roku-only queue and scheduler retain their original behavior. Do not point that mode at migrated version-2 state; use its separate original configuration/state directory.
 
