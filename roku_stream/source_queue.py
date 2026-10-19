@@ -12,7 +12,8 @@ already under way when it releases, gives way to those.
 
 A scheduled show that outranks what holds master (programming.PRIORITIES) cuts in at
 its start instead: a held take ends then, and a game's return waiting for its final is
-skipped. A take held by hand, and an entry with no scheduled show, are normal.
+skipped. An entry with no scheduled show is normal; a take held by hand ranks above
+normal and favorites' games (programming.FAVORITE_SPAN), so only a high show cuts it.
 """
 from dataclasses import asdict, dataclass, replace
 from contextlib import contextmanager
@@ -144,8 +145,10 @@ UPGRADE_ATTEMPTS = 3
 UPGRADE_LIMIT = RECOVERY_LIMIT - 1
 # What follows a held take is the schedule's block, which joins Up next only when the take ends.
 SCHEDULE = object()
-# The priority rank of a held take, and of an entry without a scheduled show (programming.NORMAL).
+# The priority rank of an entry without a scheduled show (programming.NORMAL), and of a
+# take held by hand: above any favorite's game, below high.
 NORMAL = 1
+HELD = NORMAL + .5
 
 
 class SourceQueue(PlayoutQueue):
@@ -455,7 +458,7 @@ class SourceQueue(PlayoutQueue):
         drops its priority. Only shows starting after the take: Play now stays on air."""
         cut = hold.get('cut')
         own = cut['until'] if cut else hold.get('until')
-        cutter = self._cutter_locked(self._lanes_locked()[0], parse_time(hold['started_at']), NORMAL)
+        cutter = self._cutter_locked(self._lanes_locked()[0], parse_time(hold['started_at']), HELD)
         if cutter is not None and (own is None or parse_time(cutter.run_at) < parse_time(own)):
             new = {'item_id': cutter.id, 'title': cutter.title, 'target': dict(cutter.target or {}), 'until': own}
             if cut == new and hold.get('until') == cutter.run_at:
@@ -482,7 +485,7 @@ class SourceQueue(PlayoutQueue):
                     or not self._due(item)):
                 continue
             ahead, rank = timed[:index], self._rank(item)
-            if self.hold is not None and rank <= NORMAL:
+            if self.hold is not None and rank <= HELD:
                 continue
             if not all(self._rank(i) < rank and (i.release_type == 'after_game'
                                                   or (i.run_at and parse_time(i.run_at) <= now)) for i in ahead):

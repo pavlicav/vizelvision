@@ -4,7 +4,8 @@ import unittest
 from unittest.mock import Mock
 from urllib.error import HTTPError
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 from roku_stream.errors import BaseballScheduleError, ConfigError
 from roku_stream.sports import EspnScoreboard, SportsCatalog, closing, estimated_end
@@ -147,11 +148,13 @@ class NewLeagueTests(unittest.TestCase):
 
     def test_upcoming_reads_ten_espn_days_and_suggests_configured_channels(self):
         urls = []
+        # The window starts today (Eastern): a game on its third day.
+        third = datetime.now(ZoneInfo('America/New_York')).date() + timedelta(days=2)
 
         def opener(request, timeout):
             urls.append(request.full_url)
             day = request.full_url.rsplit('=', 1)[1]
-            events = [espn_event(int(day), 'Boston Bruins', 'Washington Capitals')] if day.endswith('03') else []
+            events = [espn_event(int(day), 'Boston Bruins', 'Washington Capitals')] if day == f'{third:%Y%m%d}' else []
             return io.BytesIO(json.dumps({'events': events}).encode())
         config = Mock()
         channel = Mock()
@@ -161,8 +164,8 @@ class NewLeagueTests(unittest.TestCase):
         self.assertEqual(len(urls), 10)
         self.assertTrue(all('/hockey/nhl/scoreboard?dates=' in url for url in urls))
         game, = result['games']
-        self.assertEqual((game['league'], game['game_date'][-2:], game['channels'], game['home']['id']),
-                         ('nhl', '03', ['TNT'], '23'))
+        self.assertEqual((game['league'], game['game_date'], game['channels'], game['home']['id']),
+                         ('nhl', third.isoformat(), ['TNT'], '23'))
         self.assertEqual(game['suggested_target'], {'source_id': 'youtube-tv', 'channel_id': 'TNT'})
         with self.assertRaises(ConfigError):
             SportsCatalog(config, None).upcoming('xfl')
@@ -180,7 +183,7 @@ class NewLeagueTests(unittest.TestCase):
         teams = SportsCatalog(None, None, scoreboard=board).teams('nwsl')
         self.assertEqual([t['abbreviation'] for t in teams], ['BOS', 'WSH'])
         board.teams('nwsl')
-        self.assertEqual(calls, ['https://site.api.espn.com/apis/site/v2/sports/soccer/usa.nwsl/teams'])
+        self.assertEqual(calls, ['https://site.api.espn.com/apis/site/v2/sports/soccer/usa.nwsl/teams?limit=1000'])
 
     def test_estimated_end_counts_periods_and_breaks(self):
         now = datetime(2026, 10, 2, 0, 0, tzinfo=timezone.utc)

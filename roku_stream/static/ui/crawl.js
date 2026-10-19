@@ -7,14 +7,18 @@
   const q = name => document.querySelector(`[data-id="${name}"]`);
   const MODE_NAMES = {always: 'Always on', popups: 'Pop-ups', quiet: 'Important only'};
   const CONTEXT_NAMES = {program: 'Programs', game: 'Live games', off_air: 'Off-air card', ident: 'Station ID'};
-  const LEAGUES = {mlb: 'MLB', nfl: 'NFL', nba: 'NBA', nhl: 'NHL', wnba: 'WNBA', nwsl: 'NWSL'};
+  const LEAGUES = {mlb: 'MLB', nfl: 'NFL', ncaaf: 'College Football', nba: 'NBA', nhl: 'NHL', wnba: 'WNBA', nwsl: 'NWSL'};
+  const PLAYOFFS = {mlb: 'All playoffs, through the World Series', ncaaf: 'All bowls and playoffs'};
+  // A favorite's game, by what the planner did with it (favorites.py).
+  const FAV_STATUS = {scheduled: ['pvw', 'On the Schedule'], by_hand: ['pvw', 'Scheduled by hand'], off: ['', 'Would go on air'],
+    removed: ['', 'Removed from the Schedule'], tbd: ['', 'Time to be announced'], no_channel: ['warn', 'No channel'], error: ['warn', 'Could not schedule']};
   const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
   const DURATIONS = [[30, '30 minutes'], [60, '1 hour'], [120, '2 hours'], [240, '4 hours'], [720, '12 hours'], [0, 'Until cleared']];
   const STATUS = {on_air: ['pgm', 'On air'], looping: ['pgm', 'Looping'], next: ['touch', 'Next'], held: ['', 'Held'], muted: ['', 'Muted'], duplicate: ['', 'Duplicate']};
   const view = {scope: VV.store.get('crawlScope', 'alert'), status: '', source: '', query: '', tab: VV.store.get('crawlTab', 'manual')};
   const expanded = new Set();
   const dirty = {rules: false, segments: false, messages: false, transit: false, important: false, override: false};
-  let data = null, reg = null, busy = false, busRoutes = null, routes = [], messages = [];
+  let data = null, reg = null, busy = false, busRoutes = null, routes = [], messages = [], favs = null;
   const teams = {};
 
   /* Fetching and acting ------------------------------------------------------------------------------------- */
@@ -292,7 +296,7 @@
       if (live.next_planned) notes.push('next ' + fmt.rel(live.next_planned));
       if (data.rotation?.new?.[seg]) notes.push(data.rotation.new[seg] + ' new, waiting');
       if (seg === 'cairo') notes.push('off-air card only, while Cairo Radio is the off-air audio');
-      if (seg === 'scores' && !data.settings.teams.length) notes.push('choose teams to follow');
+      if (seg === 'scores' && favs && !favs.favorites.length) notes.push('choose favorites');
       if (seg === 'messages' && !data.settings.messages.length) notes.push('add station messages');
       const card = h('article', {class: 'seg-card' + (options.enabled ? '' : ' off'), data: {segment: seg}},
         h('div', {class: 'row between'}, check(h('strong', meta.name), n => {
@@ -372,25 +376,69 @@
   q('save-zip').onclick = () => { const zip = q('zip').value.trim(); if (!/^\d{5}$/.test(zip)) { toast('Type a five-digit ZIP code.', {error: true}); return; } act(() => api('v1/crawl/feeds', {weather: {zip}}), 'Weather location saved; the forecast updates within a few seconds.'); };
   q('clear-zip').onclick = () => act(() => api('v1/crawl/feeds', {weather: {zip: ''}}), 'Weather is back to the configured station.');
 
-  /* Teams ------------------------------------------------------------------------------------------------------------ */
+  /* Favorites ------------------------------------------------------------------------------------------------------------ */
+  // Teams and whole playoffs, best first (GET/POST /v1/favorites): the Scores segment's games,
+  // and with on air on, games the Schedule gets.
   q('league').append(...Object.entries(LEAGUES).map(([v, n]) => new Option(n, v)));
   async function loadTeams(league) { if (!teams[league]) teams[league] = (await api('v1/sports/teams?league=' + league)).teams; return teams[league]; }
-  function teamName(tid) { const [league, team] = tid.split(':'); const found = (teams[league] || []).find(t => t.id === team); return LEAGUES[league] + ' · ' + (found ? found.name : '#' + team); }
-  async function renderTeams() {
-    await Promise.all([...new Set(data.settings.teams.map(t => t.split(':')[0]))].map(l => loadTeams(l).catch(() => [])));
-    VV.fill(q('followed'), data.settings.teams.length ? data.settings.teams.map(tid => { const b = h('button', {type: 'button', 'aria-label': 'Stop following ' + teamName(tid)}, teamName(tid) + ' ✕'); b.onclick = () => saveTeams(data.settings.teams.filter(t => t !== tid)); return b; }) : h('span', {class: 'hint'}, 'No teams yet.'));
-    if (view.tab !== 'teams') return;
-    const league = q('league').value; let list;
-    try { list = await loadTeams(league); } catch (e) { q('teams').replaceChildren(h('p', {class: 'hint'}, 'Could not load teams: ' + e.message)); return; }
-    const filter = q('team-filter').value.trim().toLowerCase();
-    VV.fill(q('teams'), list.filter(t => !filter || (t.name + ' ' + t.abbreviation).toLowerCase().includes(filter)).map(team => {
-      const tid = league + ':' + team.id, check = h('input', {type: 'checkbox', checked: data.settings.teams.includes(tid)});
-      check.onchange = () => saveTeams(check.checked ? [...data.settings.teams, tid] : data.settings.teams.filter(t => t !== tid));
-      return h('label', {class: 'check'}, check, h('span', team.name));
-    }));
+  function favName(fid) {
+    const [league, team] = fid.split(':');
+    if (team === 'playoffs') return (LEAGUES[league] || league) + ' · ' + (PLAYOFFS[league] || 'All playoffs');
+    const found = (teams[league] || []).find(t => t.id === team);
+    return (LEAGUES[league] || league) + ' · ' + (found ? found.name : '#' + team);
   }
-  const saveTeams = next => act(() => api('v1/crawl', {teams: [...new Set(next)]}), 'Teams to follow saved.');
-  q('league').onchange = renderTeams; q('team-filter').oninput = renderTeams;
+  async function loadFavorites() { favs = await api('v1/favorites'); renderFavorites(); }
+  async function saveFavorites(changes, message) {
+    try { favs = await api('v1/favorites', changes); toast(message, {ok: true}); }
+    catch (e) { toast(e.message, {error: true}); }
+    renderFavorites();
+    // The planner reschedules within a moment.
+    setTimeout(() => loadFavorites().catch(() => {}), 1500);
+  }
+  function favGame(g) {
+    const [cls, text] = FAV_STATUS[g.status] || ['', g.status];
+    const start = g.start || g.start_time, where = g.target ? VV.label(g.target) : null;
+    const why = g.status === 'no_channel' ? (g.networks.length ? 'On ' + g.networks.join(', ') + ': not a channel VizelVision gets' : 'No TV listing')
+      : g.status === 'removed' ? 'Taken off the Schedule; schedule it by hand to air it' : g.status === 'error' ? g.error : null;
+    return h('li', h('span', {class: 't'}, g.tbd ? 'TBD' : fmt.when(start)),
+      h('div', h('strong', g.title), h('small', '★ ' + g.rank + ' · ' + favName(g.favorite) + (where ? ' · ' + where : '')), why ? h('small', why) : null),
+      h('span', {class: 'chip ' + cls}, text));
+  }
+  async function renderFavorites() {
+    if (!favs) return;
+    const list = favs.favorites;
+    await Promise.all([...new Set(list.map(t => t.split(':')[0]))].map(l => loadTeams(l).catch(() => [])));
+    q('fav-air').checked = favs.air;
+    const save = (next, message) => saveFavorites({favorites: next}, message);
+    const move = (index, by) => { const next = [...list]; [next[index], next[index + by]] = [next[index + by], next[index]]; save(next, favName(list[index]) + ' is now number ' + (index + by + 1) + '.'); };
+    VV.fill(q('followed'), list.length ? list.map((fid, index) => {
+      const up = h('button', {type: 'button', class: 'xs quiet', 'aria-label': 'Move ' + favName(fid) + ' up', disabled: index === 0}, '▲'); up.onclick = () => move(index, -1);
+      const down = h('button', {type: 'button', class: 'xs quiet', 'aria-label': 'Move ' + favName(fid) + ' down', disabled: index === list.length - 1}, '▼'); down.onclick = () => move(index, 1);
+      const remove = h('button', {type: 'button', class: 'xs quiet', 'aria-label': 'Remove ' + favName(fid)}, '✕'); remove.onclick = () => save(list.filter(t => t !== fid), favName(fid) + ' is no longer a favorite.');
+      return h('li', h('span', {class: 'n'}, String(index + 1)), h('span', favName(fid)), h('span', {class: 'acts'}, up, down, remove));
+    }) : h('li', {class: 'hint'}, 'No favorites yet. Add them below.'));
+    q('fav-games-title').textContent = 'Their games, next ' + (favs.days || 7) + ' days';
+    const games = favs.games || [], errors = Object.entries(favs.errors || {});
+    VV.fill(q('fav-games'), games.length ? games.map(favGame) : h('li', {class: 'hint'}, list.length ? (favs.checked_at ? 'No games for your favorites in the next ' + (favs.days || 7) + ' days.' : 'Looking for their games…') : 'Add favorites to see their games.'));
+    q('fav-checked').textContent = [favs.checked_at ? 'Checked ' + fmt.when(favs.checked_at) + ', every ' + (favs.check_minutes || 10) + ' minutes.' : '',
+      ...errors.map(([league, e]) => (LEAGUES[league] || league) + ': ' + e)].filter(Boolean).join(' ');
+    if (view.tab !== 'teams') return;
+    const league = q('league').value; let teamList;
+    try { teamList = await loadTeams(league); } catch (e) { q('teams').replaceChildren(h('p', {class: 'hint'}, 'Could not load teams: ' + e.message)); return; }
+    if (q('league').value !== league) return;  // Another league was chosen meanwhile: its render fills it.
+    const filter = q('team-filter').value.trim().toLowerCase();
+    const option = (fid, text, cls) => {
+      const check = h('input', {type: 'checkbox', checked: list.includes(fid)});
+      check.onchange = () => save(check.checked ? [...list, fid] : list.filter(t => t !== fid), check.checked ? favName(fid) + ' is favorite number ' + (list.length + 1) + '.' : favName(fid) + ' is no longer a favorite.');
+      return h('label', {class: 'check' + (cls ? ' ' + cls : '')}, check, h('span', text));
+    };
+    const playoffs = league + ':playoffs', playoffName = PLAYOFFS[league] || 'All playoffs';
+    VV.fill(q('teams'), [
+      ...(!filter || playoffName.toLowerCase().includes(filter) || 'playoffs postseason'.includes(filter) ? [option(playoffs, playoffName, 'playoffs')] : []),
+      ...teamList.filter(t => !filter || (t.name + ' ' + t.abbreviation).toLowerCase().includes(filter)).map(team => option(league + ':' + team.id, team.name))]);
+  }
+  q('fav-air').onchange = () => saveFavorites({air: q('fav-air').checked}, q('fav-air').checked ? 'Favorites go on air whenever they are on.' : 'Favorites stay off the air; their games scheduled for later are taken off the Schedule.');
+  q('league').onchange = renderFavorites; q('team-filter').oninput = renderFavorites;
 
   /* Station messages ------------------------------------------------------------------------------------------------ */
   function renderMessages() {
@@ -441,16 +489,16 @@
     view.tab = name; VV.store.set('crawlTab', name);
     document.querySelectorAll('#tabs [data-tab]').forEach(b => b.setAttribute('aria-selected', String(b.dataset.tab === name)));
     document.querySelectorAll('[data-panel]').forEach(p => { p.hidden = p.dataset.panel !== name; });
-    if (name === 'teams' && data) renderTeams();
+    if (name === 'teams') renderFavorites();
   }
   document.querySelectorAll('#tabs [data-tab]').forEach(b => { b.onclick = () => tab(b.dataset.tab); });
   tab(location.hash.slice(1) && document.querySelector(`[data-tab="${location.hash.slice(1)}"]`) ? location.hash.slice(1) : view.tab);
   function render() {
     if (!data) return;
     renderTop(); renderRegister(); renderTimeline(); renderComing(); renderManual(); renderRules(); renderSegments(); renderFeeds(); renderMessages(); renderHistory();
-    if (view.tab === 'teams') renderTeams(); else if (data.settings.teams.length && !q('followed').children.length) renderTeams();
   }
   VV.watch('v1/crawl', 5000, (result, w) => { if (w.error) return; if (busy) return; data = result; render(); });
+  VV.watch('v1/favorites', 15000, (result, w) => { if (w.error) return; favs = result; renderFavorites(); });
   VV.watch('v1/crawl/alerts', 5000, (result, w) => { if (w.error) { reg = {ready: false, error: w.error.message, items: [], plan: {}}; } else reg = result; if (data && !busy) { renderTop(); renderRegister(); renderTimeline(); renderComing(); } });
   window.addEventListener('beforeunload', e => { if (Object.values(dirty).some(Boolean)) e.preventDefault(); });
   VV.commands.add(

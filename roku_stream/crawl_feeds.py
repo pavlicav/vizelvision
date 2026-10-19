@@ -27,6 +27,7 @@ from urllib.request import Request, urlopen
 from zoneinfo import ZoneInfo
 
 from .baseball import scoreline
+from .favorites import matches
 from .radio_info import RadioInfo
 
 EASTERN = ZoneInfo('America/New_York')
@@ -463,7 +464,9 @@ def score_item(league, game, now):
 
 
 class ScoresFeed(Feed):
-    """Today's games (and last night's finals before 10 AM) for the followed teams, from ESPN."""
+    """Today's games (and last night's finals before 10 AM) for the favorites (favorites.py),
+    from ESPN: their teams' and, for "league:playoffs", every postseason game. Live games
+    first, each part by the best favorite's place on the list."""
     INTERVAL = 60
     STALE = 600
     LIMIT = 12
@@ -473,22 +476,20 @@ class ScoresFeed(Feed):
         self.scoreboard, self.teams = scoreboard, teams
 
     def fetch(self):
-        followed = {}
-        for team in self.teams():
-            league, _, ident = team.partition(':')
-            followed.setdefault(league, set()).add(ident)
+        order = list(self.teams())
         now = datetime.fromtimestamp(self.clock(), timezone.utc)
         today = now.astimezone(EASTERN)
         days = [today.date()] + ([today.date() - timedelta(days=1)] if today.hour < 10 else [])
-        live, rest = [], []
-        for league, ids in followed.items():
+        found = []
+        for league in dict.fromkeys(f.partition(':')[0] for f in order):
             for day in days:
                 for game in self.scoreboard.games(league, day.isoformat()):
-                    sides = {str((game.get(side) or {}).get('id')) for side in ('away', 'home')}
-                    if sides & ids:
-                        item = score_item(league, game, now)
-                        (live if str(game.get('state')).casefold() in ('in', 'live') else rest).append(item)
-        return live + rest
+                    sides = [str((game.get(side) or {}).get('id')) for side in ('away', 'home')]
+                    places = [order.index(f) for f in matches(league, game, sides) if f in order]
+                    if places:
+                        live = str(game.get('state')).casefold() in ('in', 'live')
+                        found.append((not live, min(places), score_item(league, game, now)))
+        return [item for *_, item in sorted(found, key=lambda f: f[:2])]
 
 
 # --------------------------------------------------------------------- station

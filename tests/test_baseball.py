@@ -118,13 +118,17 @@ class BaseballTests(unittest.TestCase):
             path = Path(directory) / "config.json"
             path.write_text(json.dumps({"channels": [
                 {"name": "NBC", "guide_index": 0}, {"name": "FOX", "guide_index": 1},
-                {"name": "FS1", "guide_index": 2}, {"name": "NBC Sports Network", "aliases": ["NBCSN"], "guide_index": 3}]}))
+                {"name": "FS1", "guide_index": 2}, {"name": "NBC Sports Network", "aliases": ["NBCSN"], "guide_index": 3},
+                {"name": "ESPN", "guide_index": 4}]}))
             catalog = BaseballCatalog(load_config(path), client=None)
 
             def channels(name, call_sign, national=True):
                 return catalog._yttv_channels({"name": name, "call_sign": call_sign, "is_national": national})
             self.assertEqual(channels("NBC/Peacock", "NBC"), ["NBC"])
             self.assertEqual(channels("Peacock/NBCSN", "Peacock"), ["NBC Sports Network"])
+            # Peacock alone is an exclusive, on NBC Sports Network.
+            self.assertEqual(channels("Peacock", "Peacock"), ["NBC Sports Network"])
+            self.assertEqual(channels("ESPN+", "ESPN+"), [])
             self.assertEqual(channels("FOX / FS1", "FOX/FS1"), ["FOX", "FS1"])
             self.assertEqual(channels("Fox Deportes / FOX ONE", "FOX Dep."), [])
             self.assertEqual(channels("NBC/Peacock", "NBC", national=False), [])

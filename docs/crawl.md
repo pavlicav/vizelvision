@@ -54,7 +54,7 @@ Use **Save segments** for timing and other options.
 | Metro and bus | WMATA rail incidents and bus GTFS-realtime service alerts, for the routes you choose | 15 min |
 | AlertDC | DC HSEMA's AlertDC list, last 24 hours, without police crime alerts | 30 min |
 | Weather | api.weather.gov: now, and the next two forecast periods, for your ZIP (default Reagan National) | 30 min |
-| Scores | ESPN: today's games for the teams you follow | 20 min |
+| Scores | ESPN: today's games for your favorites (teams, and whole playoffs; [favorites.md](favorites.md)) | 20 min |
 | Coming up | The schedule projection: the next two programs | 30 min |
 | Now on Cairo Radio | Cairo's public API: show and track, only under the off-air card while Cairo is the off-air audio | 15 min |
 | Station messages | Your messages, each on its days, times and dates; one per pop-up, taking turns | 20 min |
@@ -203,8 +203,9 @@ version is read as the override.
   `alerts`, `rotation_alerts`, `bulletin`, `bulletins_ended`, `eas`, `nws`), the
   rotation's status (`context`, `mode`, `segments` with previews, `history`), and the
   segment, context and mode names.
-- `POST /v1/crawl`: changed settings (`rules` and `segments` merge key by key; `messages`,
-  `teams` and the flags replace).
+- `POST /v1/crawl`: changed settings (`rules` and `segments` merge key by key; `messages`
+  and the flags replace). Its `teams` are the old followed teams; favorites have them now.
+- `GET`/`POST /v1/favorites`: the ranked favorites ([favorites.md](favorites.md)).
 - `POST /v1/crawl/important`, `POST /v1/crawl/override`: `{text, label, style?, minutes}`.
   `minutes: null` runs until cleared; empty text clears.
 - `POST /v1/crawl/dismiss`: `{source: "eas"|"nws", id, dismissed}`.
@@ -220,7 +221,7 @@ version is read as the override.
   - `gone`: items that ended in the last six hours.
   - Also `counts`, `context`, `mode`, `higher` and `running`.
 - `POST /v1/crawl/alerts/<id>` (id URL-encoded): `{action: "air" | "mute" | "unmute"}`.
-- `GET /v1/sports/teams?league=nhl`: a league's teams, for Teams to follow.
+- `GET /v1/sports/teams?league=nhl`: a league's teams, for Favorites.
 
 Worker socket: `{"action": "crawl", "body": {"bulletin": {...} | null}}`; see
 `crawl.validate_bulletin`.

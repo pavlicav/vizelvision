@@ -28,8 +28,10 @@ LATE = timedelta(seconds=60)
 OFF_AIR = {'source_id': 'off-air', 'channel_id': 'off-air'}
 # Sources whose channel id is a game's id (NFL on ESPN, MLB gamePk).
 GAME_SOURCES = {'thursday-night-football': 'nfl', 'sunday-ticket': 'nfl', 'mlb': 'mlb'}
-# A show's priority rank (programming.PRIORITIES); takes held by hand are normal.
+# A show's priority rank (programming.PRIORITIES); a take held by hand ranks above normal
+# and favorites' games, below high (source_queue.HELD).
 NORMAL = 1
+HELD = NORMAL + .5
 
 
 @dataclass
@@ -45,7 +47,7 @@ class Entry:
     color: str | None = None
     source: str = 'schedule'  # schedule (not yet in Up next) or queue
     start: datetime | None = None  # Its scheduled time, before any game gate (default: due).
-    rank: int = NORMAL        # Its show's priority: one that outranks a held game cuts in.
+    rank: float = NORMAL      # Its show's priority: one that outranks a held game cuts in.
     item: str | None = None   # Its Up next entry, once queued.
     key: str | None = None    # Its schedule key (programming), if it comes from the schedule.
 
@@ -67,7 +69,7 @@ class Program:
     color: str | None = None
     source: str = 'schedule'
     notes: list = field(default_factory=list)
-    rank: int = NORMAL
+    rank: float = NORMAL
     item: str | None = None   # The Up next entry it aired from.
 
 
@@ -384,10 +386,10 @@ def _current(now, status, items, on_air, game_end, length, label, colors, queue)
     mine = aired.id if aired else None
     if hold and hold.get('game'):
         return Program(hold['game'].get('title') or '', 'game', hold.get('target'), since,
-                       game_end(hold['game']), True, hold['game'], source='queue', item=mine)
+                       game_end(hold['game']), True, hold['game'], source='queue', rank=HELD, item=mine)
     if hold and hold.get('until'):
         return Program(aired.title if aired and aired.title else '', 'manual', hold.get('target'), since,
-                       datetime.fromisoformat(hold['until']), True, source='queue', item=mine)
+                       datetime.fromisoformat(hold['until']), True, source='queue', rank=HELD, item=mine)
     if not on_air:
         return Program('OFF AIR', 'off_air', dict(OFF_AIR), now)
     source = on_air.get('source_id')

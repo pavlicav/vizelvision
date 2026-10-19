@@ -1,0 +1,18 @@
+{
+  "favorites": ["nhl:5", "mlb:playoffs", "nhl:23"],
+  "air": true,
+  "checked_at": "2026-10-02T02:10:00+00:00",
+  "errors": {},
+  "days": 7,
+  "check_minutes": 10,
+  "games": [
+    {"league": "mlb", "game_pk": 813024, "game_date": "2026-10-02", "title": "Detroit Tigers at Cleveland Guardians",
+     "start_time": "2026-10-02T17:08:00Z", "tbd": false, "networks": ["ESPN"],
+     "target": {"source_id": "youtube-tv", "channel_id": "ESPN"}, "favorites": ["mlb:playoffs"],
+     "favorite": "mlb:playoffs", "rank": 2, "status": "scheduled", "show_id": "5f1d0c6e2a7b4e0f9c3d8a1b2c3d4e5f",
+     "start": "2026-10-02T17:08:00+00:00"},
+    {"league": "nhl", "game_pk": 401802317, "game_date": "2026-10-04", "title": "Detroit Red Wings at Washington Capitals",
+     "start_time": "2026-10-04T23:00Z", "tbd": false, "networks": ["ESPN+"], "target": null,
+     "favorites": ["nhl:5", "nhl:23"], "favorite": "nhl:5", "rank": 1, "status": "no_channel"}
+  ]
+}

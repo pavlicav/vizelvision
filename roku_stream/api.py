@@ -57,6 +57,7 @@ from .production_monitor import ProductionMonitor
 from . import playback
 from .continuity import Continuity, Voice
 from .station_watch import StationWatch
+from .favorites import Favorites, FavoritesPlanner
 from .sports_join import SportsJoin
 from .ident import ident_file
 from .programming import Programming
@@ -150,6 +151,7 @@ def handler_factory(
     crawl_desk: CrawlDesk | None = None,
     promo_desk: PromoDesk | None = None,
     station_watch: StationWatch | None = None,
+    favorites: FavoritesPlanner | None = None,
 ) -> type[BaseHTTPRequestHandler]:
     master = coordinator or MasterClient(config.master)
     master_preview = MasterPreview(config.master)
@@ -892,6 +894,10 @@ def handler_factory(
                     query = parse_qs(parsed.query)
                     requested_date = query.get("date", [None])[0]
                     self._json(HTTPStatus.OK, baseball.games(requested_date))
+                elif path == "/v1/favorites":
+                    if favorites is None:
+                        raise ConfigError("Favorites need master control")
+                    self._json(HTTPStatus.OK, favorites.view())
                 elif path == "/v1/alerts":
                     # The station watch: what is stuck now, and whether alerts are pushed.
                     self._json(HTTPStatus.OK, station_watch.view() if station_watch
@@ -997,6 +1003,12 @@ def handler_factory(
                 elif path == '/v1/crawl':
                     crawl_settings.update(data)
                     self._json(HTTPStatus.OK, crawl_view())
+                elif path == '/v1/favorites':
+                    # The ranked list and/or air; the planner reschedules within a moment.
+                    if favorites is None:
+                        raise ConfigError('Favorites need master control')
+                    favorites.favorites.update(data)
+                    self._json(HTTPStatus.OK, favorites.view())
                 elif path == '/v1/admute':
                     admute_settings.update(data)
                     self._json(HTTPStatus.OK, admute_view())
@@ -1371,8 +1383,13 @@ def serve(config: AppConfig) -> None:
         # Someone is told when the station is stuck (station_watch.py).
         station_watch = StationWatch(playout.status, coordinator.on_air, programming.on_now,
                                      config.state_file.with_name('alerts.json'))
+        # Favorite teams and playoffs, ranked: their games go on the Schedule (favorites.py).
+        favorite_list = Favorites(config.state_file.with_name('favorites.json'),
+                                  seed=lambda: CrawlSettings(config.master).read()['teams'])
+        programming.favorites = favorite_list.order
+        planner = FavoritesPlanner(favorite_list, programming, sports)
     else:
-        programming = station_watch = None
+        programming = station_watch = planner = None
         # Without master control, a legacy job or queue entry only puts the channel on the Roku.
         def play(channel):
             if roku is None:
@@ -1405,7 +1422,7 @@ def serve(config: AppConfig) -> None:
                  'dc_alerts': crawl_feeds.AlertDcFeed(),
                  'weather': crawl_feeds.WeatherFeed(config.crawl.weather_station, config.crawl.forecast_point,
                                                     config.crawl.weather_place, lambda: feed_settings.read()['weather']),
-                 'scores': crawl_feeds.ScoresFeed(sports.scoreboard, lambda: crawl_settings.read()['teams']),
+                 'scores': crawl_feeds.ScoresFeed(sports.scoreboard, planner.favorites.order),
                  'cairo': crawl_feeds.CairoFeed(config.master.off_air_radio_info_url)}
         if projector is not None:
             feeds['coming_up'] = crawl_feeds.ComingUpFeed(projector)
@@ -1439,7 +1456,7 @@ def serve(config: AppConfig) -> None:
     server = ThreadingHTTPServer(
         (config.server.host, config.server.port),
         handler_factory(config, roku, scheduler, baseball, playout, sources, coordinator, programming, sports,
-                        production_monitor, projector, continuity, crawl_desk, promo_desk, station_watch),
+                        production_monitor, projector, continuity, crawl_desk, promo_desk, station_watch, planner),
     )
     if roku is not None:
         roku.hold.start()
@@ -1455,6 +1472,7 @@ def serve(config: AppConfig) -> None:
     if isinstance(playout, SourceQueue):
         playout.start()
         programming.start()
+        planner.start()
         continuity.start()
     if crawl_desk:
         crawl_desk.start()
@@ -1476,6 +1494,8 @@ def serve(config: AppConfig) -> None:
             playout.stop()  # Paused while stopping; Up next carries on after the restart.
         if station_watch:
             station_watch.stop()
+        if planner:
+            planner.close()
         if programming:
             programming.close()
         if continuity:

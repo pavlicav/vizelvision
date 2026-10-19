@@ -62,7 +62,7 @@ DEFAULTS = {
                  for key, (_, _, every) in SEGMENTS.items()},
     'cycle_messages': True,  # one station message per bulletin, in turn
     'messages': [],
-    'teams': [],             # followed teams, "league:espn-id"
+    'teams': [],             # followed teams until 2026-10-17; favorites.json has them now (favorites.py)
 }
 STYLES = ('station', 'urgent')
 TEXT_LIMIT, LABEL_LIMIT, TAG_LIMIT, DISMISSED_LIMIT = 500, 24, 20, 50

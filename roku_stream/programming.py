@@ -20,8 +20,13 @@ game on air until it is final, then joins the next show or game in progress.
 
 Each show has a priority (low, normal, high). A show that outranks what holds master
 cuts in at its start: a game on air before its final, or a take held to an end time
-(normal). Of equal priority, what is on air keeps master, as above. A program show
-starting inside one that outranks it waits for that one to end.
+(between normal and high). Of equal priority, what is on air keeps master, as above. A
+program show starting inside one that outranks it waits for that one to end.
+
+A favorite's game (favorites.py) at normal ranks a little above normal, the higher on the
+favorites list the more, still below a take held by hand: of two favorites' games the
+higher one cuts in on the other. One starting with another show starts a second before
+it, or a second after one that outranks it, and so goes on first or waits for its final.
 
 Scheduled games follow MLB and ESPN until they start (follow_games): a moved game
 takes its window with it, a series winner replaces "ATL/PHI" in the title, and a
@@ -59,6 +64,9 @@ REMOVED_KEPT = timedelta(days=2)    # How long games removed by their feeds stay
 # queued by hand are normal.
 PRIORITIES = ('low', 'normal', 'high')
 NORMAL = PRIORITIES.index('normal')
+# How far above normal the top favorite's game ranks; the last one ranks just above normal.
+# A take held by hand ranks normal + 0.5 (source_queue.HELD), above every favorite.
+FAVORITE_SPAN = 0.4
 _COLOR = re.compile(r'^#[0-9a-fA-F]{6}$')
 log = logging.getLogger(__name__)
 
@@ -97,8 +105,14 @@ def _priority(value):
     return value
 
 
-def show_rank(show):
-    return PRIORITIES.index(show.get('priority') or 'normal')
+def show_rank(show, favorites=()):
+    """A show's priority rank: its index in PRIORITIES. favorites is the ranked favorites
+    list: a favorite's game at normal ranks above normal by its best favorite's place."""
+    rank = PRIORITIES.index(show.get('priority') or 'normal')
+    places = [favorites.index(f) for f in show.get('favorites') or () if f in favorites]
+    if rank == NORMAL and places:
+        rank += FAVORITE_SPAN * (len(favorites) - min(places)) / len(favorites)
+    return rank
 
 
 def target_key(target):
@@ -118,6 +132,8 @@ class Programming:
         self.normalize = normalize or (lambda target: target)
         self.game = game
         self.locate = locate
+        # The ranked favorites list, read live (favorites.Favorites.order).
+        self.favorites = lambda: []
         self.zone = zone or system_zone()
         self.poll_seconds = poll_seconds
         self.lock = threading.Lock()
@@ -212,7 +228,15 @@ class Programming:
         self.sync()
         return self.describe()
 
-    def add_show(self, value):
+    def _order(self):
+        try:
+            return list(self.favorites())
+        except Exception:  # No favorites: every show keeps its own priority.
+            return []
+
+    def add_show(self, value, favorites=None):
+        """favorites: the favorites a game is (favorites.matches), when the favorites planner
+        adds it; its rank then follows their place on the list."""
         if not isinstance(value, dict):
             raise ConfigError('A show must be an object')
         mode = value.get('mode', 'program')
@@ -264,7 +288,19 @@ class Programming:
         else:
             show['target'] = self._target(value.get('target'))
             show['title'] = _text(value.get('title'), 'Show title', 72)
+        if favorites is not None:
+            if mode != 'game':
+                raise ConfigError('Only games come from the favorites')
+            show['favorites'], show['added_by'] = list(favorites), 'favorites'
+        order = self._order()
         with self.lock:
+            if favorites is not None:
+                # Starting with another show: first, or after one that outranks it.
+                taken, rank, step = {parse_time(o['start']): o for o in self.data['shows']}, show_rank(show, order), None
+                while start in taken:
+                    step = step or timedelta(seconds=1 if show_rank(taken[start], order) >= rank else -1)
+                    start, end = start + step, end + step
+                show['start'], show['end'] = start.isoformat(), end.isoformat()
             for other in self.data['shows']:
                 if parse_time(other['start']) == start:
                     raise ConfigError(f'"{other["title"]}" starts at the same time. Start this one later '
@@ -301,7 +337,12 @@ class Programming:
         show_id = parts[2].split(':', 1)[0]
         with self.lock:
             show = next((s for s in self.data['shows'] if s['id'] == show_id), None)
-        return show_rank(show) if show else NORMAL
+        return show_rank(show, self._order()) if show else NORMAL
+
+    def shows(self):
+        """Every scheduled show and game, oldest first."""
+        with self.lock:
+            return copy.deepcopy(self.data['shows'])
 
     def remove_show(self, show_id):
         with self.lock:
@@ -446,8 +487,9 @@ class Programming:
         with self.lock:
             data = copy.deepcopy(data or self.data)
         segments = self._grid_segments(data, start, end)
+        order = self._order()
         # Lower priorities are laid down first; within one, in start order (a stable sort).
-        for show, s_start, s_end in sorted(self._windows(data['shows']), key=lambda w: show_rank(w[0])):
+        for show, s_start, s_end in sorted(self._windows(data['shows']), key=lambda w: show_rank(w[0], order)):
             if s_end <= start or s_start >= end:
                 continue
             carved = []

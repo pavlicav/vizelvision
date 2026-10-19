@@ -19,7 +19,7 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 from zoneinfo import ZoneInfo
 
-from .baseball import scoreline
+from .baseball import EXCLUSIVES, scoreline
 from .errors import BaseballScheduleError, ChannelNotFoundError, ConfigError
 
 ESPN_URL = 'https://site.api.espn.com/apis/site/v2/sports/{path}/scoreboard?dates={day}'
@@ -54,6 +54,8 @@ TYPICAL = {'mlb': timedelta(hours=2, minutes=50), 'nfl': timedelta(hours=3, minu
 # Clock sports: (periods, real minutes per period, minutes of each long break, periods followed by one).
 PERIODS = {'nfl': (4, 45, 15, (2,)), 'nba': (4, 35, 15, (2,)), 'wnba': (4, 28, 15, (2,)),
            'nhl': (3, 38, 18, (1, 2)), 'nwsl': (2, 52, 15, (1,)), 'ncaaf': (4, 48, 20, (2,))}
+# MLB's game types for the wild card, division series, league championship and World Series.
+MLB_POSTSEASON = frozenset({'F', 'D', 'L', 'W'})
 # A game this close to its start already counts as on the channel (pregame coverage).
 SOON = timedelta(hours=1)
 # A game's closing stretch, when what follows it is prepared while it finishes (source_queue):
@@ -187,7 +189,8 @@ class EspnScoreboard:
             cached = self._cache.get(key)
             if cached and time.monotonic() - cached[0] < 86400:
                 return cached[1]
-        payload = self._get(ESPN_TEAMS_URL.format(path=ESPN_PATHS[league]), league, {'teams': True})
+        # Without a limit ESPN lists 50 teams: no Michigan State among college football's.
+        payload = self._get(ESPN_TEAMS_URL.format(path=ESPN_PATHS[league]) + '?limit=1000', league, {'teams': True})
         teams = []
         for sport in payload.get('sports') or []:
             for entry in (sport.get('leagues') or [{}])[0].get('teams') or []:
@@ -217,6 +220,7 @@ class EspnScoreboard:
                  for c in competition.get('competitors') or [] if isinstance(c, dict)}
         return self._normalize(league, {'id': header.get('id') or event_id, 'date': competition.get('date'),
                                         'status': competition.get('status'), 'competitions': [competition],
+                                        'season': header.get('season'),
                                         'name': f"{teams.get('away')} at {teams.get('home')}"
                                                 if teams.get('away') and teams.get('home') else None})
 
@@ -248,6 +252,8 @@ class EspnScoreboard:
                 # Postponed and cancelled games also release the backup.
                 'finished': status.get('completed') is True or status.get('state') == 'post'
                             or name in ('STATUS_POSTPONED', 'STATUS_CANCELED', 'STATUS_CANCELLED'),
+                # Playoffs, the World Series, bowls: ESPN's season type 3.
+                'postseason': (event.get('season') or {}).get('type') == 3,
                 'broadcasts': broadcasts}
 
 
@@ -265,17 +271,21 @@ class SportsCatalog:
 
     def _channel(self, name):
         name = NETWORK_ALIASES.get(name.upper(), name)
+        if name.rstrip().endswith('+'):
+            # ESPN+, Paramount+: streaming, though a lookup that drops the "+" finds ESPN.
+            # On 2026-10-17 ESPN+-only NHL games were suggested on ESPN.
+            return None
         try:
             return self.config.resolve_channel(name)[1].name
         except ChannelNotFoundError:
             return None
 
     def _suggest(self, game):
-        channels = []
-        for broadcast in game['broadcasts']:
-            channel = self._channel(broadcast['name']) if broadcast.get('market') in (None, 'national') else None
-            if channel and channel not in channels:
-                channels.append(channel)
+        national = [b['name'] for b in game['broadcasts'] if b.get('market') in (None, 'national')]
+        channels = list(dict.fromkeys(filter(None, map(self._channel, national))))
+        if not channels:  # A streaming exclusive (EXCLUSIVES): the channel that carries them.
+            channels = list(dict.fromkeys(filter(None, (self._channel(EXCLUSIVES[n.upper()])
+                                                        for n in national if n.upper() in EXCLUSIVES))))
         start = datetime.fromisoformat(game['start_time'].replace('Z', '+00:00')).astimezone(_EASTERN) \
             if game.get('start_time') else None
         regional = bool(game['league'] == 'nfl' and start and start.weekday() == 6 and start.hour < 19
@@ -381,6 +391,10 @@ class SportsCatalog:
                           'status': g['status'], 'state': g['state'].casefold(),
                           'start_time_tbd': g.get('start_time_tbd', False), 'if_necessary': g.get('if_necessary', False),
                           'series': g.get('series'), 'series_game': g.get('series_game'),
+                          'postseason': g.get('game_type') in MLB_POSTSEASON,
+                          'away': g.get('away'), 'home': g.get('home'),
+                          # MLB.TV streams it (automatic routing's last resort).
+                          'streams': any(s.get('provider') == 'mlb' for s in g.get('sources', [])),
                           'broadcasts': [{'name': b['name'], 'market': 'national' if b.get('is_national') else None}
                                          for b in g.get('broadcasts', [])],
                           'channels': channels,

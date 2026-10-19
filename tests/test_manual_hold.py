@@ -120,6 +120,16 @@ class HoldQueueTests(unittest.TestCase):
         self.game.update(finished=True, status='Final')
         self.wait(lambda: self.aired == [ESPN])
 
+    def test_a_favorites_game_waits_for_a_take_held_by_hand(self):
+        # Favorites rank above normal (programming.FAVORITE_SPAN); a take put on by hand is above them.
+        self.ranked()
+        self.queue.hold_for(TV, {'until': soon(.4)})
+        self.show('Northwestern at Michigan State', .05, 1.4)
+        time.sleep(.2)
+        self.assertEqual(self.aired, [])
+        self.assertNotIn('cut', self.queue.status()['hold'])
+        self.wait(lambda: self.aired == [ESPN])
+
     def test_the_cut_follows_the_show_and_is_undone_when_it_drops_its_priority(self):
         self.ranked()
         own = soon(3600)

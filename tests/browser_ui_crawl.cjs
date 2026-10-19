@@ -15,7 +15,7 @@ const muted = {...base, id: 'nws:urn:oid:2.49.0.1', source: 'nws', source_name: 
 run(async browser => {
   const t = await open(browser, '/crawl', {
     edit: F => { F.alerts.items.unshift(severe, muted); F.alerts.counts.looping = 1; F.alerts.counts.muted = 1; },
-    api: {'POST /v1/crawl/*': (body, F) => F.crawl, 'POST /v1/crawl': (body, F) => {
+    api: {'POST /v1/favorites': (body, F) => Object.assign(F.favorites, body), 'POST /v1/crawl/*': (body, F) => F.crawl, 'POST /v1/crawl': (body, F) => {
       for (const [segment, options] of Object.entries(body.segments || {})) {
         assert.ok(Object.keys(options).every(key => ['enabled', 'every', 'changed_only'].includes(key)), 'only valid segment fields are sent');
         Object.assign(F.crawl.settings.segments[segment], options);
@@ -122,11 +122,38 @@ run(async browser => {
   await page.locator('[data-id=save-transit]').click();
   await page.waitForTimeout(200);
   assert.deepEqual(t.posts.at(-1).body.transit.routes.slice(-2), ['C91', 'X2']);
+  // Favorites: ranked, whole playoffs among them, and their games with what the planner did.
   await page.locator('[data-tab=teams]').click();
-  await page.locator('[data-id=league]').selectOption('nhl');
-  await page.locator('[data-panel=teams] .pick label').first().locator('input').check();
+  const favorites = page.locator('[data-id=followed] li');
+  await page.waitForFunction(() => document.querySelector('[data-id=followed] li')?.textContent.includes('Detroit Red Wings'));
+  assert.deepEqual(await favorites.evaluateAll(rows => rows.map(r => r.children[1].textContent)),
+    ['NHL · Detroit Red Wings', 'MLB · All playoffs, through the World Series', 'NHL · Washington Capitals']);
+  const games = page.locator('[data-id=fav-games] li');
+  assert.match(await games.nth(0).textContent(), /Detroit Tigers at Cleveland Guardians.*★ 2 · MLB · All playoffs.*On the Schedule/);
+  assert.match(await games.nth(1).textContent(), /On ESPN\+: not a channel VizelVision gets.*No channel/);
+  assert.equal(await page.locator('[data-id=fav-air]').isChecked(), true);
+  await page.getByRole('button', {name: 'Move MLB · All playoffs, through the World Series up'}).click();
   await page.waitForTimeout(200);
-  assert.ok(t.posts.at(-1).body.teams.some(team => team.startsWith('nhl:')));
+  assert.deepEqual(t.posts.at(-1), {method: 'POST', path: '/v1/favorites', body: {favorites: ['mlb:playoffs', 'nhl:5', 'nhl:23']}});
+  await page.waitForFunction(() => document.querySelector('[data-id=followed] li')?.textContent.includes('All playoffs'));
+  await page.locator('[data-id=league]').selectOption('ncaaf');
+  const pick = page.locator('[data-panel=teams] .pick label');
+  await page.waitForFunction(() => document.querySelector('[data-panel=teams] .pick label')?.textContent !== 'All playoffs, through the World Series');
+  assert.equal(await pick.first().textContent(), 'All bowls and playoffs', 'whole playoffs come first');
+  await pick.first().locator('input').check();
+  await page.waitForTimeout(200);
+  assert.deepEqual(t.posts.at(-1).body, {favorites: ['mlb:playoffs', 'nhl:5', 'nhl:23', 'ncaaf:playoffs']});
+  await page.locator('[data-id=league]').selectOption('nhl');
+  await page.waitForFunction(() => document.querySelector('[data-panel=teams] .pick label')?.textContent === 'All playoffs');
+  await page.getByRole('checkbox', {name: 'Boston Bruins'}).check();
+  await page.waitForTimeout(200);
+  assert.equal(t.posts.at(-1).body.favorites.at(-1), 'nhl:1');
+  await page.getByRole('button', {name: 'Remove NHL · Detroit Red Wings'}).click();
+  await page.waitForTimeout(200);
+  assert.deepEqual(t.posts.at(-1).body.favorites, ['mlb:playoffs', 'nhl:23', 'ncaaf:playoffs', 'nhl:1']);
+  await page.locator('[data-id=fav-air]').uncheck();
+  await page.waitForTimeout(200);
+  assert.deepEqual(t.posts.at(-1).body, {air: false});
   await page.locator('[data-tab=messages]').click();
   await page.locator('[data-id=add-message]').click();
   await page.locator('[data-id=messages] textarea').last().fill('Game 3 tonight at 8');

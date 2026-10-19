@@ -289,6 +289,7 @@
       if (day(a) !== last) { last = day(a); list.append(h('li', {class: 'day'}, last)); }
       const body = h('div', h('strong', (s.mode === 'game' ? LEAGUE_ICON[s.game?.league || 'mlb'] : '') + s.title), h('small', showSource(s)));
       if (s.mode === 'game' && s.backup.source_id !== 'schedule') body.append(h('small', 'Then ' + s.backup_title + ' on ' + targetLabel(s.backup) + ' after the final, until ' + hm(b)));
+      if (s.added_by === 'favorites') body.append(h('small', '★ A favorite\'s game · ', h('a', {href: 'crawl#teams'}, 'rank favorites')));
       if (s.update) body.append(h('small', {class: 'note'}, s.update.text + ' · ' + hm(new Date(s.update.at))));
       if (s.missing_since) { const since = Date.parse(s.missing_since); body.append(h('small', {class: 'note'}, 'Not on the ' + (s.game?.league || 'mlb').toUpperCase() + ' schedule since ' + hm(new Date(since)) + '; removed at ' + hm(new Date(since + gone * 6e4)) + ' if it stays off')); }
       const twins = shows.filter(o => o !== s && Date.parse(o.start) === a.getTime());

@@ -29,6 +29,11 @@ _YTTV_NETWORKS: tuple[tuple[str, str], ...] = (
     ("MLBNETWORK", "MLB Network"),
 )
 
+# Streaming services whose exclusives a YouTube TV channel carries, used only when no channel
+# of the game's own is configured (NBC/Peacock is on NBC). Northwestern at Michigan State,
+# listed by ESPN only as Peacock on 2026-10-17, was on NBC Sports Network.
+EXCLUSIVES = {"PEACOCK": "NBC Sports Network"}
+
 _TEAM_CARD_NAMES = {
     108: "Angels", 109: "D-backs", 110: "Orioles", 111: "Red Sox",
     112: "Cubs", 113: "Reds", 114: "Guardians", 115: "Rockies",
@@ -279,8 +284,10 @@ class BaseballCatalog:
         """Configured channels for a national broadcast, in listed order."""
         if broadcast.get("is_national") is not True:
             return []
+        # ESPN+ is streaming: without its "+" it would be ESPN.
         parts = [normalize_channel_name(part) for field in ("name", "call_sign")
-                 for part in str(broadcast.get(field) or "").split("/") if part.strip()]
+                 for part in str(broadcast.get(field) or "").split("/")
+                 if part.strip() and not part.strip().endswith("+")]
         tokens = {normalize_channel_name(token): name for token, name in _YTTV_NETWORKS}
         found: list[str] = []
         # Exact parts only: NBC must not match NBCSN, nor FOX match "FOX Dep." (Fox Deportes).
@@ -288,6 +295,10 @@ class BaseballCatalog:
             channel = self._configured_channel(tokens[part]) if part in tokens else None
             if channel and channel not in found:
                 found.append(channel)
+        # A Peacock exclusive is on NBC Sports Network; NBC/Peacock is on NBC.
+        exclusive = [EXCLUSIVES[part.upper()] for part in parts if part.upper() in EXCLUSIVES]
+        if not found and exclusive and self._configured_channel(exclusive[0]):
+            found.append(self._configured_channel(exclusive[0]))
         return found
 
     def _with_sources(self, game: dict[str, object]) -> dict[str, object]:

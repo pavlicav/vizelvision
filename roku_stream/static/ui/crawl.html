@@ -48,6 +48,15 @@
 .chips{display:flex;gap:6px;flex-wrap:wrap}
 .chips button{height:24px;font-size:12px;padding:0 9px;border-radius:99px;border-color:var(--touch-line);background:var(--touch-bg);color:#d7eeff}
 .pick{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:2px 14px;max-height:340px;overflow:auto}
+.pick .playoffs{grid-column:1/-1;padding-bottom:4px;margin-bottom:2px;border-bottom:1px solid var(--line)}
+.favs{list-style:none;margin:0;padding:0;display:grid;gap:4px}
+.favs li{display:grid;grid-template-columns:22px minmax(0,1fr) auto;gap:8px;align-items:center;padding:5px 6px 5px 10px;border:1px solid var(--line);border-radius:var(--r);background:var(--well)}
+.favs .n{font:500 11px/1 var(--mono);color:var(--dim)}
+.favs .acts{display:flex;gap:4px}
+.favgames>li{display:grid;grid-template-columns:96px minmax(0,1fr) auto;gap:4px 10px;padding:8px 0;align-items:baseline}
+.favgames>li .t{font:500 12.5px/1.3 var(--mono)}
+.favgames>li small{display:block;color:var(--muted);font-size:12px}
+@media (max-width:640px){.favgames>li{grid-template-columns:1fr}}
 .msg{padding:14px;border:1px solid var(--line);border-radius:var(--r-lg);background:var(--well);display:grid;gap:10px}
 .msg.off{opacity:.6}
 .days{display:flex;gap:4px 12px;flex-wrap:wrap}
@@ -98,7 +107,7 @@
     <section class="panel tabs-panel" aria-label="Crawl controls">
       <div class="head" style="padding:0 8px;border-bottom:0"><div class="tabs" role="tablist" id="tabs" style="margin:0;border:0">
         <button type="button" role="tab" data-tab="manual">Messages on the bar</button><button type="button" role="tab" data-tab="rules">Rules</button><button type="button" role="tab" data-tab="segments">Segments</button>
-        <button type="button" role="tab" data-tab="feeds">Sources</button><button type="button" role="tab" data-tab="teams">Teams</button><button type="button" role="tab" data-tab="messages">Station messages</button><button type="button" role="tab" data-tab="history">History</button></div></div>
+        <button type="button" role="tab" data-tab="feeds">Sources</button><button type="button" role="tab" data-tab="teams">Favorites</button><button type="button" role="tab" data-tab="messages">Station messages</button><button type="button" role="tab" data-tab="history">History</button></div></div>
       <div class="body" style="border-top:1px solid var(--line)">
         <div data-panel="manual" class="cols-2">
           <section class="stack tight" aria-label="Important message"><div class="row"><span class="lamp" id="important-lamp"></span><strong>Important message</strong><span class="tiny muted" id="important-state"></span></div>
@@ -147,11 +156,17 @@
               <p class="tiny muted" data-id="zip-state"></p></section>
           </div>
         </div>
-        <div data-panel="teams" hidden class="stack tight">
-          <p class="hint">The Scores segment shows these teams' games today: when and where before, the score while live, the final after (and last night's finals until 10 AM). Changes save as you check them.</p>
-          <div class="chips" data-id="followed"></div>
-          <div class="fields"><label class="field"><span>League</span><select data-id="league"></select></label><label class="field"><span>Filter</span><input data-id="team-filter" placeholder="Team or city"></label></div>
-          <div class="pick" data-id="teams"></div>
+        <div data-panel="teams" hidden class="stack">
+          <p class="hint">Your favorite teams, and whole playoffs, best first. The Scores segment shows their games today: when and where before, the score while live, the final after (and last night's finals until 10 AM). Changes save at once.</p>
+          <label class="switch"><input type="checkbox" data-id="fav-air"><span>Put favorites' games on air whenever they're on</span></label>
+          <p class="hint" style="margin-top:-6px">Each game goes on the Schedule from its start, on the channel that carries it, and back to the schedule after the final. When games overlap, the higher favorite cuts in on the lower; a lower one starting during a higher one joins after its final, if it is still on. Favorites outrank normal shows; a High show, or something you put on by hand with an end time, comes first. Remove a game from the Schedule and it stays off.</p>
+          <div class="cols-2">
+            <section class="stack tight" aria-label="Favorites, best first"><strong>Ranked</strong><ol class="favs" data-id="followed"></ol></section>
+            <section class="stack tight" aria-label="Favorites' games"><strong data-id="fav-games-title">Their games</strong><ul class="list favgames" data-id="fav-games"></ul><p class="tiny muted" data-id="fav-checked"></p></section>
+          </div>
+          <section class="stack tight" aria-label="Add favorites"><strong>Add favorites</strong>
+            <div class="fields"><label class="field"><span>League</span><select data-id="league"></select></label><label class="field"><span>Filter</span><input data-id="team-filter" placeholder="Team or city"></label></div>
+            <div class="pick" data-id="teams"></div></section>
         </div>
         <div data-panel="messages" hidden class="stack">
           <p class="hint">Your own items, each on its days, between its times (empty: all day) and within its dates. They air in the Station messages segment.</p>
