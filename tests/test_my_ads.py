@@ -92,6 +92,28 @@ class RotationTests(unittest.TestCase):
         self.assertIsNone(Rotation().pick(s, [{**plays[0], 'id': ad(1)['id']}], now), 'nothing left: the card')
         self.assertIsNone(Rotation().pick(self.settings(n=1), [], now, skip={ad(1)['id']}))
 
+    def test_limits_from_resets_the_limits_but_keeps_counting_after(self):
+        day = {'count': 1, 'minutes': 1440}
+        a = validate({'ads': [ad(1, limit=day)]})['ads'][0]
+        now = 100000.
+        earlier = [{'kind': 'ad', 'id': a['id'], 'at': now - 3600, 'counted': True}]
+        self.assertFalse(allowed(a, earlier, now))
+        self.assertTrue(allowed(a, earlier, now, now - 60), 'played before the reset: it may air again')
+        self.assertIsNone(allowed_again(a, earlier, now, now - 60))
+        later = earlier + [{'kind': 'ad', 'id': a['id'], 'at': now + 10, 'counted': True}]
+        self.assertFalse(allowed(a, later, now + 20, now - 60), 'played after the reset: its limit holds again')
+        self.assertEqual(allowed_again(a, later, now + 20, now - 60), now + 10 + 86400)
+        s = validate({'limits_from': now - 60, 'ads': [ad(1, limit=day)]})
+        self.assertEqual(Rotation().pick(s, [{**earlier[0], 'id': ad(1)['id']}], now)['name'], 'Ad 1')
+        self.assertIsNone(validate({})['limits_from'])
+        mine = {**a, 'limits_from': now - 60}                 # one ad's own reset
+        self.assertTrue(allowed(mine, earlier, now))
+        self.assertFalse(allowed(mine, later, now + 20))
+        self.assertFalse(allowed(a, earlier, now), 'the others keep their limits')
+        self.assertEqual(validate({'ads': [{**ad(1), 'limits_from': 5}]})['ads'][0]['limits_from'], 5.0)
+        with self.assertRaises(ConfigError):
+            validate({'limits_from': 'yesterday'})
+
     def test_counts_from_ten_seconds_or_half_a_short_ad(self):
         self.assertFalse(my_ads.counts(9.9, 60))
         self.assertTrue(my_ads.counts(10, 60), 'a minute-long ad cut at 10 s counts')
@@ -130,6 +152,10 @@ class StoreTests(unittest.TestCase):
             self.store.edit(first['id'], {'file': 'x.mp4'})
         with self.assertRaises(ConfigError):
             self.store.edit(first['id'], {'trim_db': 40})
+        before = time.time()
+        reset = next(x for x in self.store.edit(second['id'], {'limits_from': 'now'})['ads'] if x['id'] == second['id'])
+        self.assertGreaterEqual(reset['limits_from'], round(before, 1) - 0.1)
+        self.assertIsNone(next(x for x in self.store.read()['ads'] if x['id'] == first['id'])['limits_from'])
         value = self.store.reorder([second['id'], first['id']])
         self.assertEqual([(a['name'], a['enabled'], a['limit'], a['trim_db']) for a in value['ads']],
                          [('second', True, {'count': 1, 'minutes': 60}, 0.0), ('Pizza', False, None, -3.0)])

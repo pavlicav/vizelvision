@@ -49,11 +49,14 @@ DEFAULTS = {
     'card': {'text': 'STAY TUNED', 'image': None},
     # The limit a new upload gets: None, or at most count plays in any minutes.
     'default_limit': None,
+    # A reset of the limits: plays before this time (epoch seconds) do not count towards any
+    # ad's limit (they stay in the play log and its counts). None: every play counts.
+    'limits_from': None,
     'ads': [],
 }
 AD_DEFAULTS = {'name': '', 'enabled': True, 'limit': None, 'trim_db': 0.0, 'audio': True, 'lufs': None,
                'gain_db': 0.0, 'pics': 0, 'width': None, 'height': None, 'bytes': None, 'added': None,
-               'source_name': None, 'converted': False}
+               'source_name': None, 'converted': False, 'limits_from': None}
 VIDEO_EXT = ('.mp4', '.m4v', '.mov', '.mkv', '.webm', '.ts', '.mts', '.m2ts', '.avi', '.mpg', '.mpeg', '.wmv', '.flv')
 IMAGE_EXT = ('.png', '.jpg', '.jpeg', '.webp')
 MAX_BYTES = 4_000_000_000
@@ -126,6 +129,8 @@ def _validate_ad(ad, lenient):
     result['duration'] = float(_number(result.get('duration'), .5, MAX_SECONDS + 60, 'duration'))
     result['name'] = validate_name(result['name'])
     result['limit'] = validate_limit(result['limit'])
+    if result['limits_from'] is not None:                # this ad's own reset (settings' limits_from: all)
+        result['limits_from'] = float(_number(result['limits_from'], 0, 4e9, 'limits_from'))
     result['trim_db'] = float(_number(result['trim_db'], *TRIM_DB, 'trim_db'))
     result['gain_db'] = float(_number(result['gain_db'], *GAIN_DB, 'gain_db'))
     for key in ('enabled', 'audio'):
@@ -162,6 +167,8 @@ def validate(value, *, lenient=False):
     if image is not None and (not isinstance(image, str) or not re.fullmatch(r'card-own-[0-9a-f]{8}\.(png|jpe?g|webp)', image)):
         raise ConfigError('card image must be an uploaded card')
     result['default_limit'] = validate_limit(result['default_limit'], 'default_limit')
+    if result['limits_from'] is not None:
+        result['limits_from'] = float(_number(result['limits_from'], 0, 4e9, 'limits_from'))
     ads = result['ads']
     if not isinstance(ads, list) or len(ads) > MAX_ADS:
         raise ConfigError(f'ads must list at most {MAX_ADS} ads')
@@ -189,21 +196,23 @@ def counted(plays, ad_id, since):
                   and played(p) and p.get('at', 0) >= since)
 
 
-def allowed(ad, plays, now):
-    """May this ad air now: switched on, and under its limit?"""
+def allowed(ad, plays, now, since=None):
+    """May this ad air now: switched on, and under its limit? since: the limits' reset
+    (settings' limits_from); plays before it do not count."""
     if not ad.get('enabled'):
         return False
     limit = ad.get('limit')
-    return not limit or len(counted(plays, ad['id'], now - limit['minutes'] * 60)) < limit['count']
+    since = max(since or 0, ad.get('limits_from') or 0)
+    return not limit or len(counted(plays, ad['id'], max(now - limit['minutes'] * 60, since))) < limit['count']
 
 
-def allowed_again(ad, plays, now):
+def allowed_again(ad, plays, now, since=None):
     """When an ad held back by its limit may air again (epoch seconds); None if it may now."""
     limit = ad.get('limit')
     if not limit:
         return None
     window = limit['minutes'] * 60
-    times = counted(plays, ad['id'], now - window)
+    times = counted(plays, ad['id'], max(now - window, since or 0, ad.get('limits_from') or 0))
     return times[len(times) - limit['count']] + window if len(times) >= limit['count'] else None
 
 
@@ -235,7 +244,7 @@ class Rotation:
 
     def pick(self, settings, plays, now, skip=()):
         ads = settings['ads']
-        ok = {a['id']: a for a in ads if a['id'] not in skip and allowed(a, plays, now)}
+        ok = {a['id']: a for a in ads if a['id'] not in skip and allowed(a, plays, now, settings.get('limits_from'))}
         if not ok:
             return None
         if settings['order'] == 'list':
@@ -340,9 +349,12 @@ class MyAds:
             return self.save(value), result
 
     def update(self, changes):
-        """Settings (not the ads): enabled, order, pip, card text, default_limit."""
+        """Settings (not the ads): enabled, order, pip, card text, default_limit, limits_from
+        ("now" resets the limits from this moment)."""
         if not isinstance(changes, dict) or not set(changes) <= set(DEFAULTS) - {'ads'}:
             raise ConfigError('Settings take ' + ', '.join(k for k in DEFAULTS if k != 'ads'))
+        if changes.get('limits_from') == 'now':
+            changes = {**changes, 'limits_from': round(time.time(), 1)}
         if 'card' in changes and (not isinstance(changes['card'], dict) or set(changes['card']) - {'text'}):
             raise ConfigError('Set the card text here; upload an image for a card of your own')
 
@@ -358,9 +370,13 @@ class MyAds:
         return ad
 
     def edit(self, ad_id, changes):
-        """One ad's name, enabled, limit or trim_db."""
-        if not isinstance(changes, dict) or not changes or not set(changes) <= {'name', 'enabled', 'limit', 'trim_db'}:
-            raise ConfigError('An ad takes name, enabled, limit and trim_db')
+        """One ad's name, enabled, limit, trim_db or limits_from ("now" resets its limit: plays
+        before now stop counting)."""
+        if (not isinstance(changes, dict) or not changes
+                or not set(changes) <= {'name', 'enabled', 'limit', 'trim_db', 'limits_from'}):
+            raise ConfigError('An ad takes name, enabled, limit, trim_db and limits_from')
+        if changes.get('limits_from') == 'now':
+            changes = {**changes, 'limits_from': round(time.time(), 1)}
         return self._change(lambda value: self._find(value, ad_id).update(changes))[0]
 
     def reorder(self, ids):

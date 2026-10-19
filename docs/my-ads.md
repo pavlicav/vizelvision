@@ -112,6 +112,12 @@ Master keeps it (`ad_break.AdBreak`): the page only asks.
   (`my_ads.played`).
   An ad cut short by the programme's return before that does not count. While an ad
   airs, it counts already, so the next one cued respects its limit.
+- **Resetting the limits:** `limits_from` (`POST /v1/my-ads` `{"limits_from": "now"}`, or a time in
+  epoch seconds; `null` undoes it) makes plays before then count towards no ad's limit, so every ad
+  switched on may air at once; plays after it count as usual, so each ad's limit holds again once it
+  airs. The plays stay in the log and in the page's counts. Master, Next up and the page all use it.
+  **Reset limit**, on each ad with a limit (highlighted while it sits out), does the same for that ad
+  alone: its own `limits_from` (`POST /v1/my-ads/ads/<id>` `{"limits_from": "now"}`).
 - **Sitting out:** an ad switched off, or over its limit, sits out. The page shows
   until when. With every ad out, the break card shows.
 
@@ -152,9 +158,9 @@ Beside the master socket (`state/master-candidate/`):
 | Route | |
 |---|---|
 | `GET /v1/my-ads` | settings, each ad with `present`, `allowed`, `again` and `played` (hour/day/week/last), master's `status`, ad mute's mode, the last 80 plays |
-| `POST /v1/my-ads` | settings: `enabled`, `order`, `pip` {enabled, corner, size}, `card` {text}, `default_limit` |
+| `POST /v1/my-ads` | settings: `enabled`, `order`, `pip` {enabled, corner, size}, `card` {text}, `default_limit`, `limits_from` (a time, `"now"`, or `null`) |
 | `POST /v1/my-ads/upload?name=` | an ad (the body is the file) |
-| `POST /v1/my-ads/ads/<id>` · `DELETE` | one ad: `name`, `enabled`, `limit`, `trim_db` · delete it, its file and pictures |
+| `POST /v1/my-ads/ads/<id>` · `DELETE` | one ad: `name`, `enabled`, `limit`, `trim_db`, `limits_from` (`"now"`: Reset limit) · delete it, its file and pictures |
 | `POST /v1/my-ads/order` `{ids}` · `/shuffle` `{}` | reorder · a random order |
 | `POST /v1/my-ads/card-image?name=` · `DELETE` | your own card picture · back to the station card |
 | `GET /v1/my-ads/file/<name>` | an ad (`<id>`), a picture, or the card, for the page |

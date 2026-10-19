@@ -1207,7 +1207,7 @@ class AdBreak:
         for e in queue:
             if e['kind'] == 'ad':
                 ad = ads.get(e['id'])
-                if ad is None or (e['by'] == 'rotation' and not allowed(ad, plays + ahead, now)):
+                if ad is None or (e['by'] == 'rotation' and not allowed(ad, plays + ahead, now, settings.get('limits_from'))):
                     gone.add(e['key'])
                     continue
                 ahead.append({'kind': 'ad', 'id': e['id'], 'at': now, 'counted': True})

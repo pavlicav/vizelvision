@@ -342,8 +342,8 @@ def handler_factory(
             mine = [p for p in plays if p.get('kind') == 'ad' and p.get('id') == ad['id']]
             counted = [p['at'] for p in mine if my_ads_module.played(p)]
             ads.append({**ad, 'present': (my_ads.folder / ad['file']).is_file(),
-                        'allowed': my_ads_module.allowed(ad, plays, now),
-                        'again': my_ads_module.allowed_again(ad, plays, now),
+                        'allowed': my_ads_module.allowed(ad, plays, now, settings.get('limits_from')),
+                        'again': my_ads_module.allowed_again(ad, plays, now, settings.get('limits_from')),
                         'played': {'hour': sum(1 for t in counted if t >= now - 3600),
                                    'day': sum(1 for t in counted if t >= now - 86400), 'week': len(counted),
                                    'last': max((p['at'] for p in mine), default=None)}})
