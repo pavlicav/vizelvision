@@ -7,6 +7,92 @@ misread "Vizel" (the continuity announcers' lines already do). Lines voiced befo
 7 October 2026 (the station ID, the Sports ID and the first nine promos) spell it
 "Vizel Vision".
 
+## At a glance
+
+VizelVision is a small automated TV station on one Linux box. It takes live channels from
+an antenna, YouTube TV and other streaming apps, and puts one of them on air at a time,
+following a schedule. It dresses the output like a broadcast station (station ID, crawl,
+promos, captions) and takes the sound out of the commercial breaks. Viewers watch a single
+output stream, in a browser or on a Roku.
+
+```text
+  INPUTS                          MASTER                                   VIEWERS
+  antenna tuners ─────────┐
+  Roku: YouTube TV, MLB,  │      ┌───────────────────────────────────┐
+    Sunday Ticket, TNF ───┼────▶ │ decode ─▶ switch ─▶ delay ─▶ mute │ ─▶ MediaMTX ─▶ browser,
+  recordings (library) ───┤      │ + clock, crawl, captions, promos  │    (HLS/RTSP)   Roku app
+  station ID, promos, ────┘      └───────────────────────────────────┘
+    My ads, off-air card                │ copy of the picture   ▲ when to mute
+                                        ▼ and sound             │
+                                   AD DETECTOR (vizelvision-admute)
+  CONTROL: the web app (Up next, Schedule, sports, crawl, continuity, UI) tells master what to air.
+```
+
+### The input stack
+
+- **TV Thing**, a separate service on the same host, owns the hardware:
+  - the antenna tuners (digital and analog);
+  - since 6 October, the source Roku and its HD PVR capture card (the "Roku lane").
+- **Asking for a channel.** VizelVision asks TV Thing for a channel or a game under a lock,
+  then plays the feed it gets back.
+- **The Roku.** The Roku lane drives the Roku by remote control (ECP). It reaches YouTube TV,
+  the MLB app, NFL Sunday Ticket and Prime Video's Thursday Night Football. It checks the
+  screen before it accepts that the right thing is playing.
+- **The sources Up next can put on air:**
+  - `tv-thing-digital` and `tv-thing-analog` (the antenna);
+  - `youtube-tv`, `mlb`, `sunday-ticket` and `thursday-night-football` (the Roku);
+  - `library` (finished recordings and other files);
+  - the station's own material: the station ID, promos, My ads, and the off-air card with
+    Cairo Radio under it.
+- **When a feed fails.** A live feed that stalls holds its last picture for 8 s. One that
+  fails is put back on air automatically. A broadcast network can move between YouTube TV
+  and the antenna.
+
+### The pieces
+
+| Process | What it does |
+| --- | --- |
+| `vizelvision-web` (port 6970) | The control room: the web UI and API, and Up next (the only way on air). Also the Schedule, which follows MLB and ESPN to move, retitle or drop games, and favorite teams. Plus the crawl's rotation, the continuity announcer, the promo and My ads settings, and the station watch. |
+| `vizelvision-master` | The GStreamer master. It decodes the input on air and the one being prepared, and cuts between them. It holds the programme a few seconds, draws the clock, crawl, captions and promos, encodes H.264 (NVENC) and publishes. Severe-weather alerts run here, so they air even if the web app is down. |
+| `vizelvision-mediamtx` | Serves master's output over RTSP and HLS to the browser monitor and the Roku viewer app. |
+| `vizelvision-admute` | The ad detector, below. |
+
+The first three start together under `vizelvision-stack.target`
+([master worker](docs/master-worker.md)).
+
+### How ad detection works
+
+Full detail is in [docs/ad-mute.md](docs/ad-mute.md).
+
+1. **Look ahead.** Master holds the programme up to 13 s before anyone hears it. Meanwhile
+   the detector gets a small copy of each live input: a low-resolution picture and 16 kHz
+   sound. It has seen and heard what follows a possible break before that moment airs.
+2. **Gather evidence, every second.**
+   - **Picture:**
+     - black frames and hard cuts, where breaks begin;
+     - score bugs and channel logos, which mean the programme;
+     - YouTube TV's "Sponsored" label, which means an ad;
+     - whether the picture looks like the last few minutes of the programme;
+     - an image model's read of the frame.
+   - **Sound:**
+     - Whisper's transcript: ad wording, and the programme's own vocabulary;
+     - audio fingerprints of ads it has heard before.
+   - **Claude Haiku** reads the transcript (and, when the detector is unsure, a few
+     frames) and calls it ad or programme.
+   - **MLB's live play-by-play** says when an inning break starts.
+3. **Weigh it.** One logistic model turns the evidence into a probability that each second
+   is an ad. A Viterbi pass over the black frames and cuts decides where breaks start and end.
+4. **Err towards sound.**
+   - A mute starts only at a seam, and is retracted unless it is confirmed within 10 s.
+   - It never starts under a score bug the detector trusts.
+   - The sound comes back as soon as the programme does.
+   - When the detector is unsure, or any part of it is down, the sound stays on. Master's
+     mute holds only while the detector keeps renewing it.
+5. **Fill the break.** Master fades the sound out. It can play Cairo Radio under the break,
+   or the station's own ads with the muted programme small in a corner, and its promos.
+6. **Learn.** Each confirmed break adds its ads to the known-ads database. The operator's
+   one-key fixes ("it's an ad", "it's the show") become training labels.
+
 > **The source Roku moved to TV Thing on 2026-10-06.** TV Thing's *Roku lane* now owns the
 > Roku (10.0.0.240) and its Hauppauge HD PVR: the YouTube TV, MLB, Thursday Night Football and
 > Sunday Ticket navigation and screen recognition described below (now TV Thing's
