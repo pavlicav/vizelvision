@@ -89,7 +89,7 @@
 
     <section class="machine machinery" aria-label="How it works: the plan"><div class="head"><span class="title">How it works · the next three hours</span><span class="tiny muted" id="plan-note"></span></div>
       <div class="body"><svg class="diagram timeline" id="timeline" viewBox="0 0 1200 210" role="img" aria-label="The crawl's planned pop-ups"></svg>
-        <p class="hint" style="margin-top:8px">Bands are the contexts ahead (from the schedule) and the rule each follows. Blocks are planned pop-ups, as <code>CrawlDesk.plan()</code> plays the rules forward: at most <span id="r-hour">4</span> an hour, <span id="r-gap">5</span> min apart (shaded), the most overdue segment first, new items at once. It assumes nothing new arrives.</p></div></section>
+        <p class="hint" style="margin-top:8px">Bands are the contexts ahead (from the schedule) and the rule each follows. Blocks are planned pop-ups, as <code>CrawlDesk.plan()</code> plays the rules forward: new items at once, on their own; everything else together in an update round every <span id="r-round">15</span> min, at least <span id="r-gap">5</span> min after the bar last left (shaded). It assumes nothing new arrives.</p></div></section>
 
     <section class="panel" id="register" aria-label="Alerts and items">
       <div class="head"><span class="lamp" id="reg-lamp"></span><h2>Alerts &amp; items</h2><div class="end"><span class="tiny muted" id="reg-updated"></span></div></div>
@@ -125,13 +125,16 @@
             <div class="actions"><button type="button" class="primary" data-id="override-go">Put on air</button><button type="button" class="quiet" data-id="override-clear">Clear</button></div></section>
         </div>
         <div data-panel="rules" hidden class="stack">
-          <p class="hint">What the rotation does in each context. <b>Pop-ups</b>: one segment at a time, one pass, then the bar slides away. <b>Always on</b>: every segment's items loop. <b>Important only</b>: no rotation; important news, severe alerts and the override still run.</p>
+          <p class="hint">What the rotation does in each context. <b>Pop-ups</b>: new items pop up at once, on their own, in blue with a red <b>NEW</b> box (weather alerts keep their orange); everything else airs together, in one <b>UPDATE</b> round, one pass, then the bar slides away. <b>Always on</b>: every segment's items loop. <b>Important only</b>: no rotation; important news, severe alerts and the override still run.</p>
           <div class="fields" data-id="rules"></div>
-          <div class="fields"><label class="field"><span>Pop-ups an hour, at most</span><input type="number" data-id="per-hour" min="1" max="60"></label><label class="field"><span>Minutes between pop-ups, at least</span><input type="number" data-id="gap" min="0" max="120"></label></div>
+          <div class="fields"><label class="field"><span>An update round every (minutes)</span><input type="number" data-id="round" min="5" max="120"></label><label class="field"><span>Minutes after the bar leaves, at least</span><input type="number" data-id="gap" min="0" max="120"></label></div>
+          <div class="stack tight"><strong>Bar at the top during</strong>
+            <p class="hint">Live games of these leagues put the bar along the top of the picture, clear of a score bug along the bottom; the station clock and the AD badge step below it. A game is what the Schedule airs, or a game on the channel on air (a channel put on by hand counts).</p>
+            <div class="days" data-id="top-leagues"></div></div>
           <div class="actions"><button type="button" class="primary" data-id="save-rules">Save rules</button><span class="tiny" data-id="rules-dirty" style="color:var(--warn)"></span></div>
         </div>
         <div data-panel="segments" hidden class="stack">
-          <p class="hint">On/off switches save immediately and stay set until you change them. Use <b>Save segments</b> for the other options. Each segment pops up every <i>n</i> minutes (if <b>Repeat</b> is on), only in the contexts it may air in; <b>new items at once</b> pops up items never seen before, once each, ahead of the timer.</p>
+          <p class="hint">On/off switches save immediately and stay set until you change them. Use <b>Save segments</b> for the other options. Each segment rides the update round about every <i>n</i> minutes (if <b>Repeat</b> is on: the round nearest that), only in the contexts it may air in; <b>new items at once</b> pops up items never seen before, once each, on their own and marked NEW.</p>
           <div class="seg-cards" data-id="segments"></div>
           <div class="actions"><button type="button" class="primary" data-id="save-segments">Save segments</button><span class="tiny" data-id="segments-dirty" style="color:var(--warn)"></span></div>
         </div>
@@ -170,7 +173,7 @@
         </div>
         <div data-panel="messages" hidden class="stack">
           <p class="hint">Your own items, each on its days, between its times (empty: all day) and within its dates. They air in the Station messages segment.</p>
-          <label class="switch"><input type="checkbox" data-id="cycle"><span>One message per pop-up, taking turns (off: every active message each time)</span></label>
+          <label class="switch"><input type="checkbox" data-id="cycle"><span>One message per round, taking turns (off: every active message each time)</span></label>
           <div class="stack tight" data-id="messages"></div>
           <div class="actions"><button type="button" class="quiet" data-id="add-message">+ Add message</button><button type="button" class="primary" data-id="save-messages">Save messages</button><span class="tiny" data-id="messages-dirty" style="color:var(--warn)"></span></div>
         </div>

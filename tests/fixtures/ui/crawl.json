@@ -126,9 +126,12 @@
   "higher": null,
   "history": [],
   "last_end": null,
+  "league": null,
   "mode": "quiet",
   "new": {},
+  "next_round": null,
   "popups_this_hour": 0,
+  "position": "bottom",
   "running": null,
   "segments": {
    "alerts": {
@@ -364,8 +367,12 @@
    "gap_minutes": 5,
    "ident": "quiet",
    "off_air": "always",
-   "per_hour": 4,
-   "program": "popups"
+   "program": "popups",
+   "round_minutes": 15,
+   "top_leagues": [
+    "nfl",
+    "ncaaf"
+   ]
   },
   "segments": {
    "alerts": {
@@ -483,6 +490,7 @@
    "url": "http://127.0.0.1:8090/eas"
   },
   "error": null,
+  "flag": "",
   "items": [],
   "key": null,
   "kind": null,
@@ -496,6 +504,7 @@
    ]
   },
   "on_air": false,
+  "position": "bottom",
   "rotation_alerts": [],
   "style": null
  }

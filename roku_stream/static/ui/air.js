@@ -187,7 +187,7 @@
   VV.watch('v1/crawl/alerts', 10000, (data, w) => { if (!w.error) { register = data; crawlTile(); } });
   function crawlTile() {
     const c = master.crawl;
-    CrawlBar.draw(strip, c?.on_air ? {label: c.label, style: c.style, items: c.items || []} : null);
+    CrawlBar.draw(strip, c?.on_air ? {label: c.label, flag: c.flag, style: c.style, position: c.position, items: c.items || []} : null);
     const kind = c?.on_air ? c.kind : null;
     id('crawl-lamp').className = 'lamp ' + (kind === 'important' ? 'pgm' : kind ? 'touch' : '');
     id('crawl-state').textContent = kind === 'important' ? 'Important news is running' : kind === 'override' ? 'Override on the bar' : kind ? (c.label || 'Bulletin') + ' pop-up' : 'Bar off';

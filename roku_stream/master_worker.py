@@ -40,6 +40,10 @@ from .my_ads import MyAds
 from .promos import Promos
 from . import crawl
 
+# How long the rotation's choice of where the bar runs lasts unless renewed (crawl_desk.py
+# renews it every POSITION_RENEW s): a stopped web app leaves the bar at the bottom.
+CRAWL_POSITION_LEASE = 60
+
 
 class MasterWorker:
     # Start the armed next file this long before the on-air one ends, so its first
@@ -87,6 +91,9 @@ class MasterWorker:
         self.bulletin = None
         self.bulletin_log = []
         self.crawl_wake = False
+        # Where the rotation wants the bar (top during some games) and until when: past its
+        # lease, the bottom.
+        self.crawl_position = ('bottom', 0.)
         # The source Roku is TV Thing's Roku lane, played like its tuners.
         self.roku_enabled = bool(config.tv_thing.enabled)
         self.tv = tv or TvControl(config.tv_thing)
@@ -164,10 +171,19 @@ class MasterWorker:
                 self.arm = None
             return {"accepted": True}
         if action == "crawl":
-            # A bulletin from the rotation, or None to clear it. Important and override
-            # crawls are not interrupted: the bulletin is refused while one runs.
+            # A bulletin from the rotation, or None to clear it; and (with or without one) where
+            # the bar runs, for CRAWL_POSITION_LEASE seconds. Important and override crawls
+            # are not interrupted: the bulletin is refused while one runs.
+            position = crawl.validate_position(body['position']) if 'position' in body else None
+            if position is None and 'bulletin' not in body:
+                raise ConfigError('The crawl command takes a bulletin, a position or both')
             bulletin = crawl.validate_bulletin(body['bulletin']) if body.get('bulletin') is not None else None
             with self.lock:
+                if position is not None:
+                    self.crawl_position = (position, time.monotonic() + CRAWL_POSITION_LEASE)
+                    self.crawl_wake = True
+                if 'bulletin' not in body:
+                    return {"accepted": True}
                 kind = (self.crawl_content or {}).get('kind')
                 if bulletin and kind in ('important', 'override'):
                     return {"accepted": False, "reason": kind}
@@ -665,6 +681,8 @@ class MasterWorker:
         content = crawl.compose(settings, important, label, now)
         with self.lock:
             bulletin = self.bulletin
+            position, until = self.crawl_position
+        position = position if time.monotonic() < until else 'bottom'
         if bulletin:
             finished = getattr(self.output, 'crawl_finished', lambda: None)()
             if finished == bulletin['key']:
@@ -674,11 +692,14 @@ class MasterWorker:
             elif content is not None:
                 self._end_bulletin('preempted by ' + content['kind'])
             else:
-                content = {key: bulletin[key] for key in ('kind', 'key', 'label', 'style', 'passes', 'items')}
+                content = {key: bulletin[key] for key in ('kind', 'key', 'label', 'flag', 'style', 'passes', 'items')}
+        if content is not None:
+            content = {**content, 'position': position}
         if content != self.crawl_content and hasattr(self.output, 'set_crawl'):
             old = self.crawl_content
             # The same crawl with new words (a transcript arrived, the rotation's loop
-            # changed) follows the running pass; anything else cuts in at once.
+            # changed) follows the running pass, and moved to the top or bottom slides there;
+            # anything else cuts in at once.
             same = bool(old and content and old['key'] == content['key'])
             if content is not None or (old or {}).get('kind') != 'bulletin' or not old.get('passes'):
                 self.output.set_crawl(content, restart=not same)
@@ -693,7 +714,10 @@ class MasterWorker:
             'kind': (self.crawl_content or {}).get('kind'),
             'key': (self.crawl_content or {}).get('key'),
             'label': (self.crawl_content or {}).get('label'),
+            'flag': (self.crawl_content or {}).get('flag') or '',
             'style': (self.crawl_content or {}).get('style'),
+            # Where the bar runs (or would run): the rotation's choice while its lease lasts.
+            'position': position,
             # The status reply is capped at 64 KB: the items once, without a plain-text copy.
             'items': (self.crawl_content or {}).get('items', [])[:40],
             'alerts': summaries,

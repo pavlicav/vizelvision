@@ -368,5 +368,7 @@ svg.diagram .muted{fill:var(--muted)}
 .crawlbar .run b{color:var(--head);margin-right:1em}.crawlbar .run i{font-style:normal;background:var(--lbg);color:var(--lfg);padding:0 .2em;margin-right:.4em}
 .crawlbar .boxlabel{position:absolute;top:0;bottom:0;left:0;z-index:1;display:flex;align-items:center;padding:0 calc(var(--h) * .74) 0 calc(var(--h) * .42);
   background:var(--lbg);color:var(--lfg);font-size:calc(var(--h) * .44);clip-path:polygon(0 0,100% 0,calc(100% - var(--h) * .32) 100%,0 100%)}
+.crawlbar .boxlabel .flag{align-self:stretch;display:flex;align-items:center;margin:0 calc(var(--h) * .42) 0 calc(var(--h) * -.42);padding:0 calc(var(--h) * .42);background:#d6121a;color:#fff}
+.barscreen:not(.strip) .crawlbar.top{bottom:auto;top:1.97cqw}
 @keyframes crawl{from{transform:translateX(var(--from))}to{transform:translateX(var(--to))}}
 @media (prefers-reduced-motion:reduce){.crawlbar .run{animation:none;transform:translateX(var(--rest,0))}}

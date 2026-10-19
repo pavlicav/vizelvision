@@ -1425,11 +1425,12 @@ def serve(config: AppConfig) -> None:
                  'scores': crawl_feeds.ScoresFeed(sports.scoreboard, planner.favorites.order),
                  'cairo': crawl_feeds.CairoFeed(config.master.off_air_radio_info_url)}
         if projector is not None:
-            feeds['coming_up'] = crawl_feeds.ComingUpFeed(projector)
+            feeds['coming_up'] = crawl_feeds.ComingUpFeed(projector, game_on=coordinator.game_on_target)
         ledger = CrawlLedger(Path(config.master.socket_path).with_name('crawl-ledger.json'))
         crawl_desk = CrawlDesk(crawl_settings, MasterClient(config.master), feeds=feeds,
                                production=ProductionSettings(config.master), projector=projector,
-                               feed_options=feed_settings.read, ledger=ledger)
+                               feed_options=feed_settings.read, ledger=ledger,
+                               game_on=lambda target: (coordinator.game_on_target(target) or {}).get('league'))
 
         # Station promos' live values (promos.py): the temperature (a weather feed of its own,
         # fetched only while a promo shows it) and the programme on air, voiced for 'only-on'.

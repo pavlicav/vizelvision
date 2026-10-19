@@ -14,7 +14,13 @@ const muted = {...base, id: 'nws:urn:oid:2.49.0.1', source: 'nws', source_name: 
 
 run(async browser => {
   const t = await open(browser, '/crawl', {
-    edit: F => { F.alerts.items.unshift(severe, muted); F.alerts.counts.looping = 1; F.alerts.counts.muted = 1; },
+    edit: F => {
+      F.alerts.items.unshift(severe, muted); F.alerts.counts.looping = 1; F.alerts.counts.muted = 1;
+      // A new item on the bar during Sunday Night Football: its own colour and a NEW box, along the top.
+      Object.assign(F.crawl.status, {on_air: true, kind: 'bulletin', label: 'DC ALERTS', flag: 'NEW', style: 'new', position: 'top',
+        items: [{tag: 'ALERTDC', heading: '', text: 'Red Mass road closures until 1 PM.'}]});
+      Object.assign(F.crawl.rotation, {context: 'game', mode: 'popups', position: 'top', league: 'nfl', next_round: Date.now() / 1000 + 600});
+    },
     api: {'POST /v1/favorites': (body, F) => Object.assign(F.favorites, body), 'POST /v1/crawl/*': (body, F) => F.crawl, 'POST /v1/crawl': (body, F) => {
       for (const [segment, options] of Object.entries(body.segments || {})) {
         assert.ok(Object.keys(options).every(key => ['enabled', 'every', 'changed_only'].includes(key)), 'only valid segment fields are sent');
@@ -25,6 +31,13 @@ run(async browser => {
   const page = t.page;
   await page.waitForSelector(`#reg-body tr.item[data-id="${BUS}"]`);
   const row = id => page.locator(`#reg-body tr.item[data-id="${id}"]`);
+
+  // The bar now: the NEW box in front of the label, along the top during football.
+  const bar = page.locator('#screen .crawlbar');
+  assert.equal(await bar.locator('.boxlabel .flag').innerText(), 'NEW');
+  assert.match(await bar.locator('.boxlabel').innerText(), /NEW\s*DC ALERTS/);
+  assert.match(await page.locator('#bar-note').innerText(), /New items, on their own[\s\S]*Along the top/);
+  assert.match(await page.locator('#state').innerText(), /Next round ≈[\s\S]*Bar at the top · NFL/i);
 
   // Alerts first, each with where it stands and when it airs next.
   assert.equal(await page.locator('#reg-body tr.item').count(), 8, 'alerts only: EAS, NWS, Metro and AlertDC');
@@ -79,9 +92,12 @@ run(async browser => {
   // Rules and segments save what changed; segment options go to the feed settings too.
   await page.locator('[data-tab=rules]').click();
   await page.locator('[data-context=program]').selectOption('always');
+  await page.locator('[data-id=round]').fill('20');
+  await page.locator('[data-id=top-leagues]').getByRole('checkbox', {name: 'NBA', exact: true}).check();
+  await page.locator('[data-id=top-leagues]').getByRole('checkbox', {name: 'College Football'}).uncheck();
   await page.locator('[data-id=save-rules]').click();
   await page.waitForTimeout(200);
-  assert.deepEqual(t.posts.at(-1).body, {rules: {per_hour: 4, gap_minutes: 5, program: 'always', game: 'quiet', off_air: 'always', ident: 'quiet'}});
+  assert.deepEqual(t.posts.at(-1).body, {rules: {round_minutes: 20, gap_minutes: 5, top_leagues: ['nfl', 'nba'], program: 'always', game: 'quiet', off_air: 'always', ident: 'quiet'}});
   await page.locator('[data-tab=segments]').click();
   const alertDC = page.locator('.seg-card[data-segment=dc_alerts]').getByRole('checkbox', {name: 'AlertDC', exact: true});
   await alertDC.uncheck();

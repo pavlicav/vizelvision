@@ -47,7 +47,8 @@
     else if (!status) chips.push(h('span', {class: 'chip'}, 'Waiting for master'));
     else {
       if (rot.context) chips.push(h('span', {class: 'chip'}, (CONTEXT_NAMES[rot.context] || rot.context) + ' · ' + (MODE_NAMES[rot.mode] || rot.mode)));
-      if (rot.mode === 'popups') chips.push(h('span', {class: 'chip ' + (rot.popups_this_hour >= data.settings.rules.per_hour ? 'warn' : '')}, rot.popups_this_hour + '/' + data.settings.rules.per_hour + ' this hour'));
+      if (rot.mode === 'popups' && rot.next_round) chips.push(h('span', {class: 'chip', title: 'Everything due airs together then; new items pop up at once'}, rot.next_round * 1000 > Date.now() ? 'Next round ≈ ' + fmt.clock(rot.next_round) : 'Round due'));
+      if (rot.position === 'top') chips.push(h('span', {class: 'chip touch', title: 'Clear of the score bug along the bottom'}, 'Bar at the top' + (rot.league ? ' · ' + (LEAGUES[rot.league] || rot.league) : '')));
       for (const name of ['eas', 'nws']) if (status[name]?.error) chips.push(h('span', {class: 'chip warn', title: status[name].error}, (name === 'eas' ? 'EAS decoder' : 'NWS') + ' unreachable'));
       if (rot.error) chips.push(h('span', {class: 'chip warn', title: rot.error}, 'Rotation paused'));
       if (status.error) chips.push(h('span', {class: 'chip warn', title: status.error}, 'Crawl error'));
@@ -55,22 +56,26 @@
     VV.fill(state, chips);
     const kind = status?.on_air ? status.kind : null;
     $('bar-lamp').className = 'lamp ' + (kind === 'important' ? 'pgm' : kind ? 'touch' : '');
-    CrawlBar.draw(screen, status?.on_air ? {label: status.label, style: status.style, items: status.items || []} : null);
-    $('bar-note').textContent = kind === 'important' ? 'Important news: runs continuously over everything until it ends.' : kind === 'override' ? 'The override holds the bar until it is cleared or ends.'
-      : kind === 'bulletin' ? 'A pop-up running its pass; the bar slides away when it ends.' : 'The bar is off. A mimic of master\'s bar: same colours and wording, 120 px a second at 720p.';
+    CrawlBar.draw(screen, status?.on_air ? {label: status.label, flag: status.flag, style: status.style, position: status.position, items: status.items || []} : null);
+    const where = status?.position === 'top' ? ' Along the top, clear of the score bug.' : '';
+    $('bar-note').textContent = (kind === 'important' ? 'Important news: runs continuously over everything until it ends.' : kind === 'override' ? 'The override holds the bar until it is cleared or ends.'
+      : kind === 'bulletin' ? (status.flag ? 'New items, on their own; the bar slides away after one pass.' : status.label === 'UPDATE' ? 'The update round: everything due, together, one pass.' : 'A pop-up running its pass; the bar slides away when it ends.')
+      : 'The bar is off. A mimic of master\'s bar: same colours and wording, 120 px a second at 720p.') + where;
     const s = data.settings, active = layer => s[layer].text && (!s[layer].until || Date.parse(s[layer].until) > Date.now());
     const layerRow = (n, name, on, detail, cls) => h('li', {class: (on ? 'on ' : '') + (cls || '')}, h('span', {class: 'n'}, n), h('div', h('strong', name), h('small', detail)), h('span', {class: 'lamp ' + (on ? (cls === 'important' ? 'pgm' : 'touch') : '')}));
     const severe = (status?.alerts || []).filter(a => a.important && !a.dismissed && !a.duplicate).length;
     VV.fill($('layers'),
       layerRow('1', 'Important', kind === 'important', severe ? severe + ' severe alert' + (severe > 1 ? 's' : '') + (active('important') ? ' + your message' : '') : active('important') ? 'Your message, ' + (s.important.until ? 'until ' + fmt.when(s.important.until) : 'until cleared') : 'Severe alerts and the important message', 'important'),
       layerRow('2', 'Override', kind === 'override', active('override') ? (kind === 'override' ? 'On the bar ' : 'Set, waiting ') + (s.override.until ? 'until ' + fmt.when(s.override.until) : 'until cleared') : 'Your message, holding the bar'),
-      layerRow('3', 'Rotation', kind === 'bulletin', kind === 'bulletin' ? (status.label || 'A segment') + ' pop-up' : rot.mode === 'quiet' ? 'Quiet in this context' : (MODE_NAMES[rot.mode] || '—') + (reg?.plan?.slots?.[0] ? ' · next ' + segName(reg.plan.slots[0].segment) + ' ' + fmt.rel(reg.plan.slots[0].at) : '')));
+      layerRow('3', 'Rotation', kind === 'bulletin', kind === 'bulletin' ? (status.flag ? 'New: ' + (status.label || 'items') : status.label === 'UPDATE' ? 'The update round' : (status.label || 'A segment') + ' pop-up') : rot.mode === 'quiet' ? 'Quiet in this context' : (MODE_NAMES[rot.mode] || '—') + (reg?.plan?.slots?.[0] ? ' · next ' + segName(reg.plan.slots[0].segment) + ' ' + fmt.rel(reg.plan.slots[0].at) : '')));
   }
-  const segName = seg => data?.segments?.[seg]?.name || seg;
+  const segName = seg => seg === 'round' ? 'Update round' : data?.segments?.[seg]?.name || seg;
+  // A slot or history entry, in words: a round names what it carries.
+  const slotName = s => s.segment === 'round' ? 'Update round' + ((s.segments || []).length ? ': ' + s.segments.map(segName).join(', ') : '') : segName(s.segment) + (s.new ? ' · new' : '');
   // The next planned pop-ups (and loops), in plain words.
   function renderComing() {
     const plan = reg?.plan || {}, byId = new Map((reg?.items || []).map(i => [i.id, i]));
-    const entries = [...(plan.slots || []).map(s => ({at: s.at, what: segName(s.segment) + (s.new ? ' · new items' : ''), ids: s.ids, context: s.context})),
+    const entries = [...(plan.slots || []).map(s => ({at: s.at, what: s.segment === 'round' ? slotName(s) : segName(s.segment) + (s.new ? ' · new items' : ''), ids: s.ids, context: s.context})),
       ...(plan.loops || []).map(l => ({at: l.start, what: 'Loop over the ' + (CONTEXT_NAMES[l.context] || l.context).toLowerCase(), ids: l.ids, context: l.context}))].sort((a, b) => a.at - b.at).slice(0, 4);
     VV.fill($('coming'), entries.length ? entries.map(e => h('li', h('span', {class: 't'}, '≈ ' + fmt.clock(e.at), h('small', {class: 'muted', style: {display: 'block', fontSize: '11px', marginTop: '3px'}}, fmt.rel(e.at))),
       h('span', {class: 'small'}, h('strong', e.what), h('span', {class: 'muted'}, ' · ' + e.ids.map(i => byId.get(i)).filter(Boolean).map(i => i.tag || i.heading || i.source_name).filter((v, i, a) => a.indexOf(v) === i).slice(0, 4).join(', '))),
@@ -101,7 +106,7 @@
   function nextCell(item) {
     if (item.status === 'on_air') return h('div', {class: 'when', style: {color: 'var(--pgm)'}}, 'Now');
     if (item.status === 'looping') return h('div', {class: 'when'}, 'Continuous', h('small', item.expires ? 'until ' + fmt.when(item.expires) : 'until it ends'));
-    if (item.next_at) return h('div', {class: 'when'}, '≈ ' + fmt.clock(item.next_at), h('small', fmt.rel(item.next_at) + (item.next_how === 'new' ? ' · at once' : item.next_how === 'loop' ? ' · loop' : '')));
+    if (item.next_at) return h('div', {class: 'when'}, '≈ ' + fmt.clock(item.next_at), h('small', fmt.rel(item.next_at) + (item.next_how === 'new' ? ' · at once' : item.next_how === 'loop' ? ' · loop' : item.next_how === 'round' ? ' · round' : '')));
     return h('div', {class: 'when muted'}, '—');
   }
   function itemText(item) {
@@ -206,7 +211,7 @@
     if (!VV.machinery.on || !reg?.plan?.until) return;
     const svg = $('timeline'), plan = reg.plan, now = reg.now, end = plan.until, W = 1200, L = 10, R = 1190, X = t => L + (R - L) * (t - now) / (end - now);
     const gap = data.settings.rules.gap_minutes * 60;
-    $('r-hour').textContent = data.settings.rules.per_hour; $('r-gap').textContent = data.settings.rules.gap_minutes;
+    $('r-round').textContent = data.settings.rules.round_minutes; $('r-gap').textContent = data.settings.rules.gap_minutes;
     $('plan-note').textContent = plan.slots.length + ' pop-ups planned' + (plan.higher_until ? ' · a higher layer holds the bar' : '');
     const esc = t => String(t).replace(/[&<>]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;'}[c]));
     const tone = {program: '#4fb3ff', game: '#ffb340', off_air: '#8e99a3', ident: '#b495ff'};
@@ -222,7 +227,7 @@
     plan.slots.forEach((slot, i) => {
       const x = X(slot.at), w = Math.max(3, X(slot.at + slot.duration) - x), y = 92 + (i % 3) * 18;
       if (gap) out += `<rect x="${x + w}" y="60" width="${Math.max(0, X(slot.at + slot.duration + gap) - x - w)}" height="88" fill="#ffb3400d"/>`;
-      out += `<rect x="${x}" y="${y}" width="${w}" height="14" rx="2" fill="${slot.new ? '#4fb3ff' : '#c3cbd1'}"/><text x="${x + w + 4}" y="${y + 11}" fill="#c3cbd1">${esc(segName(slot.segment))}${slot.new ? ' · new' : ''}</text>`;
+      out += `<rect x="${x}" y="${y}" width="${w}" height="14" rx="2" fill="${slot.new ? '#4fb3ff' : '#c3cbd1'}"/><text x="${x + w + 4}" y="${y + 11}" fill="#c3cbd1">${esc(slot.segment === 'round' ? 'Round · ' + (slot.segments || []).length : segName(slot.segment) + (slot.new ? ' · new' : ''))}</text>`;
     });
     for (let t = Math.ceil(now / 1800) * 1800; t < end; t += 1800) out += `<line x1="${X(t)}" x2="${X(t)}" y1="150" y2="160" stroke="#46515b"/><text x="${X(t) - 16}" y="176" class="muted">${esc(fmt.clock(t))}</text>`;
     out += `<line x1="${L}" x2="${R}" y1="150" y2="150" stroke="#2f373f"/><line x1="${L}" x2="${L}" y1="14" y2="160" stroke="#ff4438" stroke-width="2"/><text x="${L + 4}" y="12" fill="#ff8f86">NOW</text>`;
@@ -270,11 +275,17 @@
       select.value = rules[context]; select.onchange = () => mark('rules');
       return h('label', {class: 'field'}, h('span', name), select);
     }));
-    q('per-hour').value = rules.per_hour; q('gap').value = rules.gap_minutes;
+    q('round').value = rules.round_minutes; q('gap').value = rules.gap_minutes;
+    VV.fill(q('top-leagues'), Object.entries(LEAGUES).map(([league, name]) => {
+      const box = h('input', {type: 'checkbox', checked: rules.top_leagues.includes(league), data: {league}});
+      box.onchange = () => mark('rules');
+      return h('label', {class: 'check'}, box, h('span', name));
+    }));
   }
-  q('per-hour').oninput = q('gap').oninput = () => mark('rules');
+  q('round').oninput = q('gap').oninput = () => mark('rules');
   q('save-rules').onclick = () => {
-    const rules = {per_hour: Number(q('per-hour').value), gap_minutes: Number(q('gap').value)};
+    const rules = {round_minutes: Number(q('round').value), gap_minutes: Number(q('gap').value),
+      top_leagues: [...document.querySelectorAll('[data-id="top-leagues"] [data-league]')].filter(b => b.checked).map(b => b.dataset.league)};
     document.querySelectorAll('[data-context]').forEach(s => { rules[s.dataset.context] = s.value; });
     clean('rules'); act(() => api('v1/crawl', {rules}), 'Rules saved.');
   };
@@ -479,7 +490,7 @@
     const rows = data.rotation?.history || [], box = q('history');
     if (!rows.length) { box.replaceChildren(h('p', {class: 'hint'}, 'Nothing has aired since the web service started. Per-item airings are in each item\'s details above.')); return; }
     box.replaceChildren(h('table', {class: 'data'}, h('thead', h('tr', ['Started', 'Segment', 'During', 'Ended', 'Items', 'Text'].map(t => h('th', t)))),
-      h('tbody', rows.map(r => h('tr', h('td', {class: 'mono small nowrap'}, fmt.when(r.started)), h('td', (data.segments[r.segment]?.name || (r.loop ? 'Loop' : r.segment)) + (r.forced ? ' (by hand)' : '') + (r.new ? ' (new)' : '')),
+      h('tbody', rows.map(r => h('tr', h('td', {class: 'mono small nowrap'}, fmt.when(r.started)), h('td', (r.segment === 'round' ? slotName(r) : data.segments[r.segment]?.name || (r.loop ? 'Loop' : r.segment)) + (r.forced ? ' (by hand)' : '') + (r.new ? ' (new)' : '')),
         h('td', CONTEXT_NAMES[r.context] || r.context), h('td', {class: 'small'}, r.ended ? (r.how || 'ended') + ' ' + fmt.clock(r.ended) : h('span', {style: {color: 'var(--pgm)'}}, 'on air')),
         h('td', {class: 'mono small'}, String((r.ids || []).length || '—')), h('td', {class: 'small'}, r.text))))));
   }

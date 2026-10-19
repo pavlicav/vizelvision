@@ -4,6 +4,8 @@ Starts a private MediaMTX and a 720p60 master on the off-air card, then reads fr
 over RTSP: a DC alert as important news (red band and label box, nothing drawn above the
 bar), a one-pass bulletin that slides away by itself and reports it finished, a station
 override cutting in, and clearing back to the card, with the output real time throughout.
+Then the bar along the top: a new item's blue band and red NEW box there (and nothing at the
+bottom), the station clock stepped below it, and the same pass moving to the bottom.
 
 Run: /usr/bin/python3 tests/crawl_integration.py [screenshot.png]
 """
@@ -21,6 +23,7 @@ from roku_stream.publication import LocalMediaMtx
 
 W, H, FPS = 1280, 720, 60
 RED, NAVY, WHITE = (158, 13, 18), (10, 23, 48), (255, 255, 255)
+NEW_BLUE, FLAG_RED = (0, 61, 140), (214, 18, 26)
 
 
 def wait(check, timeout=20, poll=None):
@@ -110,8 +113,33 @@ def main(screenshot=None):
                 cleared = pixels(server.rtsp_url, probes)
                 assert near(cleared[0], before[0], 24) and near(cleared[2], before[2], 24), (before, cleared)
                 assert output.healthy() and not renderer.failed and renderer.finished == 'scores-test'
+                # Along the top during football: a new item, in its own colour with a NEW box.
+                output.set_clock({'enabled': True, 'seconds': False})
+                clock_ypad = output.clock_overlay.get_property('ypad')
+                new = {'kind': 'bulletin', 'key': 'dc-new', 'label': 'DC ALERTS', 'flag': 'NEW', 'style': 'new',
+                       'passes': 0, 'position': 'top', 'items': [{'tag': 'ALERTDC', 'heading': '', 'text': 'Road closed.'}]}
+                high = renderer.top + 3
+                above = [(W - 4, high), (8, high), (W - 4, top)]
+                card = pixels(server.rtsp_url, above)
+                output.set_crawl(new)
+                wait(lambda: renderer.scene is not None and renderer.scene.key == 'dc-new')
+                time.sleep(1.5)
+                shown = pixels(server.rtsp_url, above, screenshot and screenshot.replace('.png', '-top.png'))
+                assert near(shown[0], NEW_BLUE) and near(shown[1], FLAG_RED), shown  # blue band, red NEW box
+                assert near(shown[2], card[2], 24), (card, shown)  # nothing at the bottom
+                assert output.clock_overlay.get_property('ypad') >= renderer.top + renderer.bar, 'the clock steps below'
+                # The same pass moved to the bottom slides away at the top and comes back there.
+                output.set_crawl({**new, 'position': 'bottom'}, restart=False)
+                time.sleep(2)
+                moved = pixels(server.rtsp_url, above)
+                assert near(moved[0], card[0], 24) and near(moved[2], NEW_BLUE), (card, moved)
+                assert output.clock_overlay.get_property('ypad') == clock_ypad, 'the clock is back'
+                output.set_crawl(None)
+                time.sleep(1.5)
+                assert renderer.blocked and not renderer.failed
                 print(f'PASS: important alert drawn only in the bar, bulletin ran once and slid away, '
-                      f'override cut in, cleared to the card; lag {lag:.2f} s.')
+                      f'override cut in, cleared to the card; NEW along the top above the clock, moved to the '
+                      f'bottom; lag {lag:.2f} s.')
             except Exception:
                 print(server.log_path.read_text()[-4000:], file=sys.stderr)
                 raise

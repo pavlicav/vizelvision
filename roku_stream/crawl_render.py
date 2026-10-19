@@ -8,6 +8,12 @@ only places the tiles that are on screen, so a frame costs one blend of the bar
 The bar slides up when a crawl starts and down when it ends. A crawl with passes runs
 its text that many times and then slides away by itself (a bulletin); `finished` then
 holds its key. With passes 0 it runs until replaced or cleared.
+
+A crawl's position puts the bar along the bottom (the default) or along the top, where it
+slides down from the top edge; a crawl moved to the other edge slides away and comes back
+there. While the bar is at the top, on_cover(y) says how far down it reaches, so the
+station clock and the AD badge can step below it. A flag ("NEW") is a box of its own in
+front of the label.
 """
 from __future__ import annotations
 
@@ -33,8 +39,11 @@ PALETTE = {
     'advisory': ((.94, .75, 0), INK, (.45, .05, .05), INK, (.94, .75, 0)),
     'test': ((.18, .25, .32), WHITE, (.62, .83, 1), WHITE, (.18, .25, .32)),
     'station': ((.04, .09, .19), WHITE, (.39, .86, .89), (.39, .86, .89), (.04, .09, .19)),
+    # The rotation's new items: a brighter blue than the station's navy, in gold.
+    'new': ((0, .24, .55), WHITE, (1, .84, .3), (1, .82, .2), (.04, .09, .19)),
 }
 PALETTE.update(national=PALETTE['warning'], urgent=PALETTE['warning'], unknown=PALETTE['advisory'])
+FLAG = ((.84, .07, .1), WHITE)  # the flag box: background, text
 SEPARATOR = '  ◆  '
 SLIDE = .35  # seconds to slide the bar in or out
 
@@ -54,6 +63,7 @@ class Scene:
         self.gst = gst
         self.key = content.get('key') or ''
         self.passes = content.get('passes') or 0
+        self.position = 'top' if content.get('position') == 'top' else 'bottom'
         band, text, heading, label_bg, label_fg = PALETTE.get(content['style'], PALETTE['station'])
         font = Pango.FontDescription.from_string(FONT)
         font.set_absolute_size(round(height * .52) * Pango.SCALE)
@@ -79,25 +89,35 @@ class Scene:
                                                      lambda ctx, x0=x0: self._text(ctx, layout, -x0, top))))
         self.blank = self._paint(TILE, height, band, lambda ctx: None)
         self.label = None
-        if content.get('label'):
+        boxes = [(text, fill, ink) for text, fill, ink in ((content.get('flag'), *FLAG), (content.get('label'), label_bg, label_fg))
+                 if text]
+        if boxes:
             label_font = font.copy()
             label_font.set_absolute_size(round(height * .44) * Pango.SCALE)
-            label = self._layout(label_font, f'<span foreground="{_hex(label_fg)}">{escape(content["label"])}</span>')
-            _, box = label.get_pixel_extents()
             pad = round(height * .42)
             # A slanted right edge, as broadcast lower thirds have.
             slant = round(height * .32)
-            span = box.width + 2 * pad + slant
+            parts = []
+            for text, fill, ink in boxes:
+                layout = self._layout(label_font, f'<span foreground="{_hex(ink)}">{escape(text)}</span>')
+                _, box = layout.get_pixel_extents()
+                parts.append((layout, box, fill, box.width + 2 * pad))
+            span = sum(part[3] for part in parts) + slant
 
             def draw(ctx):
-                ctx.move_to(0, 0)
-                ctx.line_to(span, 0)
-                ctx.line_to(span - slant, height)
-                ctx.line_to(0, height)
-                ctx.close_path()
-                ctx.set_source_rgb(*label_bg)
-                ctx.fill()
-                self._text(ctx, label, pad, (height - box.height) / 2)
+                left = 0
+                for index, (layout, box, fill, width) in enumerate(parts):
+                    last = index == len(parts) - 1
+                    right = left + width + (slant if last else 0)
+                    ctx.move_to(left, 0)
+                    ctx.line_to(right, 0)
+                    ctx.line_to(right - (slant if last else 0), height)
+                    ctx.line_to(left, height)
+                    ctx.close_path()
+                    ctx.set_source_rgb(*fill)
+                    ctx.fill()
+                    self._text(ctx, layout, left + pad, (height - box.height) / 2)
+                    left += width
             # Transparent beside the slant, so whichever crawl is passing shows through.
             self.label = (span, self._paint(span, height, None, draw))
         # Text is gone once it has passed behind the label box.
@@ -132,19 +152,25 @@ class Scene:
 
 
 class CrawlRenderer:
-    """Owns a crawl overlaycomposition element. show() may be called from any thread."""
+    """Owns a crawl overlaycomposition element. show() may be called from any thread.
+    on_cover(y) is called from the streaming thread whenever the lowest line the bar covers
+    from the top changes (0 while it is not at the top)."""
 
-    def __init__(self, gst, element, width, height):
+    def __init__(self, gst, element, width, height, on_cover=None):
         self.gst, self.element, self.width, self.height = gst, element, width, height
-        # A bar 7.5% of the picture high, inside the action-safe area.
+        # A bar 7.5% of the picture high, inside the action-safe area: along the bottom, or
+        # as far from the top edge.
         self.bar = _even(height * .075)
         self.y = height - _even(height * .035) - self.bar
+        self.top = _even(height * .035)
+        self.on_cover, self.cover = on_cover, 0
         # A multiple of 60 px/s (120 at 720p) moves whole pixels each frame at 30 and 60 fps.
         self.speed = max(60, round(height / 360) * 60)
         self.slide = int(SLIDE * gst.SECOND)
         self.lock = threading.Lock()
         self.generation = 0
-        self.scene = self.pending = self.tail = None
+        # after: the crawl that comes back at the other edge once this one has slid away.
+        self.scene = self.pending = self.tail = self.after = None
         self.t0 = None
         self.entered = 0
         # Slide state: when the bar started up (and from how far), when it started down.
@@ -171,7 +197,7 @@ class CrawlRenderer:
             self.generation += 1
             generation = self.generation
             if content is None:
-                self.pending = None
+                self.pending = self.after = None
                 if self.scene is not None:
                     self.hide_requested = True
                 return
@@ -187,6 +213,11 @@ class CrawlRenderer:
         with self.lock:
             if generation != self.generation:
                 return
+            if self.scene is not None and scene.position != self.scene.position:
+                # At the other edge: slide away here, then come back there.
+                self.after, self.pending, self.hide_requested = scene, None, True
+                return
+            self.after = None
             if restart or self.scene is None or self.hiding_at is not None or self.hide_requested:
                 if self.scene is None:
                     self.shown_at, self.rise_from = None, 0.
@@ -245,14 +276,25 @@ class CrawlRenderer:
             if visible <= 0:
                 if self.done_key is not None:
                     self.finished = self.done_key
-                self.scene = self.pending = self.tail = None
+                # Moved after its last pass: it does not come back.
+                after = self.after if self.after is not None and self.after.key != self.done_key else None
+                self.scene = self.pending = self.tail = self.after = None
                 self.shown_at = self.hiding_at = None
                 self.hide_requested, self.done_key, self.visible = False, None, 0.
-                self._block(True)
+                self._covers(0)
+                if after is not None:  # Moved: it slides in at the other edge from the next frame.
+                    self.scene, self.t0, self.entered, self.rise_from = after, None, 0, 0.
+                else:
+                    self._block(True)
                 return None
         self.visible = visible = max(0., visible)
         eased = visible * visible * (3 - 2 * visible)
-        y = self.y + round((1 - eased) * (self.height - self.y))
+        if scene.position == 'top':  # Down from above the top edge.
+            y = self.top - round((1 - eased) * (self.top + self.bar))
+            self._covers(max(0, y + self.bar))
+        else:
+            y = self.y + round((1 - eased) * (self.height - self.y))
+            self._covers(0)
         rectangles, left, blank = [], self.width, scene.blank
         if self.tail is not None:
             old, t0, last = self.tail
@@ -282,6 +324,15 @@ class CrawlRenderer:
             else:
                 composition.add_rectangle(rectangle)
         return composition
+
+    def _covers(self, line):
+        if line != self.cover:
+            self.cover = line
+            if self.on_cover is not None:
+                try:
+                    self.on_cover(line)
+                except Exception:
+                    logging.getLogger(__name__).exception('Crawl cover callback failed')
 
     def _copies(self, rectangles, scene, base, copies):
         """Adds the on-screen tiles of these copies; returns the leftmost x drawn."""

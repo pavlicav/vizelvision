@@ -586,7 +586,10 @@ class SourceCoordinator:
     def game_on(self, item):
         """The game a queue entry just taken carries, live or starting within the hour:
         the game itself for MLB or Sunday Ticket, else a national game on its channel."""
-        target = item.target or {}
+        return self.game_on_target(item.target or {})
+
+    def game_on_target(self, target):
+        """The game a source carries, live or starting within the hour (see game_on), or None."""
         if self.sports is None or target.get('source_id') in (LIBRARY_SOURCE_ID, IDENT_SOURCE_ID, 'off-air'):
             return None
         name = None

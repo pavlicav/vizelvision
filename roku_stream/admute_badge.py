@@ -95,6 +95,7 @@ class AdBadge:
         self.gst, self.element = gst, element
         self.size = _even(height * .17)
         self.x, self.y = round(width * .045), round(height * .05)
+        self.cover = 0               # the crawl's bar along the top reaches this far down: the badge goes below
         self.lock = threading.Lock()
         self.intervals = []          # [(from_ns, to_ns | None, Plate)] on the master clock
         self.plates = {}
@@ -147,7 +148,7 @@ class AdBadge:
                         if end is not None:
                             alpha = min(alpha, (end - pts) / fade)
                         rect = GstVideo.VideoOverlayRectangle.new_raw(
-                            plate.buffer, self.x, self.y, plate.width, plate.height,
+                            plate.buffer, self.x, max(self.y, self.cover), plate.width, plate.height,
                             GstVideo.VideoOverlayFormatFlags.PREMULTIPLIED_ALPHA)
                         if alpha < 1:
                             rect.set_global_alpha(max(0., alpha))

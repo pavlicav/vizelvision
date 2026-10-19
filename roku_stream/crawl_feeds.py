@@ -495,20 +495,45 @@ class ScoresFeed(Feed):
 # --------------------------------------------------------------------- station
 
 class ComingUpFeed(Feed):
-    """The next programs from the schedule projection (what will actually air)."""
+    """The next programs from the schedule projection (what will actually air), leaving out
+    what carries on the program on air from another source: its game, anywhere ahead (a
+    channel put on by hand, then the schedule's slot for the same game), or the same title
+    right after it. game_on(target) is the game a channel carries now (a dict with game_pk
+    and title), or None."""
     INTERVAL = 60
     STALE = 600
     LIMIT = 2
 
-    def __init__(self, projector, **kwargs):
+    def __init__(self, projector, game_on=None, **kwargs):
         super().__init__(**kwargs)
-        self.projector = projector
+        self.projector, self.game_on = projector, game_on
+
+    def _airing(self, segment):
+        """What is on now, by (league, game) and by title."""
+        games, titles = set(), {str(segment.get('title') or '').casefold()} - {''}
+        game = segment.get('game') or None
+        if not (game and game.get('game_pk') is not None) and self.game_on and segment.get('kind') not in ('off_air', 'recording'):
+            try:
+                game = self.game_on({k: v for k, v in (segment.get('target') or {}).items() if k in ('source_id', 'channel_id')})
+            except Exception:  # Unknown: every later program is coming up.
+                game = None
+        if game and game.get('game_pk') is not None:
+            games.add((game.get('league') or 'mlb', game['game_pk']))
+            titles |= {str(game.get('title') or '').casefold()} - {''}
+        return games, titles
 
     def fetch(self):
         now = datetime.fromtimestamp(self.clock(), timezone.utc)
         segments = self.projector.describe(now, now + timedelta(hours=12)).get('segments') or []
-        items = []
+        games, titles = self._airing(segments[0]) if segments else (set(), set())
+        items, carrying_on = [], True
         for segment in segments[1:]:
+            game = segment.get('game') or {}
+            if game.get('game_pk') is not None and ((game.get('league') or 'mlb'), game['game_pk']) in games:
+                continue
+            carrying_on = carrying_on and str(segment.get('title') or '').casefold() in titles
+            if carrying_on:
+                continue
             if segment.get('kind') in ('off_air', 'backup') or not segment.get('title'):
                 continue
             start = datetime.fromisoformat(str(segment['start']).replace('Z', '+00:00')).astimezone(EASTERN)

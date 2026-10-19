@@ -1,19 +1,25 @@
-"""The crawl's rotation, in the web app: which segment runs as a bulletin, and when.
+"""The crawl's rotation, in the web app: what runs as a bulletin, and when.
 
 Every two seconds the desk reads the crawl settings and master's status, works out
 the context (a program, a live game, the off-air card, the station ID) and does what
 that context's rule says:
 
 - always: one bulletin that loops every segment's items, renewed while it applies;
-- popups: one segment at a time, one pass, then the bar slides away. A segment is due
-  `every` minutes (with changed_only, only if its items changed); at most `per_hour`
-  pop-ups an hour, at least `gap_minutes` apart, the most overdue first;
+- popups: new items at once, on their own, marked NEW; everything else together, in one
+  round every `round_minutes` (at least `gap_minutes` after the bar last left). A round
+  carries each segment that is due by then: every `every` minutes, to the nearest round
+  (with changed_only, only if its items changed). One pass, then the bar slides away;
 - quiet: no bulletins.
 
+A live game is what the schedule says is on, or a game on the channel master shows (a
+channel put on by hand that carries Sunday Night Football is a game too). During a game of
+one of `top_leagues` (football, whose score bugs sit along the bottom) the bar runs along
+the top: the desk tells the worker, with a lease it renews.
+
 Feed options (crawl.FeedSettings, crawl-feeds.json) add per segment: the contexts it may
-air in at all; repeat (off: no timer); and new_now, which pops up items that are news at
-once (one pass, only those items), ahead of the timer, the hourly limit and the gap,
-though never over a running pop-up or important news.
+air in at all; repeat (off: never in a round); and new_now, which pops up items that are
+news at once (one pass, only those items), ahead of the rounds and the gap, though never
+over a running pop-up or important news.
 
 Every item has an id (crawl_feeds.py; the worker's alerts by their EAS or NWS id), and the
 ledger (crawl_ledger.py) keeps when each was first seen and each time it aired, including
@@ -40,6 +46,9 @@ from .crawl_ledger import CrawlLedger
 from .errors import ConfigError
 
 LOOP_LEASE, LOOP_RENEW, BULLETIN_LEASE = 30, 10, 600
+POSITION_RENEW = 20  # the worker's position lease is master_worker.CRAWL_POSITION_LEASE (60 s)
+ROUND_LABEL, NEW_FLAG = 'UPDATE', 'NEW'
+ROUND_ITEMS = 40     # the most a bulletin carries
 HISTORY = 40
 HORIZON = 3 * 3600  # how far plan() looks ahead: past a game, usually
 PLAN_SLOTS = 40
@@ -82,24 +91,30 @@ class CrawlDesk:
     TICK = 2
 
     def __init__(self, settings, master, *, feeds=None, production=None, projector=None, feed_options=None,
-                 ledger=None, clock=time.time):
+                 ledger=None, game_on=None, clock=time.time):
         self.settings, self.master = settings, master
         self.feed_options = feed_options or (lambda: crawl.FeedSettings.validate({}))
         self.feeds = feeds or {}
         self.production, self.projector = production, projector
+        # game_on(target): the league of a game the source carries now, or None.
+        self.game_on = game_on
         self.clock = clock
         self.ledger = ledger if ledger is not None else CrawlLedger(clock=clock)
         self.lock = threading.Lock()
         self.stopping = threading.Event()
         self.thread = None
         self.last_aired, self.fingerprints = {}, {}
+        self.last_round = 0.
         self.cycle = 0
         self.history = []
         self.running = None
         self.last_end = 0.
         self.forced = None
         self.view = {'context': None, 'mode': None, 'error': None}
-        self.game_checked, self.game_on = 0., False
+        self.flags = False                                   # the worker draws NEW flags (and takes positions)
+        self.game_checked, self.game_key, self.league = 0., None, None
+        self.channel_game = (None, 0., None)                 # (source and channel, when looked, its game's league)
+        self.position_sent = (None, 0.)                      # what the worker was told, and when
         self.loop_ids = set()                                # what the running loop carries
         self.layer_ids = {'important': set(), 'override': set()}  # what the worker's layers carry
         self.snapshot = None                                 # the last tick's view, for plan() and register()
@@ -108,27 +123,63 @@ class CrawlDesk:
 
     # ------------------------------------------------------------------ context
 
-    def _game(self, now):
-        """Whether the schedule projection says a game holds master now (cached 15 s)."""
-        if self.projector is None:
-            return False
-        if now - self.game_checked > 15:
-            self.game_checked = now
+    def _game(self, state, now):
+        """The league of the game on master now ('' when the schedule says a game but not
+        whose), or None: what the schedule projection says is on, else a game on the channel
+        master shows. Checked every 15 s, or at once when master's input changes; the channel's
+        games (sports.games_on: every league's scoreboard) every 2 minutes, 1 during a game."""
+        target = state.get('on_air') or {}
+        key = (target.get('source_id'), target.get('channel_id'), target.get('id'))
+        if now - self.game_checked <= 15 and key == self.game_key:
+            return self.league
+        self.game_checked, self.game_key, league = now, key, None
+        if self.projector is not None:
             try:
                 moment = datetime.fromtimestamp(now, timezone.utc)
                 segments = self.projector.describe(moment, moment + timedelta(hours=1)).get('segments') or []
-                self.game_on = bool(segments) and segments[0].get('kind') == 'game'
+                if segments and (segments[0].get('kind') == 'game' or segments[0].get('game')):
+                    league = (segments[0].get('game') or {}).get('league') or ''
             except Exception as exc:
                 logging.getLogger(__name__).debug('Crawl desk cannot read the schedule: %s', exc)
-                self.game_on = False
-        return self.game_on
+        if not league and self.game_on is not None and target.get('source_id'):
+            # A channel put on by hand, or a scheduled game the schedule does not name.
+            channel = key[:2]
+            looked, at, found = self.channel_game
+            if looked != channel or now - at > (60 if found else 120):
+                try:
+                    found = self.game_on({k: target[k] for k in ('source_id', 'channel_id') if k in target})
+                except Exception as exc:
+                    logging.getLogger(__name__).debug('Crawl desk cannot tell the game on air: %s', exc)
+                    found = None
+                self.channel_game = (channel, now, found)
+            league = found or league
+        self.league = league
+        return league
 
     def context(self, state, now):
         if (state.get('ident') or {}).get('on_air'):
             return 'ident'
         if not state.get('on_air'):
             return 'off_air'
-        return 'game' if self._game(now) else 'program'
+        return 'game' if self._game(state, now) is not None else 'program'
+
+    def position(self, settings, context):
+        """Where the bar runs: along the top during a game of one of the top leagues."""
+        top = context == 'game' and self.league and self.league in settings['rules']['top_leagues']
+        return 'top' if top else 'bottom'
+
+    def _place(self, position, crawl_state, now):
+        """Tells the worker where the bar runs, when that changes and to renew its lease."""
+        if 'position' not in crawl_state:
+            return  # A worker from before positions: it would take the command as a cleared bulletin.
+        sent, at = self.position_sent
+        if position == sent and crawl_state.get('position') == position and now - at < POSITION_RENEW:
+            return
+        if position == 'bottom' and sent == 'bottom' and crawl_state.get('position') == 'bottom':
+            return  # The bottom needs no lease.
+        result = self.master.request('crawl', {'position': position})
+        if result.get('accepted'):
+            self.position_sent = (position, now)
 
     def _radio(self):
         try:
@@ -210,22 +261,34 @@ class CrawlDesk:
             named.append({**item, 'id': _summary_id(summary), 'segment': 'alerts', **self._meta(summary)})
         return named
 
-    def _content(self, segment, items, *, loop=False):
-        name, label, _ = crawl.SEGMENTS[segment] if segment in crawl.SEGMENTS else ('', 'VIZELVISION', 0)
-        return {'key': (f'loop-{segment}' if loop else f'{segment}-{uuid.uuid4().hex[:10]}'),
-                'label': label, 'style': 'watch' if segment == 'alerts' else 'station',
-                'passes': 0 if loop else 1, 'lease': LOOP_LEASE if loop else BULLETIN_LEASE,
-                'items': [_air(item) for item in items[:40]]}
+    def _content(self, segment, items, *, loop=False, new=False):
+        _, label, _ = crawl.SEGMENTS[segment] if segment in crawl.SEGMENTS else ('', 'VIZELVISION', 0)
+        # New items stand out: their own colour (weather alerts keep theirs) and a NEW box,
+        # once the worker draws them (a worker from before positions refuses both).
+        new = new and self.flags
+        content = {'key': (f'loop-{segment}' if loop else f'{segment}-{uuid.uuid4().hex[:10]}'),
+                   'label': ROUND_LABEL if segment == 'round' else label,
+                   'style': 'watch' if segment == 'alerts' else 'new' if new else 'station',
+                   'passes': 0 if loop else 1, 'lease': LOOP_LEASE if loop else BULLETIN_LEASE,
+                   'items': [_air(item) for item in items[:ROUND_ITEMS]]}
+        if new:
+            content['flag'] = NEW_FLAG
+        return content
 
     def allowed(self, segment, settings, options, context):
         return settings['segments'][segment]['enabled'] and context in options['segments'][segment]['contexts']
 
+    @staticmethod
+    def _labelled(segment, items):
+        """Items among other segments' (a loop, a round): a bare one is tagged with its segment's label."""
+        label = crawl.SEGMENTS[segment][1]
+        return [{**item, 'tag': item['tag'] or label} for item in items]
+
     def _loop_items(self, settings, options, crawl_state, context):
         items = []
-        for segment, (_, label, _) in crawl.SEGMENTS.items():
+        for segment in crawl.SEGMENTS:
             if self.allowed(segment, settings, options, context):
-                listed = self.items(segment, settings, crawl_state, context)
-                items += [{**item, 'tag': item['tag'] or label} for item in listed]
+                items += self._labelled(segment, self.items(segment, settings, crawl_state, context))
         return items
 
     def _ready(self, segment):
@@ -234,9 +297,10 @@ class CrawlDesk:
 
     # ------------------------------------------------------------------ sending
 
-    def _send(self, segment, items, context, *, forced=False, new=False, loop=False, key=None):
-        items = items[:40]
-        content = self._content(segment, items, loop=loop)
+    def _send(self, segment, items, context, *, forced=False, new=False, loop=False, key=None, parts=None):
+        """parts: a round's [(segment, its items)]; items is then all of them, labelled."""
+        items = items[:ROUND_ITEMS]
+        content = self._content(segment, items, loop=loop, new=new)
         if key:
             content['key'] = key
         result = self.master.request('crawl', {'bulletin': content})
@@ -249,6 +313,7 @@ class CrawlDesk:
         if not loop or not self.running or self.running['key'] != content['key']:
             self.history = (self.history + [{
                 'key': content['key'], 'segment': segment, 'label': content['label'], 'context': context,
+                'segments': [part for part, _ in parts] if parts else [segment],
                 'started': now, 'ended': None, 'how': None, 'forced': forced, 'loop': loop, 'new': new,
                 'ids': [item['id'] for item in items], 'text': crawl.plain(content)[:240]}])[-HISTORY:]
         ids = {item['id'] for item in items}
@@ -262,10 +327,16 @@ class CrawlDesk:
             self.loop_ids = ids
         else:
             self.ledger.aired(items, key=content['key'], context=context, layer='rotation', forced=forced, new=new,
-                              segment=segment)
+                              segment=None if parts else segment)
         self.running = {'key': content['key'], 'segment': segment, 'loop': loop, 'renewed': now,
                         'fingerprint': fingerprint, 'started': now, 'ids': sorted(ids)}
-        if not loop:
+        if parts is not None:
+            for part, part_items in parts:
+                self.last_aired[part], self.fingerprints[part] = now, _fingerprint(part_items)
+                if part == 'messages':
+                    self.cycle += 1
+            self.last_round = now
+        elif not loop:
             if not new:  # A new item's pop-up leaves the segment's timer alone.
                 self.last_aired[segment] = now
                 self.fingerprints[segment] = fingerprint
@@ -307,31 +378,54 @@ class CrawlDesk:
 
     # ------------------------------------------------------------------ the rotation
 
-    def due(self, settings, crawl_state, context, now, feed_options=None):
-        """Segments that could pop up, most overdue first: [(segment, seconds overdue, items)]."""
+    @staticmethod
+    def _round_parts(settings, options, at, last_aired, fingerprints, listed):
+        """What a round at `at` carries: [(segment, items)] in segment order, at most
+        ROUND_ITEMS items, the most overdue segments first if they do not all fit. A segment
+        is due every `every` minutes, to the nearest round (so a 30-minute segment rides every
+        other 15-minute round); with changed_only, only if its items changed. listed(segment)
+        gives the segment's items here and now ([] where it may not air)."""
+        half = settings['rules']['round_minutes'] * 30
+        due = []
+        for segment, seg in settings['segments'].items():
+            if not options['segments'][segment]['repeat']:
+                continue
+            wait = seg['every'] * 60
+            overdue = at - last_aired.get(segment, 0) - wait
+            if overdue < -half:
+                continue
+            items = listed(segment)
+            if not items or (seg['changed_only'] and fingerprints.get(segment) == _fingerprint(items)):
+                continue
+            due.append((-overdue / wait, segment, items))
+        parts, room = [], ROUND_ITEMS
+        for _, segment, items in sorted(due, key=lambda entry: entry[0]):
+            if room > 0:
+                parts.append((segment, items[:room]))
+                room -= len(parts[-1][1])
+        order = list(crawl.SEGMENTS)
+        return sorted(parts, key=lambda part: order.index(part[0]))
+
+    def round(self, settings, crawl_state, context, now, feed_options=None):
+        """What a round now would carry: [(segment, items)] (see _round_parts)."""
         feed_options = feed_options or self.feed_options()
-        found = []
-        for segment, options in settings['segments'].items():
-            if not self.allowed(segment, settings, feed_options, context) or not feed_options['segments'][segment]['repeat']:
-                continue
-            wait = options['every'] * 60
-            overdue = now - self.last_aired.get(segment, 0) - wait
-            if overdue < 0:
-                continue
-            items = self.items(segment, settings, crawl_state, context, rotate=True)
-            if not items:
-                continue
-            if options['changed_only'] and self.fingerprints.get(segment) == _fingerprint(items):
-                continue
-            found.append((segment, overdue / wait, items))
-        found.sort(key=lambda entry: -entry[1])
-        return found
+
+        def listed(segment):
+            if not self.allowed(segment, settings, feed_options, context):
+                return []
+            return self.items(segment, settings, crawl_state, context, rotate=True)
+        return self._round_parts(settings, feed_options, now, self.last_aired, self.fingerprints, listed)
+
+    def next_round(self, settings):
+        """When the next round may start: a round's length after the last, and the gap after the bar left."""
+        rules = settings['rules']
+        return max(self.last_round + rules['round_minutes'] * 60, self.last_end + rules['gap_minutes'] * 60)
 
     def tick(self):
         inputs = self._tick()
         if inputs is not None:
             self.snapshot = {**inputs, 'last_aired': dict(self.last_aired), 'fingerprints': dict(self.fingerprints),
-                             'last_end': self.last_end, 'cycle': self.cycle,
+                             'last_end': self.last_end, 'last_round': self.last_round, 'cycle': self.cycle,
                              'running': dict(self.running) if self.running else None,
                              'loop_ids': set(self.loop_ids), 'layer_ids': {k: set(v) for k, v in self.layer_ids.items()},
                              'history': [dict(entry) for entry in self.history]}
@@ -362,9 +456,12 @@ class CrawlDesk:
         context = self.context(state, now)
         mode = settings['rules'][context]
         higher = crawl_state.get('kind') in ('important', 'override')
-        recent = [e for e in self.history if not e['loop'] and not e['forced'] and now - e['started'] < 3600]
+        self.flags = 'position' in crawl_state
+        position = self.position(settings, context)
+        self._place(position, crawl_state, now)  # Before the layers: important news moves too.
         self.view = {'context': context, 'mode': mode, 'error': None, 'higher': crawl_state.get('kind') if higher else None,
-                     'popups_this_hour': len(recent)}
+                     'league': self.league if context == 'game' else None, 'position': position,
+                     'next_round': self.next_round(settings) if mode == 'popups' else None}
         with self.lock:
             forced, self.forced = self.forced, None
         options = self.feed_options()
@@ -413,15 +510,15 @@ class CrawlDesk:
             self._clear()  # A loop from another context.
         if mode == 'quiet':
             return inputs
-        for segment, items in new.items():  # New items first, at once.
+        for segment, items in new.items():  # New items first, at once, on their own.
             if self._send(segment, items, context, new=True):
                 return inputs
-        rules = settings['rules']
-        if now - self.last_end < rules['gap_minutes'] * 60 or len(recent) >= rules['per_hour']:
+        if now < self.next_round(settings):
             return inputs
-        for segment, _, items in self.due(settings, crawl_state, context, now, options):
-            if self._send(segment, items, context):
-                return inputs
+        parts = self.round(settings, crawl_state, context, now, options)
+        if parts:  # Everything else that is due, together.
+            self._send('round', [item for segment, items in parts for item in self._labelled(segment, items)],
+                       context, parts=parts)
         return inputs
 
     # ------------------------------------------------------------------ control
@@ -488,9 +585,11 @@ class CrawlDesk:
 
     def _duration(self, segment, items, history):
         """How long a pop-up of these items runs: what this segment's last passes took, else
-        from its length (Nimbus Sans Bold at 720p is about 16 px a character, at 120 px/s)."""
+        (and always for a round, which carries something different each time) from its length:
+        Nimbus Sans Bold at 720p is about 16 px a character, at 120 px/s."""
         runs = [entry['ended'] - entry['started'] for entry in history
-                if entry['segment'] == segment and entry['how'] == 'done' and entry['ended'] and not entry['loop']][-5:]
+                if segment != 'round' and entry['segment'] == segment and entry['how'] == 'done' and entry['ended']
+                and not entry['loop']][-5:]
         if runs:
             return max(5., statistics.median(runs))
         chars = sum(len(item.get('tag') or '') + len(item.get('heading') or '') + len(item.get('text') or '') + 6
@@ -541,8 +640,9 @@ class CrawlDesk:
 
     def plan(self, snap=None, horizon=HORIZON):
         """Plays the rotation's rules forward: {spans, slots}, where each slot is a pop-up
-        [{at, segment, ids, duration, context, new}] and a loop span lists what it carries.
-        It assumes the items stay as they are and nothing new arrives."""
+        [{at, segment, segments, ids, duration, context, new}] (segment 'round' for a round,
+        segments what it carries) and a loop span lists what it carries. It assumes the items
+        stay as they are and nothing new arrives."""
         snap = snap or self.snapshot
         if not snap:
             return {'spans': [], 'slots': [], 'until': None}
@@ -553,8 +653,7 @@ class CrawlDesk:
         spans = self.spans(snap, end)
         last_aired, fingerprints = dict(snap['last_aired']), dict(snap['fingerprints'])
         history = snap['history']
-        recent = sorted(e['started'] for e in history if not e['loop'] and not e['forced'] and now - e['started'] < 3600)
-        last_end, cycle = snap['last_end'], snap['cycle']
+        last_end, last_round, cycle = snap['last_end'], snap['last_round'], snap['cycle']
         crawl_state = snap['crawl_state']
         higher_until = None
         if snap['higher'] == 'important':
@@ -565,7 +664,7 @@ class CrawlDesk:
         running = snap['running']
         if running and not running['loop']:
             started = next((e['started'] for e in history if e['key'] == running['key']), now)
-            items = [i for i in snap['listings'].get(running['segment'], []) if i['id'] in running['ids']]
+            items = [i for listed in snap['listings'].values() for i in listed if i['id'] in running['ids']]
             t = max(now + 3, started + self._duration(running['segment'], items, history))
             last_end = t
         muted = self.ledger.muted()
@@ -622,50 +721,40 @@ class CrawlDesk:
             if news:
                 segment, items = news
                 duration = self._duration(segment, items, history)
-                slots.append({'at': t, 'segment': segment, 'ids': [i['id'] for i in items], 'duration': duration,
-                              'context': context, 'new': True})
+                slots.append({'at': t, 'segment': segment, 'segments': [segment], 'ids': [i['id'] for i in items],
+                              'duration': duration, 'context': context, 'new': True})
                 sent = {i['id'] for i in items}
                 pending[segment] = [i for i in pending[segment] if i['id'] not in sent]
                 pending = {k: v for k, v in pending.items() if v}
-                recent.append(t)
                 last_end = t = t + duration
                 continue
-            earliest = max(t, last_end + rules['gap_minutes'] * 60)
-            window = [start for start in recent if start > earliest - 3600]
-            if len(window) >= rules['per_hour']:
-                earliest = max(earliest, window[-rules['per_hour']] + 3600)
-            if earliest >= span['end']:
-                t = span['end']
-                continue
-            candidates = []
-            for segment, seg in segments.items():
-                if not options['segments'][segment]['repeat']:
-                    continue
-                items = applicable(segment, context)
-                if segment == 'messages' and items and settings['cycle_messages']:
-                    items = [items[cycle % len(items)]]
-                if not items or (seg['changed_only'] and fingerprints.get(segment) == _fingerprint(items)):
-                    continue
-                due = last_aired.get(segment, 0) + seg['every'] * 60
-                candidates.append((max(due, earliest), segment, items))
-            if not candidates:
-                t = span['end']
-                continue
-            at = min(entry[0] for entry in candidates)
+            at = max(t, last_round + rules['round_minutes'] * 60, last_end + rules['gap_minutes'] * 60)
             if at >= span['end']:
                 t = span['end']
                 continue
-            wait = lambda segment: segments[segment]['every'] * 60
-            _, segment, items = max((entry for entry in candidates if entry[0] <= at),
-                                    key=lambda entry: (at - last_aired.get(entry[1], 0) - wait(entry[1])) / wait(entry[1]))
-            duration = self._duration(segment, items, history)
-            slots.append({'at': at, 'segment': segment, 'ids': [i['id'] for i in items], 'duration': duration,
-                          'context': context, 'new': False})
-            last_aired[segment], fingerprints[segment] = at, _fingerprint(items)
-            if segment == 'messages':
-                cycle += 1
-            recent.append(at)
-            last_end = t = at + duration
+
+            def listed(segment, context=context):
+                items = applicable(segment, context)
+                return [items[cycle % len(items)]] if segment == 'messages' and items and settings['cycle_messages'] else items
+            parts = self._round_parts(settings, options, at, last_aired, fingerprints, listed)
+            if not parts:
+                # Nothing due yet: the round comes when the first segment is (to the nearest round).
+                half = rules['round_minutes'] * 30
+                waits = [last_aired.get(segment, 0) + seg['every'] * 60 - half for segment, seg in segments.items()
+                         if options['segments'][segment]['repeat'] and listed(segment)
+                         and not (seg['changed_only'] and fingerprints.get(segment) == _fingerprint(listed(segment)))]
+                t = max(min(waits), at + 1) if waits and min(waits) < span['end'] else span['end']
+                continue
+            items = [i for segment, part in parts for i in self._labelled(segment, part)]
+            duration = self._duration('round', items, history)
+            slots.append({'at': at, 'segment': 'round', 'segments': [segment for segment, _ in parts],
+                          'ids': [i['id'] for i in items], 'duration': duration, 'context': context, 'new': False})
+            for segment, part in parts:
+                last_aired[segment], fingerprints[segment] = at, _fingerprint(part)
+                if segment == 'messages':
+                    cycle += 1
+            last_round, last_end = at, at + duration
+            t = last_end
         return {'spans': spans, 'slots': slots, 'loops': loops, 'until': end, 'higher_until': higher_until}
 
     # ------------------------------------------------------------------ the register
@@ -684,7 +773,8 @@ class CrawlDesk:
         if segment == 'cairo' and (context != 'off_air' or not snap['radio']):
             return 'Airs only over the off-air card, while its audio is Cairo Radio'
         if not opt['repeat']:
-            return 'Aired; repeat is off' if aired else 'Repeat is off, and it was listed before it counted as new'
+            return ('Aired; repeat is off, so it is not in the rounds' if aired
+                    else 'Repeat is off, and it was listed before it counted as new')
         if seg['changed_only'] and aired and snap['fingerprints'].get(segment) == _fingerprint(
                 snap['listings'].get(segment) or []):
             return 'Repeats when the segment changes'
@@ -804,13 +894,13 @@ class CrawlDesk:
                 elif ident in looping:
                     e.update(status='looping', why=f"In the {crawl.CONTEXTS.get(snap['context'], '').lower()} loop")
                 elif slot and (not loop or slot['at'] <= loop['start']):
-                    how = 'new' if slot['new'] else 'popup'
+                    how = 'new' if slot['new'] else 'round'
                     if slot['new']:
-                        why = 'New: pops up at once, ahead of the timer'
+                        why = 'New: pops up at once, on its own, marked NEW'
                     elif e['airing'] == 'first':
-                        why = f"First airing, in {e['segment_name']}'s next pop-up"
+                        why = 'First airing, in the next update round'
                     else:
-                        why = f"Repeats with {e['segment_name']} every {settings['segments'][segment]['every']} min"
+                        why = f"Repeats in the update round, about every {settings['segments'][segment]['every']} min"
                     if slot['context'] != snap['context'] and snap['context'] in AFTER:
                         why += AFTER[snap['context']]
                     e.update(status='next', next_at=slot['at'], next_how=how, why=why)
@@ -856,7 +946,8 @@ class CrawlDesk:
         planned = {}
         try:
             for slot in self.plan()['slots']:
-                planned.setdefault(slot['segment'], slot['at'])
+                for segment in slot.get('segments') or [slot['segment']]:
+                    planned.setdefault(segment, slot['at'])
         except Exception as exc:  # The plan is a forecast: never a reason to fail the status.
             logging.getLogger(__name__).debug('Crawl plan failed: %s', exc)
         segments = {}

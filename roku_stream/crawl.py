@@ -1,4 +1,5 @@
-"""The crawl: a bar of scrolling text along the bottom of master output.
+"""The crawl: a bar of scrolling text along the bottom of master output (along the top
+during the games of chosen leagues, whose score bugs sit at the bottom).
 
 Three layers can use it, highest first:
 
@@ -6,12 +7,14 @@ Three layers can use it, highest first:
    alerts that are immediate or expected) and the one manual important message. It
    runs continuously, over everything.
 2. Override: the operator's message, continuously, until cleared or its end time.
-3. Bulletins: the rotation (crawl_desk.py, in the web app) sends one segment at a time
-   (transit, scores, …). A bulletin runs its passes and the bar slides away.
+3. Bulletins: the rotation (crawl_desk.py, in the web app) sends new items as they come,
+   and everything else together in a round every so often. A bulletin runs its passes and
+   the bar slides away.
 
 The worker owns layers 1 and 2, so emergency alerts air even if the web app is down.
 Settings live in crawl.json beside production.json: the web app writes it, the worker
-reads it every second. crawl_render.py draws the pixels.
+reads it every second. Where the bar runs (bottom or top) comes from the rotation too, with
+a lease, so a stopped web app leaves it at the bottom. crawl_render.py draws the pixels.
 """
 from __future__ import annotations
 
@@ -47,6 +50,7 @@ SEGMENTS = {
 # override only; they are never held back).
 CONTEXTS = {'program': 'Programs', 'game': 'Live games', 'off_air': 'Off-air card', 'ident': 'Station ID'}
 MODES = ('always', 'popups', 'quiet')
+POSITIONS = ('bottom', 'top')
 DEFAULTS = {
     'eas': True,             # EAS alerts for the watched area
     'eas_tests': False,      # include required weekly/monthly tests (as rotation alerts)
@@ -56,8 +60,11 @@ DEFAULTS = {
     'nws_dismissed': [],     # NWS alert IDs taken out of the crawl
     'important': {'text': '', 'label': 'IMPORTANT', 'until': None},
     'override': {'text': '', 'label': '', 'style': 'station', 'until': None},
+    # Pop-ups: new items at once; everything else together, a round every round_minutes, at
+    # least gap_minutes after the bar last left. During a game of a top_leagues league the bar
+    # runs along the top.
     'rules': {'program': 'popups', 'game': 'quiet', 'off_air': 'always', 'ident': 'quiet',
-              'per_hour': 4, 'gap_minutes': 5},
+              'round_minutes': 15, 'gap_minutes': 5, 'top_leagues': ['nfl', 'ncaaf']},
     'segments': {key: {'enabled': True, 'every': every, 'changed_only': False}
                  for key, (_, _, every) in SEGMENTS.items()},
     'cycle_messages': True,  # one station message per bulletin, in turn
@@ -65,6 +72,9 @@ DEFAULTS = {
     'teams': [],             # followed teams until 2026-10-17; favorites.json has them now (favorites.py)
 }
 STYLES = ('station', 'urgent')
+# What a bulletin may look like: the override's styles, the alerts' and the rotation's new items.
+BULLETIN_STYLES = ('station', 'urgent', 'warning', 'watch', 'advisory', 'test', 'new')
+BULLETIN_KEYS = {'key', 'label', 'style', 'passes', 'items', 'lease'}
 TEXT_LIMIT, LABEL_LIMIT, TAG_LIMIT, DISMISSED_LIMIT = 500, 24, 20, 50
 MESSAGE_LIMIT, TEAM_LIMIT = 50, 80
 # The decoder's own severity words, most urgent first.
@@ -211,15 +221,29 @@ class CrawlSettings:
                 raise ConfigError('The override style must be station or urgent')
             result[layer] = given
         rules = result['rules']
-        if not isinstance(rules, dict) or not set(rules) <= set(DEFAULTS['rules']):
+        if not isinstance(rules, dict):
+            raise ConfigError('rules take ' + ', '.join(DEFAULTS['rules']))
+        rules = dict(rules)
+        if 'per_hour' in rules:
+            # Until 2026-10-18 pop-ups went one segment at a time, so many an hour: the rounds
+            # that replaced them come as often.
+            per_hour = rules.pop('per_hour')
+            if type(per_hour) is int and per_hour > 0:
+                rules.setdefault('round_minutes', min(120, max(5, round(60 / per_hour))))
+        if not set(rules) <= set(DEFAULTS['rules']):
             raise ConfigError('rules take ' + ', '.join(DEFAULTS['rules']))
         rules = result['rules'] = {**DEFAULTS['rules'], **rules}
         for context in CONTEXTS:
             if rules[context] not in MODES:
                 raise ConfigError(f'rules.{context} must be always, popups or quiet')
-        for key, low, high in (('per_hour', 1, 60), ('gap_minutes', 0, 120)):
+        for key, low, high in (('round_minutes', 5, 120), ('gap_minutes', 0, 120)):
             if type(rules[key]) is not int or not low <= rules[key] <= high:
                 raise ConfigError(f'rules.{key} must be a whole number from {low} to {high}')
+        leagues = rules['top_leagues']
+        if (not isinstance(leagues, list) or len(set(leagues)) != len(leagues)
+                or any(league not in LEAGUES for league in leagues)):
+            raise ConfigError('rules.top_leagues must list leagues: ' + ', '.join(LEAGUES))
+        rules['top_leagues'] = [league for league in LEAGUES if league in leagues]
         segments = result['segments']
         if not isinstance(segments, dict) or not set(segments) <= set(SEGMENTS):
             raise ConfigError('segments are ' + ', '.join(SEGMENTS))
@@ -258,6 +282,9 @@ class CrawlSettings:
                 value['segments'] = {key: {k: v for k, v in options.items() if k in ('enabled', 'every', 'changed_only')}
                                      if isinstance(options, dict) else options
                                      for key, options in value['segments'].items() if key in SEGMENTS}
+            if isinstance(value.get('rules'), dict):
+                value['rules'] = {key: given for key, given in value['rules'].items()
+                                  if key in DEFAULTS['rules'] or key == 'per_hour'}
         return self.validate(value)
 
     def _write(self, value):
@@ -652,12 +679,13 @@ def compose(settings, important_items, important_label, now):
 
 
 def validate_bulletin(value):
-    """A bulletin from the rotation, as the worker accepts it."""
-    if not isinstance(value, dict) or set(value) != {'key', 'label', 'style', 'passes', 'items', 'lease'}:
-        raise ConfigError('A bulletin has key, label, style, passes, items and lease')
+    """A bulletin from the rotation, as the worker accepts it. Its flag ("NEW") is a box
+    of its own in front of the label."""
+    if not isinstance(value, dict) or not BULLETIN_KEYS <= set(value) <= BULLETIN_KEYS | {'flag'}:
+        raise ConfigError('A bulletin has key, label, style, passes, items and lease, and may have a flag')
     if not isinstance(value['key'], str) or not re.fullmatch(r'[a-z0-9_-]{1,64}', value['key']):
         raise ConfigError('A bulletin key is up to 64 lowercase letters, digits, - and _')
-    if value['style'] not in ('station', 'urgent', 'warning', 'watch', 'advisory', 'test'):
+    if value['style'] not in BULLETIN_STYLES:
         raise ConfigError('Unknown bulletin style')
     if type(value['passes']) is not int or not 0 <= value['passes'] <= 5:
         raise ConfigError('passes must be 0 (until replaced) to 5')
@@ -674,7 +702,14 @@ def validate_bulletin(value):
                       'heading': _line(item.get('heading', ''), 'A heading', 80),
                       'text': _line(item['text'], 'Bulletin text', 2000, required=True)})
     return {'kind': 'bulletin', 'key': value['key'], 'label': _line(value['label'], 'The label', LABEL_LIMIT),
-            'style': value['style'], 'passes': value['passes'], 'items': clean, 'lease': value['lease']}
+            'flag': _line(value.get('flag', ''), 'The flag', 12), 'style': value['style'], 'passes': value['passes'],
+            'items': clean, 'lease': value['lease']}
+
+
+def validate_position(value):
+    if value not in POSITIONS:
+        raise ConfigError('The crawl position is bottom or top')
+    return value
 
 
 def plain(content):

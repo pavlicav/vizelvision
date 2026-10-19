@@ -152,7 +152,9 @@ class MasterMedia:
         self.pipeline.get_by_name('caption_pcm').connect('new-sample', self._caption_audio)
         from .crawl_render import CrawlRenderer  # Needs gi; imported only with a real pipeline.
         from .admute_badge import AdBadge
-        self.crawl = CrawlRenderer(gst, self.pipeline.get_by_name('crawl'), width, height)
+        self.clock_overlay = self.pipeline.get_by_name('clock')
+        self.clock_ypad = round(height * .05)
+        self.crawl = CrawlRenderer(gst, self.pipeline.get_by_name('crawl'), width, height, on_cover=self._crawl_cover)
         self.badge = AdBadge(gst, self.pipeline.get_by_name('adbadge'), width, height)
         self.bed = BedGain(gst, self.pipeline.get_by_name('bed_gain'))
         self.audio_slot = 0
@@ -194,6 +196,15 @@ class MasterMedia:
     def set_crawl(self, content, restart=True):
         """A crawl (crawl.compose() or a bulletin), or None to slide the bar away."""
         self.crawl.show(content, restart=restart)
+
+    def _crawl_cover(self, line):
+        """The crawl's bar along the top reaches down to line (0: it is not there). The
+        station clock and the AD badge, top right and left, step below it as it slides."""
+        below = line + 2 * round(self.height * .0075) if line else 0
+        self.clock_overlay.set_property('ypad', max(self.clock_ypad, below))
+        badge = getattr(self, 'badge', None)
+        if badge is not None:
+            badge.cover = below
 
     def configure_captions(self, settings):
         self.captions.configure(settings)

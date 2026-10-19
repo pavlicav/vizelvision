@@ -82,7 +82,8 @@ class SettingsTests(Eastern):
         self.assertEqual((value['dismissed'], value['nws_dismissed']), ([9], ['urn:x']))
         self.settings.dismiss('nws', 'urn:x', False)
         self.assertEqual(self.settings.read()['nws_dismissed'], [])
-        for bad in ({'rules': {'game': 'loud'}}, {'rules': {'per_hour': 0}}, {'segments': {'tv': {}}},
+        for bad in ({'rules': {'game': 'loud'}}, {'rules': {'round_minutes': 0}}, {'rules': {'top_leagues': ['xfl']}},
+                    {'rules': {'top_leagues': 'nfl'}}, {'segments': {'tv': {}}},
                     {'segments': {'scores': {'every': 1}}}, {'teams': ['xfl:1']}, {'teams': ['nhl:23', 'nhl:23']},
                     {'override': {'text': 'two\nlines'}}, {'important': {'until': 'soon'}}, {'dismissed': [1]},
                     {'messages': [{'text': 'x', 'days': []}]}, {'messages': [{'text': 'x', 'start': '25:00'}]},
@@ -91,6 +92,22 @@ class SettingsTests(Eastern):
                 self.settings.update(bad)
         with self.assertRaises(ConfigError):
             self.settings.dismiss('eas', 'nine')
+
+    def test_pop_ups_an_hour_become_a_round_as_often(self):
+        self.settings.path.write_text(json.dumps({'rules': {'per_hour': 3, 'gap_minutes': 5, 'game': 'popups'}}))
+        rules = self.settings.read()['rules']
+        self.assertEqual((rules['round_minutes'], rules['gap_minutes'], rules['game']), (20, 5, 'popups'))
+        self.assertEqual(rules['top_leagues'], ['nfl', 'ncaaf'])  # football's score bugs sit at the bottom
+        self.settings.update({'rules': {'round_minutes': 30}})
+        self.settings.update({'rules': {'per_hour': 12}})  # a page from before rounds: ignored
+        self.assertEqual(self.settings.read()['rules']['round_minutes'], 30)
+        self.assertNotIn('per_hour', json.loads(self.settings.path.read_text())['rules'])
+        rules = self.settings.update({'rules': {'top_leagues': ['nba', 'nfl']}})['rules']
+        self.assertEqual(rules['top_leagues'], ['nfl', 'nba'])
+        # The worker reads rules leniently too: a key from a newer web app is no reason to stop.
+        self.settings.path.write_text(json.dumps({'rules': {'round_minutes': 15, 'from_the_future': 1}}))
+        lenient = crawl.CrawlSettings(MasterConfig(socket_path=self.settings.path.with_name('master.sock')), lenient=True)
+        self.assertEqual(lenient.read()['rules']['round_minutes'], 15)
 
     def test_alertdc_switch_persists_and_can_be_enabled_again(self):
         self.settings.update({'segments': {'dc_alerts': {'enabled': False}}})
@@ -186,6 +203,11 @@ class AlertTests(Eastern):
         self.assertIsNone(crawl.compose(expired, [], None, NOW))
 
     def test_bulletins_are_validated(self):
+        self.assertEqual(crawl.validate_bulletin({'key': 'x', 'label': 'METRO', 'style': 'new', 'passes': 1, 'lease': 60,
+                                                  'flag': 'NEW', 'items': [{'text': 'Delays.'}]})['flag'], 'NEW')
+        with self.assertRaises(ConfigError):
+            crawl.validate_bulletin({'key': 'x', 'label': '', 'style': 'new', 'passes': 1, 'lease': 60,
+                                     'flag': 'BREAKING NEWS NOW', 'items': [{'text': 'Delays.'}]})
         good = {'key': 'scores-1', 'label': 'SCORES', 'style': 'station', 'passes': 1, 'lease': 600,
                 'items': [{'tag': 'NHL', 'text': 'Capitals 3, Bruins 2'}]}
         self.assertEqual(crawl.validate_bulletin(good)['items'][0], {'tag': 'NHL', 'heading': '', 'text': 'Capitals 3, Bruins 2'})
@@ -256,6 +278,31 @@ class WorkerCrawlTests(unittest.TestCase):
         self.worker._crawl()
         self.assertEqual(self.shown().args, (None,))
 
+    def test_the_bar_runs_where_the_rotation_says_while_its_lease_lasts(self):
+        self.assertEqual(self.worker.submit('crawl', {'bulletin': {**self.bulletin(), 'style': 'new', 'flag': 'NEW'}}),
+                         {'accepted': True})
+        self.worker._crawl()
+        content = self.shown().args[0]
+        self.assertEqual((content['position'], content['flag'], content['style']), ('bottom', 'NEW', 'new'))
+        # A position alone leaves the bulletin running; the same pass slides to the top.
+        self.assertEqual(self.worker.submit('crawl', {'position': 'top'}), {'accepted': True})
+        self.worker._crawl()
+        self.assertEqual((self.shown().args[0]['position'], self.shown().args[0]['key'], self.shown().kwargs),
+                         ('top', 'scores-1', {'restart': False}))
+        status = self.worker.status()['crawl']
+        self.assertEqual((status['position'], status['flag'], status['bulletin']['key']), ('top', 'NEW', 'scores-1'))
+        # Important news runs where the bar is.
+        self.alerts = [event(id=2, expires=datetime.now(timezone.utc) + timedelta(minutes=30))]
+        self.worker._crawl()
+        self.assertEqual((self.shown().args[0]['kind'], self.shown().args[0]['position']), ('important', 'top'))
+        # With its lease run out (a stopped web app), back to the bottom.
+        self.worker.crawl_position = ('top', time.monotonic() - 1)
+        self.worker._crawl()
+        self.assertEqual((self.shown().args[0]['position'], self.shown().kwargs), ('bottom', {'restart': False}))
+        for bad in ({'position': 'middle'}, {}):
+            with self.subTest(bad=bad), self.assertRaises(ConfigError):
+                self.worker.submit('crawl', bad)
+
     def test_a_loop_ends_when_its_lease_runs_out(self):
         self.worker.submit('crawl', {'bulletin': self.bulletin(passes=0, lease=30)})
         self.worker._crawl()
@@ -279,14 +326,22 @@ class WorkerCrawlTests(unittest.TestCase):
 class FakeMaster:
     def __init__(self):
         self.state = {'on_air': {'id': 'p'}, 'ident': {'on_air': False},
-                      'crawl': {'kind': None, 'bulletin': None, 'bulletins_ended': [], 'rotation_alerts': []}}
-        self.sent = []
+                      'crawl': {'kind': None, 'bulletin': None, 'bulletins_ended': [], 'rotation_alerts': [],
+                                'position': 'bottom'}}
+        self.sent, self.positions = [], []
 
     def request(self, action='status', body=None):
         if action == 'status':
             return self.state
-        self.sent.append(body['bulletin'])
-        self.state['crawl']['bulletin'] = {'key': body['bulletin']['key']} if body['bulletin'] else None
+        if 'position' in body:
+            assert 'position' in self.state['crawl'], 'a worker from before positions takes this as a cleared bulletin'
+            self.positions.append(body['position'])
+            self.state['crawl']['position'] = body['position']
+        if 'bulletin' in body:
+            if body['bulletin']:
+                crawl.validate_bulletin(body['bulletin'])
+            self.sent.append(body['bulletin'])
+            self.state['crawl']['bulletin'] = {'key': body['bulletin']['key']} if body['bulletin'] else None
         return {'accepted': True}
 
 
@@ -329,32 +384,50 @@ class DeskTests(Eastern):
         self.master.state['crawl']['bulletin'] = None
         self.master.state['crawl']['bulletins_ended'] = [{'key': key, 'how': 'done', 'at': self.now}]
 
-    def test_popups_take_turns_within_the_hourly_limit_and_gap(self):
-        self.settings.update({'segments': {k: {'enabled': k in ('transit', 'scores')} for k in crawl.SEGMENTS}})
+    def test_everything_due_airs_together_in_a_round(self):
+        self.settings.update({'segments': {k: {'enabled': k in ('transit', 'scores', 'messages')} for k in crawl.SEGMENTS},
+                              'messages': [{'text': 'Game 3 tonight'}]})
+        self.settings.update({'segments': {'scores': {'every': 30}}})
         self.desk.tick()
         first = self.master.sent[-1]
-        self.assertEqual((first['label'], first['passes'], first['items'][0]['tag']), ('METRO & BUS', 1, 'RED LINE'))
+        self.assertEqual((first['label'], first['passes'], first['style'], first.get('flag')), ('UPDATE', 1, 'station', None))
+        # In segment order, a bare item tagged with its segment's label.
+        self.assertEqual([i['tag'] for i in first['items']], ['RED LINE', 'NHL', 'VIZELVISION'])
         self.assertTrue(self.feeds['transit'].wanted)
+        self.assertEqual(self.desk.status()['history'][0]['segments'], ['transit', 'scores', 'messages'])
         self.desk.tick()
         self.assertEqual(len(self.master.sent), 1)  # one pop-up at a time
         self.finish()
+        self.now += 14 * 60
+        self.desk.tick()
+        self.assertEqual(len(self.master.sent), 1)  # a round every 15 minutes
         self.now += 60
         self.desk.tick()
-        self.assertEqual(len(self.master.sent), 1)  # five minutes apart
-        self.now += 4 * 60
-        self.desk.tick()
-        self.assertEqual(self.master.sent[-1]['label'], 'SCORES')
-        for _ in range(2):
-            self.finish()
-            self.now += 20 * 60
-            self.desk.tick()
-        self.assertEqual(len(self.master.sent), 4)
+        # Transit and messages are due again; scores (every 30) waits for the round after.
+        self.assertEqual([i['tag'] for i in self.master.sent[-1]['items']], ['RED LINE', 'VIZELVISION'])
         self.finish()
-        self.now += 6 * 60
-        sent = len(self.master.sent)
+        self.now += 15 * 60
         self.desk.tick()
-        self.assertEqual(len(self.master.sent), sent)  # four an hour at most
-        self.assertEqual([h['how'] for h in self.desk.status()['history']], ['done'] * 4)
+        self.assertEqual([i['tag'] for i in self.master.sent[-1]['items']], ['RED LINE', 'NHL', 'VIZELVISION'])
+        self.assertEqual([h['how'] for h in self.desk.status()['history']], [None, 'done', 'done'])
+
+    def test_a_round_waits_out_the_gap_after_news(self):
+        self.settings.update({'segments': {k: {'enabled': k in ('transit', 'dc_alerts')} for k in crawl.SEGMENTS}})
+        self.feeds['dc_alerts'] = FakeFeed([])
+        self.options(dc_alerts={'new_now': True, 'repeat': False})
+        self.desk.tick()
+        self.finish()
+        self.now += 14 * 60
+        self.feeds['dc_alerts']._items = [{'tag': 'ALERTDC', 'heading': '', 'text': 'Road closed.'}]
+        self.desk.tick()
+        self.assertEqual(self.master.sent[-1]['flag'], 'NEW')
+        self.now += 60
+        self.finish()
+        self.desk.tick()
+        self.assertEqual(len(self.master.sent), 2)  # the round is due, but the bar only just left
+        self.now += 5 * 60
+        self.desk.tick()
+        self.assertEqual(self.master.sent[-1]['label'], 'UPDATE')
 
     def test_changed_only_waits_for_new_items(self):
         self.settings.update({'segments': {k: {'enabled': k == 'transit', 'changed_only': True} for k in crawl.SEGMENTS}})
@@ -422,8 +495,8 @@ class DeskTests(Eastern):
         self.settings.update({'segments': {k: {'enabled': k in ('dc_alerts', 'transit')} for k in crawl.SEGMENTS}})
         self.feeds['dc_alerts'] = FakeFeed([{'tag': 'ALERTDC', 'heading': '', 'text': 'Red Mass closures.'}])
         self.options(dc_alerts={'new_now': True, 'repeat': False})
-        self.desk.tick()  # learns what is listed; the timer sends transit
-        self.assertEqual([b['label'] for b in self.master.sent], ['METRO & BUS'])
+        self.desk.tick()  # learns what is listed; the round sends transit
+        self.assertEqual([b['label'] for b in self.master.sent], ['UPDATE'])
         self.finish()
         self.desk.tick()
         self.assertEqual(len(self.master.sent), 1)  # within the gap, and Red Mass is not new
@@ -431,11 +504,78 @@ class DeskTests(Eastern):
         self.desk.tick()
         new = self.master.sent[-1]
         self.assertEqual((new['label'], [i['text'] for i in new['items']]), ('DC ALERTS', ['Bridge opening at 11 PM.']))
+        self.assertEqual((new['flag'], new['style']), ('NEW', 'new'))  # it stands out from the rounds
         self.assertTrue(self.desk.status()['history'][0]['new'])
         self.finish()
         self.now += 3600
-        self.desk.tick()  # once each: repeat is off, so the timer never brings it back
-        self.assertEqual(self.master.sent[-1]['label'], 'METRO & BUS')
+        self.desk.tick()  # once each: repeat is off, so no round brings it back
+        self.assertEqual([i['tag'] for i in self.master.sent[-1]['items']], ['RED LINE'])
+
+    def test_new_weather_alerts_keep_their_colour(self):
+        self.settings.update({'segments': {k: {'enabled': k == 'alerts'} for k in crawl.SEGMENTS}})
+        self.desk.tick()
+        _, _, rotation, summaries = crawl.alert_layers(
+            self.settings.read(), crawl.active_alerts([event(id=8, code='SVA', desc='Severe Thunderstorm Watch',
+                                                             severity='watch')], DC, NOW), [], NOW, DC)
+        self.master.state['crawl'].update(alerts=summaries, rotation_alerts=rotation)
+        self.desk.tick()
+        new = self.master.sent[-1]
+        self.assertEqual((new['label'], new['style'], new['flag']), ('WEATHER', 'watch', 'NEW'))
+
+    def test_a_worker_from_before_flags_gets_plain_pop_ups_and_no_positions(self):
+        del self.master.state['crawl']['position']
+        self.settings.update({'segments': {k: {'enabled': k == 'dc_alerts'} for k in crawl.SEGMENTS}})
+        self.feeds['dc_alerts'] = FakeFeed([])
+        self.options(dc_alerts={'new_now': True})
+        self.desk.tick()
+        self.feeds['dc_alerts']._items = [{'tag': 'ALERTDC', 'heading': '', 'text': 'Road closed.'}]
+        self.desk.tick()
+        self.assertEqual((self.master.sent[-1]['style'], 'flag' in self.master.sent[-1]), ('station', False))
+        self.assertEqual(self.master.positions, [])
+
+    def game_on_channel(self, league):
+        """A channel put on by hand that carries a game (like Sunday Night Football on NBC)."""
+        self.master.state['on_air'] = {'id': 'p', 'source_id': 'tv-thing-digital', 'channel_id': 'wrc_hd_4_1'}
+        self.desk.projector = Mock()
+        self.desk.projector.describe.return_value = {'segments': [{'kind': 'manual', 'game': None}]}
+        self.looked = []
+        self.desk.game_on = lambda target: self.looked.append(target) or league
+
+    def test_football_on_a_channel_is_a_game_with_the_bar_at_the_top(self):
+        self.settings.update({'rules': {'game': 'popups'},
+                              'segments': {k: {'enabled': k == 'transit'} for k in crawl.SEGMENTS}})
+        self.game_on_channel('nfl')
+        self.desk.tick()
+        self.assertEqual((self.desk.view['context'], self.desk.view['league'], self.desk.view['position']),
+                         ('game', 'nfl', 'top'))
+        self.assertEqual(self.looked, [{'source_id': 'tv-thing-digital', 'channel_id': 'wrc_hd_4_1'}])
+        self.assertEqual((self.master.positions, self.master.sent[-1]['label']), (['top'], 'UPDATE'))
+        self.now += 10
+        self.desk.tick()
+        self.assertEqual(self.master.positions, ['top'])
+        self.now += 20
+        self.desk.tick()
+        self.assertEqual(self.master.positions, ['top', 'top'])  # the lease renewed
+        self.assertEqual(len(self.looked), 1)  # the channel's games: every minute during one
+        self.now += 60
+        self.desk.game_on = lambda target: None  # the final
+        self.desk.tick()
+        self.assertEqual((self.desk.view['context'], self.master.positions[-1]), ('program', 'bottom'))
+        self.now += 60
+        self.desk.tick()
+        self.assertEqual(self.master.positions, ['top', 'top', 'bottom'])  # the bottom needs no lease
+
+    def test_other_leagues_keep_the_bar_at_the_bottom(self):
+        self.game_on_channel('mlb')
+        self.desk.tick()
+        self.assertEqual((self.desk.view['context'], self.desk.view['position']), ('game', 'bottom'))
+        self.assertEqual(self.master.positions, ['bottom'])
+        self.settings.update({'rules': {'top_leagues': ['mlb']}})
+        self.desk.tick()
+        self.assertEqual(self.master.positions, ['bottom', 'top'])
+        self.master.state['ident'] = {'on_air': True}  # the station ID between programs
+        self.desk.tick()
+        self.assertEqual((self.desk.view['context'], self.master.positions[-1]), ('ident', 'bottom'))
 
     def test_new_items_wait_out_quiet_contexts_and_running_popups(self):
         self.settings.update({'segments': {k: {'enabled': k == 'dc_alerts'} for k in crawl.SEGMENTS}})
@@ -458,9 +598,9 @@ class DeskTests(Eastern):
         self.feeds['weather'] = FakeFeed([{'tag': 'NOW', 'heading': '', 'text': 'Clear, 82°F.'}])
         self.options(weather={'contexts': ['off_air']})
         self.desk.tick()
-        self.assertEqual(self.master.sent[-1]['label'], 'METRO & BUS')
-        self.assertEqual([s for s, _, _ in self.desk.due(self.settings.read(), self.master.state['crawl'], 'program',
-                                                         self.now + 3600, self.desk.feed_options())], ['transit'])
+        self.assertEqual([i['tag'] for i in self.master.sent[-1]['items']], ['RED LINE'])
+        self.assertEqual([s for s, _ in self.desk.round(self.settings.read(), self.master.state['crawl'], 'program',
+                                                        self.now + 3600, self.desk.feed_options())], ['transit'])
         self.finish()
         self.master.state['on_air'] = None
         self.desk.tick()
@@ -492,8 +632,9 @@ class DeskTests(Eastern):
         self.now += 60
         self.desk.tick()
         entry = self.entry('rail:7')
-        self.assertEqual((entry['status'], entry['airing'], entry['next_how']), ('next', 'repeat', 'popup'))
-        self.assertEqual(entry['next_at'], NOW.timestamp() + 15 * 60)  # every 15 minutes from when it aired
+        self.assertEqual((entry['status'], entry['airing'], entry['next_how']), ('next', 'repeat', 'round'))
+        self.assertEqual(entry['next_at'], NOW.timestamp() + 15 * 60)  # the next round, 15 minutes on
+        self.assertIn('update round', entry['why'])
         self.assertEqual(entry['airings'][0]['how'], 'done')
 
     def test_worker_alerts_are_known_by_their_eas_and_nws_ids(self):
@@ -506,7 +647,7 @@ class DeskTests(Eastern):
         _, _, rotation, summaries = crawl.alert_layers(settings, eas, [flood], NOW, DC)
         self.master.state['crawl'].update(alerts=summaries, rotation_alerts=rotation)
         self.desk.tick()
-        self.assertEqual(self.master.sent[-1]['label'], 'WEATHER')
+        self.assertEqual((self.master.sent[-1]['label'], self.master.sent[-1]['items'][0]['tag']), ('UPDATE', 'WEATHER'))
         crawl.validate_bulletin(self.master.sent[-1])
         statuses = {e['id']: e['status'] for e in self.desk.register()['items']}
         self.assertEqual(statuses, {'nws:urn:w': 'on_air', 'eas:8': 'on_air', 'eas:9': 'duplicate', 'eas:10': 'muted'})
@@ -531,24 +672,26 @@ class DeskTests(Eastern):
         self.assertEqual(self.desk.ledger.get('eas:3')['airings'][-1]['how'], 'cleared')
 
     def test_the_plan_follows_the_rules_and_the_schedule(self):
-        self.settings.update({'segments': {k: {'enabled': k in ('transit', 'scores')} for k in crawl.SEGMENTS}})
+        self.settings.update({'segments': {k: {'enabled': k == 'transit'} for k in crawl.SEGMENTS}})
         self.desk.projector = Mock()
-        game = NOW + timedelta(minutes=30)
+        game = NOW + timedelta(minutes=50)
         self.desk.projector.describe.return_value = {'segments': [
             {'kind': 'block', 'start': NOW.isoformat(), 'end': game.isoformat()},
             {'kind': 'game', 'game': {'league': 'mlb'}, 'start': game.isoformat(),
              'end': (NOW + timedelta(hours=4)).isoformat()}]}
-        self.desk.tick()  # transit pops up during the program
+        self.desk.tick()  # a round with transit during the program
+        self.settings.update({'segments': {'scores': {'enabled': True, 'every': 30}}})
+        self.desk.tick()
         plan = self.desk.plan()
         self.assertEqual([(s['context'], s['mode']) for s in plan['spans']], [('program', 'popups'), ('game', 'quiet')])
-        slots = [(s['segment'], s['at'] - self.now) for s in plan['slots']]
-        self.assertEqual([segment for segment, _ in slots], ['scores', 'transit', 'scores'])
-        self.assertGreaterEqual(slots[0][1], 5 * 60)  # after the gap
-        self.assertEqual(slots[1][1], 15 * 60)  # transit's own every
-        self.assertTrue(all(at < 30 * 60 for _, at in slots))  # quiet once the game starts
+        slots = [(s['segment'], s['segments'], s['at'] - self.now) for s in plan['slots']]
+        # Scores, never aired, rides the next round; then every other one (30 min to the nearest round).
+        self.assertEqual(slots, [('round', ['transit', 'scores'], 15 * 60), ('round', ['transit'], 30 * 60),
+                                 ('round', ['transit', 'scores'], 45 * 60)])  # quiet once the game starts
         entry = self.entry(self.desk.snapshot['listings']['scores'][0]['id'])
-        self.assertEqual((entry['status'], entry['airing']), ('next', 'first'))
+        self.assertEqual((entry['status'], entry['airing'], entry['next_how']), ('next', 'first', 'round'))
         self.assertIn('First airing', entry['why'])
+        self.assertEqual(self.desk.status()['segments']['scores']['next_planned'], self.now + 15 * 60)
 
     def test_an_item_can_be_aired_now_or_muted(self):
         self.settings.update({'segments': {k: {'enabled': k in ('transit', 'scores')} for k in crawl.SEGMENTS},
@@ -757,6 +900,31 @@ class FeedTests(unittest.TestCase):
         self.assertEqual(feed.items(), [{'tag': 'ALERTDC', 'heading': '',
                                          'text': 'Bridge Opening (October 1 11PM): The bridge opens tonight at 11PM. Expect delays.',
                                          'id': 'alertdc:ce10327fb8', 'issued': '2026-10-01T12:30:00-04:00'}])
+
+    def test_coming_up_leaves_out_what_carries_on_the_program_on_air(self):
+        at = lambda minutes: (NOW + timedelta(minutes=minutes)).isoformat()
+        projector = Mock()
+        projector.describe.return_value = {'segments': [
+            # Sunday Night Football put on by hand from the antenna, until 11:30...
+            {'kind': 'manual', 'title': '', 'game': None, 'start': at(0), 'end': at(30),
+             'target': {'source_id': 'tv-thing-digital', 'channel_id': 'wrc_hd_4_1'}},
+            # ...then the schedule's slot for the same game, on YouTube TV: not coming up.
+            {'kind': 'game', 'title': 'Dallas Cowboys at Green Bay Packers', 'game': None, 'start': at(30), 'end': at(60),
+             'target': {'source_id': 'youtube-tv', 'channel_id': 'NBC'}},
+            {'kind': 'block', 'title': 'News 4 at 11', 'game': None, 'start': at(60), 'end': at(90), 'target': {}},
+            {'kind': 'game', 'title': 'Late game', 'game': {'league': 'nfl', 'game_pk': 7}, 'start': at(90),
+             'end': at(120), 'target': {}},
+            {'kind': 'block', 'title': 'Dallas Cowboys at Green Bay Packers', 'game': None, 'start': at(120),
+             'end': at(150), 'target': {}}]}
+        looked = []
+        game_on = lambda target: looked.append(target) or {'league': 'nfl', 'game_pk': 7, 'title': 'Dallas Cowboys at Green Bay Packers'}
+        feed = crawl_feeds.ComingUpFeed(projector, game_on=game_on, clock=lambda: NOW.timestamp())
+        # The same game later is left out by its id; the same title later, after something else, is a repeat that airs.
+        self.assertEqual([i['text'] for i in feed.fetch()], ['News 4 at 11', 'Dallas Cowboys at Green Bay Packers'])
+        self.assertEqual(looked, [{'source_id': 'tv-thing-digital', 'channel_id': 'wrc_hd_4_1'}])
+        self.assertEqual([i['text'] for i in crawl_feeds.ComingUpFeed(projector, clock=lambda: NOW.timestamp()).fetch()],
+                         ['Dallas Cowboys at Green Bay Packers', 'News 4 at 11', 'Late game',
+                          'Dallas Cowboys at Green Bay Packers'])
 
     def test_score_items_say_when_live_and_final(self):
         team = lambda name, score: {'id': '1', 'nickname': name, 'score': score}
