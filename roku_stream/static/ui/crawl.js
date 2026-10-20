@@ -309,6 +309,12 @@
       if (seg === 'cairo') notes.push('off-air card only, while Cairo Radio is the off-air audio');
       if (seg === 'scores' && favs && !favs.favorites.length) notes.push('choose favorites');
       if (seg === 'messages' && !data.settings.messages.length) notes.push('add station messages');
+      if (seg === 'election') {
+        const shown = feed?.elections || [];
+        if (!shown.length) notes.push('no election tonight (definitions in roku_stream/elections/)');
+        for (const e of shown) notes.push(e.name + ': ' + e.sources.map(s => s.name + (s.official ? ' (official)' : '') + ' ' +
+          (s.error ? 'unreachable: ' + s.error : !s.at ? 'from 5 min before polls close' : s.contests ? s.contests + ' with results' : (s.note || 'no results yet'))).join(', '));
+      }
       const card = h('article', {class: 'seg-card' + (options.enabled ? '' : ' off'), data: {segment: seg}},
         h('div', {class: 'row between'}, check(h('strong', meta.name), n => {
           n.checked = options.enabled; n.dataset.segment = seg; n.dataset.field = 'enabled';
@@ -327,7 +333,7 @@
         extra ? check('New items pop up at once (once each)', n => { n.checked = extra.new_now; n.dataset.feed = seg; n.dataset.option = 'new_now'; }) : null,
         extra ? h('div', {class: 'days'}, h('span', {class: 'tiny muted'}, 'Airs during'), Object.entries(data.contexts).map(([context, name]) => check(name, n => { n.checked = extra.contexts.includes(context); n.dataset.feed = seg; n.dataset.airs = context; }))) : null,
         h('p', {class: 'tiny muted'}, notes.join(' · ')),
-        h('ul', (live.preview || []).length ? live.preview.map(item => h('li', item.tag ? h('span', {class: 'tagbox', style: {fontSize: '10px'}}, item.tag) : null, item.text)) : h('li', {class: 'muted'}, 'Nothing to say right now.')));
+        h('ul', (live.preview || []).length ? live.preview.map(item => h('li', item.tag ? h('span', {class: 'tagbox', style: {fontSize: '10px'}}, item.tag) : null, item.heading ? h('strong', item.heading + ' ') : null, item.text)) : h('li', {class: 'muted'}, 'Nothing to say right now.')));
       box.append(card);
     }
   }

@@ -1,0 +1,41 @@
+{
+  "id": "ab2026",
+  "name": "Alberta Election Special Report",
+  "about": "Alberta's referendum of October 19, 2026: ten questions. Unofficial results from Elections Alberta's results site; alberta.io's CSV (which reads that site) when it has a question Elections Alberta's pages do not give us.",
+  "tag": "ALBERTA",
+  "show_from": "2026-10-19T00:00:00-06:00",
+  "show_until": "2026-10-23T00:00:00-06:00",
+  "zone": "America/Edmonton",
+  "zone_name": "Mountain",
+  "polls": [
+    {"where": "across Alberta", "close": "2026-10-19T20:00:00-06:00"}
+  ],
+  "warnings": [60, 30, 10],
+  "preview": "Ten questions are on the ballot. Question 10, whether to start the legal process toward a binding vote on separation, is counted first, by hand, at every voting place.",
+  "closed": "Unofficial results follow here as Elections Alberta posts them. Question 10 is counted first; Questions 1 to 9 follow, one at a time, through Wednesday.",
+  "batch": {"votes": 20000, "reporting": 0.02, "minutes": 10},
+  "sort": "fixed",
+  "contests": [
+    {"id": "q10", "tag": "Q10", "name": "Separation", "keys": {"elections_alberta": "202610", "csv": "10"},
+     "options": [{"key": "remain", "label": "Remain", "match": ["remain"]},
+                 {"key": "separate", "label": "Separate", "match": ["separate", "separation", "commence", "leave", "legal process"]}]},
+    {"id": "q1", "tag": "Q1", "name": "Control over immigration", "keys": {"elections_alberta": "202601", "csv": "1"}},
+    {"id": "q2", "tag": "Q2", "name": "Programs only for citizens and residents", "keys": {"elections_alberta": "202602", "csv": "2"}},
+    {"id": "q3", "tag": "Q3", "name": "12 months before social supports", "keys": {"elections_alberta": "202603", "csv": "3"}},
+    {"id": "q4", "tag": "Q4", "name": "Health and school fees for temporary residents", "keys": {"elections_alberta": "202604", "csv": "4"}},
+    {"id": "q5", "tag": "Q5", "name": "Proof of citizenship to vote", "keys": {"elections_alberta": "202605", "csv": "5"}},
+    {"id": "q6", "tag": "Q6", "name": "Provinces choose superior court judges", "keys": {"elections_alberta": "202606", "csv": "6"}},
+    {"id": "q7", "tag": "Q7", "name": "Abolish the Senate", "keys": {"elections_alberta": "202607", "csv": "7"}},
+    {"id": "q8", "tag": "Q8", "name": "Opt out of federal programs, keep the funding", "keys": {"elections_alberta": "202608", "csv": "8"}},
+    {"id": "q9", "tag": "Q9", "name": "Provincial laws over federal ones", "keys": {"elections_alberta": "202609", "csv": "9"}}
+  ],
+  "sources": [
+    {"kind": "elections_alberta", "name": "Elections Alberta", "official": true,
+     "url": "https://officialresults.elections.ab.ca/orEDResultsReferendum2026.cfm?EventId={key}"},
+    {"kind": "csv", "name": "alberta.io", "official": false,
+     "url": "https://alberta.io/api/referendum/results.csv",
+     "contest": "question", "options": ["option_a", "option_b"],
+     "reported": "stations_reported", "units": "stations_total", "unit": "voting stations",
+     "area": "area_type", "total_areas": ["province", "provincial", "alberta", "total", "all"]}
+  ]
+}

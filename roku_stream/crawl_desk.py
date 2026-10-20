@@ -56,7 +56,7 @@ PLAN_SLOTS = 40
 ALERT_SEGMENTS = ('alerts', 'transit', 'dc_alerts', 'manual')
 SOURCE_NAMES = {'eas': 'EAS', 'nws': 'NWS', 'rail': 'Metrorail', 'bus': 'Metrobus', 'alertdc': 'AlertDC',
                 'manual': 'Manual', 'weather': 'Weather', 'score': 'Scores', 'coming': 'Coming up',
-                'cairo': 'Cairo Radio', 'msg': 'Station message'}
+                'cairo': 'Cairo Radio', 'msg': 'Station message', 'election': 'Election'}
 STATUS_ORDER = ('on_air', 'looping', 'next', 'held', 'muted', 'duplicate')
 SUMMARY_META = ('severity', 'issued', 'expires', 'event', 'areas', 'by')
 AFTER = {'game': ', after the game', 'off_air': ', once a program is on', 'ident': ', after the station ID'}

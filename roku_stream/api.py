@@ -53,6 +53,7 @@ from .crawl import AREA_NAMES, CONTEXTS, MODES, SEGMENTS, CrawlSettings, FeedSet
 from .crawl_desk import CrawlDesk
 from .crawl_ledger import CrawlLedger
 from . import crawl_feeds
+from .election import ElectionFeed
 from .production_monitor import ProductionMonitor
 from . import playback
 from .continuity import Continuity, Voice
@@ -1423,7 +1424,9 @@ def serve(config: AppConfig) -> None:
                  'weather': crawl_feeds.WeatherFeed(config.crawl.weather_station, config.crawl.forecast_point,
                                                     config.crawl.weather_place, lambda: feed_settings.read()['weather']),
                  'scores': crawl_feeds.ScoresFeed(sports.scoreboard, planner.favorites.order),
-                 'cairo': crawl_feeds.CairoFeed(config.master.off_air_radio_info_url)}
+                 'cairo': crawl_feeds.CairoFeed(config.master.off_air_radio_info_url),
+                 # Election nights (election.py): polls closing, then results, official first.
+                 'election': ElectionFeed(state_path=Path(config.master.socket_path).with_name('election-state.json'))}
         if projector is not None:
             feeds['coming_up'] = crawl_feeds.ComingUpFeed(projector, game_on=coordinator.game_on_target)
         ledger = CrawlLedger(Path(config.master.socket_path).with_name('crawl-ledger.json'))

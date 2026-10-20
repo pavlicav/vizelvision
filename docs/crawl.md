@@ -52,7 +52,7 @@ So that a viewer can tell why the bar came up, pop-ups come in two kinds:
   running pop-up or important news). They are marked: a red **NEW** box in front of the
   label, and a blue band with gold tags instead of the station's navy and cyan. New weather
   alerts keep their orange, with the NEW box. Which segments count news is the segment's
-  *new items pop up at once* (on for weather alerts and AlertDC).
+  *new items pop up at once* (on for weather alerts, the election special report and AlertDC).
 - **The update round** carries everything else together, one pass, under the label
   **UPDATE**: every segment that is due, in segment order, each bare item tagged with its
   segment's label (as the off-air loop does). A round comes every 15 minutes
@@ -90,6 +90,7 @@ Use **Save segments** for timing and other options.
 | Segment | Source | Every |
 | --- | --- | --- |
 | Weather alerts | Lesser EAS and NWS alerts (watches, advisories, statements), from the worker | 10 min |
+| Election special report | On an election night: when polls close, then the results, official first ([election.md](election.md)) | 15 min |
 | Metro and bus | WMATA rail incidents and bus GTFS-realtime service alerts, for the routes you choose | 15 min |
 | AlertDC | DC HSEMA's AlertDC list, last 24 hours, without police crime alerts | 30 min |
 | Weather | api.weather.gov: now, and the next two forecast periods, for your ZIP (default Reagan National) | 30 min |
@@ -190,7 +191,8 @@ shows its id, source, layer, times and every airing.
 
 - **Identity.** Each feed names its items: `rail:<IncidentID>`, `bus:<GTFS entity>`,
   `alertdc:<hash of time and title>`, `weather:now` and `weather:<period>`,
-  `score:<league>:<game>`, `coming:<hash of start>`, `cairo:now`, `msg:<id>`.
+  `score:<league>:<game>`, `coming:<hash of start>`, `cairo:now`, `msg:<id>`, `election:<election>:polls…` and
+    `election:<election>:<contest>:e<edition>`.
   - The worker's alerts are `eas:<id>` and `nws:<urn>`. `alert_layers` builds
     `rotation_alerts` in the same order as its summaries, so the desk matches the n-th
     rotation alert to the n-th summary that is neither dismissed, important nor a duplicate.

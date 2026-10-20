@@ -38,6 +38,7 @@ from .sports import LEAGUES
 # The rotation's segments: name, label box, default minutes between bulletins.
 SEGMENTS = {
     'alerts': ('Weather alerts', 'WEATHER', 10),
+    'election': ('Election special report', 'SPECIAL REPORT', 15),
     'transit': ('Metro and bus', 'METRO & BUS', 15),
     'dc_alerts': ('AlertDC', 'DC ALERTS', 30),
     'weather': ('Weather', 'WEATHER', 30),
@@ -328,7 +329,7 @@ FEED_DEFAULTS = {
     'weather': {'zip': '', 'place': '', 'latitude': None, 'longitude': None},  # no ZIP: config's station
     # Per segment: new items pop up at once (one pass, only the new ones); repeat on the
     # segment's timer (crawl.json's every); and the contexts it may air in at all.
-    'segments': {key: {'new_now': key in ('alerts', 'dc_alerts'), 'repeat': True, 'contexts': list(CONTEXTS)}
+    'segments': {key: {'new_now': key in ('alerts', 'election', 'dc_alerts'), 'repeat': True, 'contexts': list(CONTEXTS)}
                  for key in SEGMENTS},
 }
 ROUTE_LIMIT = 60

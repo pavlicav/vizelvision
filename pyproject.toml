@@ -19,4 +19,4 @@ roku-stream = "roku_stream.__main__:main"
 include = ["roku_stream*"]
 
 [tool.setuptools.package-data]
-roku_stream = ["static/ui/*.html", "static/ui/*.js", "static/ui/*.css", "static/*.webp", "static/fonts/*", "static/vendor/*"]
+roku_stream = ["elections/*.json", "static/ui/*.html", "static/ui/*.js", "static/ui/*.css", "static/*.webp", "static/fonts/*", "static/vendor/*"]
