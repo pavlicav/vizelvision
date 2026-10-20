@@ -680,7 +680,8 @@ class DecodedInput:
     tap = None   # no ad-mute tap: media goes straight to master
     delay = 0
 
-    def __init__(self, output: MasterMedia, slot: int, url: str, *, test_pattern=None, tap=None):
+    def __init__(self, output: MasterMedia, slot: int, url: str, *, test_pattern=None, tap=None,
+                 decoder="uridecodebin"):
         self.output, self.slot = output, slot
         self.gst = gst = output.gst
         # The detector sees decoded media immediately. MasterMedia delays the selected
@@ -718,8 +719,10 @@ class DecodedInput:
             source.set_state(gst.State.NULL)
             source.sync_state_with_parent()
         if test_pattern is None:
-            graph = "uridecodebin name=decoder "
-            video, audio = "decoder.", "decoder."
+            graph = f"{decoder} name=decoder "
+            # decodebin3 names its pads, so each track goes to its own branch whatever comes first.
+            video, audio = (("decoder.video_0", "decoder.audio_0") if decoder == "uridecodebin3"
+                            else ("decoder.", "decoder."))
         else:
             graph = ""
             video = f"videotestsrc is-live=true pattern={int(test_pattern)}"
@@ -756,6 +759,7 @@ class DecodedInput:
             source = self.pipeline.get_by_name("decoder")
             source.connect('source-setup', self._source_setup)
             source.set_property("uri", url)
+            self._decoder_setup(source)
         for kind in self.last:
             self.pipeline.get_by_name(kind).connect("new-sample", self._sample, kind)
         if tap is not None:
@@ -839,6 +843,9 @@ class DecodedInput:
             else:
                 with self.lock:
                     self.pushed[kind] += 1
+
+    def _decoder_setup(self, decoder):
+        """Before the decoder starts: a subclass's chance to connect to it."""
 
     def _source_setup(self, _decoder, source):
         if source.get_factory().get_name() == 'rtspsrc':
@@ -1103,6 +1110,12 @@ class DecodedInput:
         self.pipeline.get_state(2 * self.gst.SECOND)
 
 
+def _language(stream):
+    tags = stream.get_tags()
+    found, value = tags.get_string('language-code') if tags is not None else (False, None)
+    return (value or '').lower() if found else ''
+
+
 class FileInput(DecodedInput):
     """A library file. Preparation checks that it decodes, then parks it paused at its
     start; take plays it from there. EOS is completion, not failure: a track that has
@@ -1110,25 +1123,82 @@ class FileInput(DecodedInput):
 
     Broadcast recordings often begin with audio only (TV-Thing's start ~1.6 s before
     the first video frame). The cue skips that lead-in so a take or a back-to-back cut
-    has both tracks immediately instead of freezing the previous picture."""
+    has both tracks immediately instead of freezing the previous picture.
+
+    A show with ad breaks (master_worker.py) stops at each one: stop_at() names the moment,
+    and from there pad probes drop what is decoded, so the last frame passed on is the dark
+    one at the break, and `stopped` says it has come. The worker freezes the file there (its
+    held frame lies under the ads), then thaw(resume) seeks to where it plays on.
+
+    A file with several sound tracks (Jellyfin's dubs, Bulgarian first) is decoded by
+    uridecodebin3, which plays only the streams it is told to: the picture, and the English
+    sound (else the first)."""
     START_TIMEOUT = 5
     AUDIO_CHUNK = 20_000_000  # 20 ms of silence per buffer while held.
     RIDES_OUT_STALLS = True
     RIDES_OUT_ON_AIR = False  # A file holds its picture with freeze() instead.
 
-    def __init__(self, output: MasterMedia, slot: int, url: str, *, start_seconds=0):
+    def __init__(self, output: MasterMedia, slot: int, url: str, *, start_seconds=0, select_audio=False):
         self.cued = self.started = self.finished = self.frozen = False
         self.frozen_at = None
         self.holder = None
         self.ended = set()
         self.start_ns = int(start_seconds * 1_000_000_000)
         self.first_video_ns = None
-        super().__init__(output, slot, url)
+        self.stop_ns, self.stopped = None, False
+        self.dropped = 0   # buffers dropped past a stop: a handful each break
+        self.select_audio = select_audio
+        super().__init__(output, slot, url, decoder="uridecodebin3" if select_audio else "uridecodebin")
         for kind in self.last:
-            self.pipeline.get_by_name(kind).get_static_pad('sink').add_probe(
-                self.gst.PadProbeType.EVENT_DOWNSTREAM, self._event, kind)
+            pad = self.pipeline.get_by_name(kind).get_static_pad('sink')
+            pad.add_probe(self.gst.PadProbeType.EVENT_DOWNSTREAM, self._event, kind)
+            pad.add_probe(self.gst.PadProbeType.BUFFER, self._stop_probe, kind)
         self.pipeline.get_by_name('video').get_static_pad('sink').add_probe(
             self.gst.PadProbeType.BUFFER, self._first_video)
+
+    def _decoder_setup(self, decoder):
+        if self.select_audio:
+            decoder.connect('select-stream', self._select_stream)
+
+    def _select_stream(self, _decoder, collection, stream):
+        """uridecodebin3: 1 plays this stream, 0 leaves it out. The first picture, the English
+        sound (else the first); no subtitles, which have nowhere to go."""
+        gst = self.gst
+        streams = [collection.get_stream(i) for i in range(collection.get_size())]
+        for kind in (gst.StreamType.VIDEO, gst.StreamType.AUDIO):
+            if not stream.get_stream_type() & kind:
+                continue
+            same = [s for s in streams if s.get_stream_type() & kind]
+            chosen = same[0] if same else None
+            if kind == gst.StreamType.AUDIO:
+                chosen = next((s for s in same if _language(s) in ('en', 'eng')), chosen)
+            return 1 if chosen is not None and chosen.get_stream_id() == stream.get_stream_id() else 0
+        return 0
+
+    def stop_at(self, seconds):
+        """Pass nothing on from this point of the file (None: play on)."""
+        with self.lock:
+            self.stop_ns = None if seconds is None else int(seconds * self.gst.SECOND)
+            self.stopped = False
+
+    def _stop_probe(self, pad, info, kind):
+        gst = self.gst
+        with self.lock:
+            stop = self.stop_ns
+        if stop is None:
+            return gst.PadProbeReturn.OK
+        buffer = info.get_buffer()
+        event = pad.get_sticky_event(gst.EventType.SEGMENT, 0)
+        if event is None or buffer is None or buffer.pts == gst.CLOCK_TIME_NONE:
+            return gst.PadProbeReturn.OK
+        position = event.parse_segment().to_stream_time(gst.Format.TIME, buffer.pts)
+        if position == gst.CLOCK_TIME_NONE or position < stop:
+            return gst.PadProbeReturn.OK
+        with self.lock:
+            self.dropped += 1
+            if kind == 'video':
+                self.stopped = True
+        return gst.PadProbeReturn.DROP
 
     def _first_video(self, pad, info):
         gst, buffer = self.gst, info.get_buffer()
@@ -1185,7 +1255,7 @@ class FileInput(DecodedInput):
         with self.lock:
             if message and message.type == self.gst.MessageType.ERROR:
                 self.error = message.parse_error()[0].message
-            elif (message or len(self.ended) == len(self.last)) and not self.cued:
+            elif (message or len(self.ended) == len(self.last)) and not self.cued and not self.frozen:
                 if self.started:
                     self.finished = True
                 elif not self.error:
@@ -1218,6 +1288,12 @@ class FileInput(DecodedInput):
             # Where the held frames start on master's clock: a wait fill opens there.
             self.frozen_at = self.last['video']['end']
         self.pipeline.set_state(self.gst.State.PAUSED)
+        with self.lock:
+            # Paused at a break: let the sinks preroll the next frame, so decoding waits there.
+            # Still dropping, it never prerolled and ran to the end of the file in the background
+            # (2026-10-20: the show "ended" at the close of a 90 s break, 11 minutes early). The
+            # thaw seeks past what was prerolled.
+            self.stop_ns = None
         self.holder = threading.Thread(target=self._hold, name='file-hold', daemon=True)
         self.holder.start()
         return True
@@ -1254,8 +1330,24 @@ class FileInput(DecodedInput):
                     return
             time.sleep(frame / gst.SECOND / 2)
 
-    def thaw(self):
-        """Play on from the held position; the file's timeline continues after the held frames."""
+    def thaw(self, resume_seconds=None):
+        """Play on from the held position, or from resume_seconds into the file; the file's
+        timeline continues after the held frames."""
+        with self.lock:
+            if not self.frozen:
+                return False
+            self.stop_ns, self.stopped = None, False
+        if resume_seconds is not None:
+            # Still paused, with the held frames going out: the seek happens under them.
+            gst = self.gst
+            if self.pipeline.seek_simple(gst.Format.TIME, gst.SeekFlags.FLUSH | gst.SeekFlags.ACCURATE,
+                                         int(resume_seconds * gst.SECOND)):
+                self.pipeline.get_state(5 * gst.SECOND)
+                with self.lock:
+                    self.ended.clear()
+            else:
+                logging.getLogger(__name__).warning('Could not seek to %.1f s: the file plays on from where it stopped',
+                                                    resume_seconds)
         with self.lock:
             if not self.frozen:
                 return False

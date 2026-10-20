@@ -50,6 +50,12 @@
         "id": "tv-recordings",
         "name": "TV Recordings",
         "path": "/mnt/sda1/media/TV Recordings"
+      },
+      {
+        "id": "jellyfin-tv",
+        "name": "Jellyfin TV",
+        "path": "/mnt/sda1/media/library/tv",
+        "ad_breaks": true
       }
     ]
   }

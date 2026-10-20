@@ -411,6 +411,7 @@ class AdBreak:
     LEAVE_OUT = 600                  # seconds an ad (or promo) that would not play is left out
     HISTORY = 7 * 86400              # plays remembered for limits (the longest is a week)
     FILL_LONGEST = 31.0              # seconds: the longest ad a wait fill starts (the source may be ready)
+    FIRST_WAIT = 3 * SECOND          # a programme break with nothing to show by then ends
     AHEAD = 5                        # the rotation's ads kept drawn in Next up
     QUEUED_MOST = 20                 # entries queued by hand, at most
     JOIN_GRACE = 3 * SECOND          # a take late for the bumper's end finds its last (black) frame
@@ -463,6 +464,7 @@ class AdBreak:
         # whether ads are wanted for it, its join bumper decoded ahead, and its planned end.
         self.fill_request = None
         self.filling = False
+        self.fill_longest = self.FILL_LONGEST   # the longest ad the fill starts (None: any)
         self.cued_join = None
         self.fill_report = None
         # The helper's
@@ -677,13 +679,50 @@ class AdBreak:
                 reel.close()
 
     # ------------------------------------------------------------ the wait fill (the worker's)
-    def fill_start(self, pts):
+    def fill_start(self, pts, length=None):
         """The station ID holds its end card from running time pts (its first held frame)
-        while the next source is prepared: from there, ads in its place."""
+        while the next source is prepared: from there, ads in its place.
+
+        With length (seconds), a programme break instead: a show from the library waits on
+        its held frame at an act break (master_worker.py) for ads of any length. The worker
+        brings the show back after about length (fill_end() says when the ad on air past it
+        ends) and says where its first frame is (fill_resume): ads go on, one after another,
+        until that frame airs, the one on air cut short there. Deciding when the show comes
+        back on what airs would be a programme delay (13 s) too late: the file's held frame
+        aired that long (2026-10-20: 5-10 s of black at the end of a break)."""
         with self.lock:
-            self.fill_request = {'start': pts, 'finish': None, 'join': None, 'stop': None}
+            self.fill_request = {'start': pts, 'finish': None, 'join': None, 'stop': None, 'length': length,
+                                 'resume': None}
             self.filling, self.fill_report = True, None
+            self.fill_longest = None if length is not None else self.FILL_LONGEST
         self.wake.set()
+
+    def fill_resume(self, pts):
+        """The show is back from running time pts (its first frame after the break): the
+        programme break ends there, cutting whatever plays."""
+        with self.lock:
+            if self.fill_request is not None and self.fill_request.get('length') is not None:
+                self.fill_request['resume'] = pts
+        self.wake.set()
+
+    def fill_prime(self):
+        """A programme break is coming: cue its first ad (any length) now, so it can open it."""
+        with self.lock:
+            if self.fill_request is None:
+                self.filling, self.fill_longest = True, None
+        self.wake.set()
+
+    def fill_unprime(self):
+        """The programme break that was coming will not (the show left air)."""
+        with self.lock:
+            if self.fill_request is None:
+                self.filling, self.fill_longest = False, self.FILL_LONGEST
+        self.wake.set()
+
+    def fill_ready(self):
+        """Whether something would go on now in a programme break: a cued ad, or a promo."""
+        with self.lock:
+            return self._choice(time.time(), fill=True) is not None
 
     def fill_finish(self, pts, join=None):
         """The next source is ready, at running time pts. The ad on air plays out, then join
@@ -772,7 +811,7 @@ class AdBreak:
         'promo' (the next promo, due) or None. First what the operator queued, then a due
         promo, then the rotation. A wait fill starts only short ads."""
         cued = self.cued
-        if cued is not None and fill and cued.ad['duration'] > self.FILL_LONGEST:
+        if cued is not None and fill and self.fill_longest is not None and cued.ad['duration'] > self.fill_longest:
             cued = None
         entry = (getattr(cued, 'entry', None) or {}) if cued is not None else {}
         kind = entry.get('kind', 'ad')
@@ -853,7 +892,9 @@ class AdBreak:
                 row['counted'] = True        # it was the break's promo: none takes its place at once
         if (getattr(reel, 'entry', None) or {}).get('by') == 'you':
             row['queued'] = True             # queued by hand
-        if self.fill is not None:
+        if self.fill is not None and self.fill['request'].get('length') is not None:
+            row['programme_break'] = True    # in a break of a show from the library
+        elif self.fill is not None:
             row['wait'] = True               # aired while the next source got ready
         if kind == 'promo':
             self.promo_playing = None
@@ -952,7 +993,12 @@ class AdBreak:
                 shown = getattr(self.reel, 'shown', None) if self.reel is not None else None
                 last = shown[1] if shown else None
                 return retimable(self.gst, last) if last is not None else self.blank
-            if request['finish'] is not None and end is None:
+            if request.get('length') is not None:
+                if request['resume'] is not None and pts >= request['resume']:
+                    self._fill_close(due, window)    # the show is back
+                    return False
+                self._break_report(request, pts)
+            elif request['finish'] is not None and end is None:
                 self._fill_plan(window, request, pts)
         self.last_due = due
         base = None
@@ -995,6 +1041,21 @@ class AdBreak:
         with self.lock:
             if self.fill_request is request:
                 self.fill_report = {'end': window['end'], 'take': window['take'], 'fixed': not join}
+
+    def _break_report(self, request, pts):
+        """A programme break: once the ad running past the break's length is on, report where
+        it ends, so the worker has the show back by then (on the input side, a programme delay
+        ahead of what airs). With nothing shown for FIRST_WAIT, report it over at once."""
+        with self.lock:
+            if self.fill_request is not request or self.fill_report is not None:
+                return
+            deadline = request['start'] + int(request['length'] * SECOND)
+            if self.reel is not None and self.reel_kind != 'join' and self.reel_start_pts is not None:
+                ends = self.reel_start_pts + int(self.reel.ad['duration'] * SECOND)
+                if ends >= deadline:
+                    self.fill_report = {'end': ends, 'take': False, 'fixed': True}
+            elif not self.break_items and pts - request['start'] > self.FIRST_WAIT:
+                self.fill_report = {'end': pts, 'take': False, 'fixed': True, 'empty': True}
 
     def _fill_next(self, due, pts):
         """The next of the fill: what the operator queued, a due promo, else a short ad; else the end card."""
@@ -1049,6 +1110,7 @@ class AdBreak:
         with self.lock:
             if self.fill_request is window['request']:
                 self.fill_request, self.fill_report, self.filling = None, None, False
+                self.fill_longest = self.FILL_LONGEST
         self.wake.set()                      # the helper lets the bumper go
 
     def fill_sound(self, due, pts, size):
@@ -1232,11 +1294,12 @@ class AdBreak:
         a short one), a promo with promos on; none left out."""
         ads = {a['id']: a for a in (self.settings or {}).get('ads', [])}
         with self.lock:
+            longest = self.fill_longest if self.filling else None
             for e in self.queue:
                 if e['id'] in self.left_out:
                     continue
                 if e['kind'] == 'ad':
-                    if self.ads_on and not (self.filling and (ads.get(e['id'], {}).get('duration') or 0) > self.FILL_LONGEST):
+                    if self.ads_on and not (longest is not None and (ads.get(e['id'], {}).get('duration') or 0) > longest):
                         return e
                 elif self.promos_on and self.library_folder is not None:
                     return e

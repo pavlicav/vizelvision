@@ -1422,6 +1422,8 @@ class SourceQueue(PlayoutQueue):
         media = on_air.get('media') or {}
         position, duration = media.get('position_seconds'), media.get('duration_seconds')
         left = max(0., duration - position) if position is not None and duration else None
+        if left is not None:  # a show with ad breaks still has its breaks to come
+            left += (on_air.get('break_plan') or {}).get('left_seconds') or 0
         if left is not None and left > ENDING_SECONDS:
             return None
         end = now + timedelta(seconds=left or 0)

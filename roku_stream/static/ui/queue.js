@@ -109,7 +109,7 @@ window.UpNext = (() => {
     // not placed yet, and what already happened.
     function entryRow(item) {
       const media = item.target?.source_id === 'library' ? VV.libraryItem(item.target.channel_id) : null;
-      const kind = media ? 'Recording · ' + (media.duration ? fmt.dur(media.duration) : 'length unknown') : item.origin === 'programming' ? 'Schedule · ' + (item.title || 'Programming block')
+      const kind = media ? 'Recording · ' + (media.duration ? fmt.dur(media.duration) : 'length unknown') + adBreaks(item.target) : item.origin === 'programming' ? 'Schedule · ' + (item.title || 'Programming block')
         : item.origin === 'manual_end' ? 'After the manual take ends · the schedule is off' : item.tune_anyway ? 'Channel only · program requirement waived' : item.program?.title || 'Live channel';
       const end = item.hold_end, until = end?.game ? ' · until ' + (end.game.title || 'the game') + ' is final' : end?.until ? ' · until ' + fmt.clock(end.until) : '';
       const due = (item.run_at ? fmt.when(item.run_at) : item.release_type === 'after_current' ? 'After what is ahead of it' : 'After ' + (item.after_game_title || 'game')) + until;
@@ -140,10 +140,12 @@ window.UpNext = (() => {
       return out;
     }
     const approx = s => !!s && (s.estimated || (s.notes || []).includes('Length unknown'));
+    // A show queued with ad breaks: My ads at each of its act breaks, about this long each.
+    const adBreaks = target => target?.ad_breaks ? ' · ad breaks of ' + fmt.dur(target.ad_breaks) : '';
     function where(s) {
       if (s.kind === 'recording') {
         const media = s.target?.source_id === 'library' ? VV.libraryItem(s.target.channel_id) : null;
-        return 'Recording · ' + (media?.duration ? fmt.dur(media.duration) : 'length unknown');
+        return 'Recording · ' + (media?.duration ? fmt.dur(media.duration) : 'length unknown') + adBreaks(s.target);
       }
       return showTarget(s.target) + (s.kind === 'game' && score(s.game) ? ' · ' + score(s.game) : '');
     }

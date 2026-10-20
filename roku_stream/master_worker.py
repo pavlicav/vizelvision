@@ -28,7 +28,7 @@ from .master import MasterStreamError, _gst
 from .master_media import DecodedInput, FileInput, MasterMedia
 from .ident import (FILL_HOLD_LIMIT, IDENT_HOLD_AT, IDENT_HOLD_LIMIT, IDENT_PATH, IDENT_SECONDS, IDENT_SLOT,
                     JOIN_FREEZE_SLACK, IdentLease)
-from .library import FileLease, LIBRARY_SOURCE_ID, library_target
+from .library import FileLease, LIBRARY_SOURCE_ID, cache_path, cached_breaks, library_target
 from .tv_control import RokuLease, SharedLease, TvControl, target_from
 from .roku_input import ROKU_SOURCE_IDS, roku_target
 from .production import ProductionSettings
@@ -330,6 +330,8 @@ class MasterWorker:
             result['shared_with'] = lease.shared_with
         if isinstance(lease, FileLease) and entry['decoder'] and hasattr(entry['decoder'], 'progress'):
             result['media'] = entry['decoder'].progress()
+            if entry.get('breaks'):
+                result['break_plan'] = self._break_status(entry['breaks'])
             with self.lock:
                 if self.arm and self.arm[0] == key:
                     result['after_input_id'] = self.arm[1]
@@ -355,6 +357,16 @@ class MasterWorker:
         with self.lock:
             if self.arm and key in self.arm:
                 self.arm = None
+        plan = entry.get("breaks") if entry else None
+        if plan and plan['state'] != 'play' and self._ad_break() is not None:
+            # The show left air in (or just before) one of its ad breaks: the break ends with it.
+            try:
+                if plan['state'] == 'held':
+                    self._ad_break().fill_stop(self.output.running_time())
+                else:
+                    self._ad_break().fill_unprime()
+            except Exception:
+                logging.getLogger(__name__).warning('The ad break could not be closed', exc_info=True)
         if self.ident_key == key:
             self.ident_key = None
             self._end_fill()  # The ID left air: whatever fills its end card stops there.
@@ -585,6 +597,7 @@ class MasterWorker:
             if self._air_ident(None):  # Ends on its own: the next take, or back to the test card.
                 logging.getLogger(__name__).info("Station ID started from the test card")
         self._hold_ident()
+        self._programme_breaks()
         self._keep_ident()
         self._admute_tick()
         if hasattr(self.output, 'caption_status'):
@@ -728,6 +741,106 @@ class MasterWorker:
             'eas': self.eas.status() if self.eas else None,
             'nws': self.nws.status() if self.nws else None,
             'error': None})
+
+    # ------------------------------------------------------------ a show's ad breaks
+    # A file queued with ad breaks (library.py, library_breaks.py) stops at each act break
+    # found by its scan: My ads (and station promos) play over its held frame for about the
+    # length asked, the ad on air plays out, and the show goes on from the break.
+    #   play ─(BREAK_PRIME s before)─▶ primed: the break's first ad is cued
+    #        ─(BREAK_ARM s before)───▶ armed: the file stops passing media on at the break,
+    #                                  or, with nothing to show, the break is skipped
+    #        ─(the break's frame)────▶ held: frozen, the fill window open (ad_break.AdBreak)
+    #        ─(the break's time)─────▶ play, from the break's resume point; ads go on over it
+    #                                  until the show's first frame airs (a programme delay on)
+    BREAK_PRIME = 15
+    BREAK_ARM = 2
+    BREAK_OVERRUN = 15   # the show waits for an ad that ends at most this long past the break's length
+
+    def _break_plan(self, lease):
+        points = cached_breaks(cache_path(self.app_config), lease.target['channel_id'], lease.generation) or []
+        if not points:
+            logging.getLogger(__name__).warning('No ad breaks are known for %s: it plays straight through',
+                                                lease.target['channel_id'])
+        return {'points': sorted(points, key=lambda p: p['at']), 'seconds': lease.target['ad_breaks'],
+                'index': 0, 'state': 'play', 'aired': 0, 'skipped': 0, 'since': None}
+
+    def _break_status(self, plan):
+        left = len(plan['points']) - plan['index']
+        held = plan['state'] == 'held' and plan['since'] is not None
+        current = max(0., plan['seconds'] - (time.monotonic() - plan['since'])) if held else 0.
+        return {'seconds': plan['seconds'], 'count': len(plan['points']), 'aired': plan['aired'],
+                'skipped': plan['skipped'], 'state': plan['state'],
+                'next_at': plan['points'][plan['index']]['at'] if left > 0 else None,
+                # Time still to come in breaks, for Up next's sums: this one's rest and the others.
+                'left_seconds': round(current + plan['seconds'] * (left - (1 if held else 0)), 1)}
+
+    def _programme_breaks(self):
+        key = self.active
+        entry = self.inputs.get(key) if key and key != self.ident_key else None
+        plan = entry.get('breaks') if entry else None
+        decoder = entry['decoder'] if entry else None
+        if not plan or not decoder or not hasattr(decoder, 'stop_at') or not getattr(decoder, 'started', False):
+            return
+        log, breaks = logging.getLogger(__name__), self._ad_break()
+        if plan['state'] == 'held':
+            # The show comes back on the input side at the break's time, or where the ad on air
+            # then ends (if soon after); what airs is a programme delay behind, and the ads
+            # carry on over it until the show's first frame (ad_break.fill_resume).
+            if breaks is not None and breaks.fill_status() is not None:
+                report = breaks.fill_end()
+                due = plan['frozen_at'] + int(plan['seconds'] * 1e9)
+                if report and report.get('empty'):
+                    due = report['end']
+                elif report:
+                    due = max(due, min(report['end'], due + int(self.BREAK_OVERRUN * 1e9)))
+                if self.output.running_time() < due:
+                    return
+            point = plan['points'][plan['index']]
+            decoder.thaw(point['resume'])
+            if breaks is not None and isinstance(getattr(decoder, 'floor', None), int):
+                breaks.fill_resume(decoder.floor)
+            plan.update(state='play', index=plan['index'] + 1, aired=plan['aired'] + 1, since=None)
+            log.info('Ad break %d of %d over: the show goes on from %.1f s', plan['index'], len(plan['points']),
+                     point['resume'])
+            return
+        if plan['index'] >= len(plan['points']):
+            return
+        point = plan['points'][plan['index']]
+
+        def skip(why):
+            decoder.stop_at(None)
+            if breaks is not None:
+                breaks.fill_unprime()
+            plan.update(state='play', index=plan['index'] + 1, skipped=plan['skipped'] + 1)
+            log.warning('Ad break at %.1f s skipped: %s', point['at'], why)
+
+        if plan['state'] == 'armed':
+            if not getattr(decoder, 'stopped', False):
+                return
+            if breaks is not None and decoder.freeze():
+                breaks.fill_start(decoder.frozen_at, length=plan['seconds'])
+                plan.update(state='held', since=time.monotonic(), frozen_at=decoder.frozen_at)
+                log.info('Ad break %d of %d at %.1f s: about %d s of ads', plan['index'] + 1, len(plan['points']),
+                         point['at'], plan['seconds'])
+            else:
+                skip('the file could not hold its picture')
+            return
+        position = decoder.progress().get('position_seconds')
+        if position is None:
+            return
+        if position > point['at'] + 1:
+            plan['index'] += 1   # already past it (a file started partway through)
+            return
+        if plan['state'] == 'play' and position >= point['at'] - self.BREAK_PRIME:
+            if breaks is None:
+                return skip('master has no ad breaks')
+            breaks.fill_prime()
+            plan['state'] = 'primed'
+        if plan['state'] == 'primed' and position >= point['at'] - self.BREAK_ARM:
+            if not (self._fills() and breaks.fill_ready()):
+                return skip('none of My ads or station promos may play now')
+            decoder.stop_at(point['at'])
+            plan['state'] = 'armed'
 
     # ------------------------------------------------------------ station ID
 
@@ -1067,7 +1180,9 @@ class MasterWorker:
                     raise MasterStreamError(self.status().get("error") or "Input preparation failed")
                 if entry["url"] and entry["decoder"] is None:
                     factory = self.file_decoder_factory if is_file else self.decoder_factory
-                    if not is_file and lane_enabled(self.admute_conf, lane):
+                    if is_file and getattr(lease, 'audio_tracks', 1) > 1:
+                        entry["decoder"] = factory(self.output, slot, entry["url"], select_audio=True)
+                    elif not is_file and lane_enabled(self.admute_conf, lane):
                         # Ad mute analyses this input; the programme plays the lookahead behind.
                         entry["tap"] = self.admute.open_input(key, {
                             **{k: v for k, v in lease.target.items() if isinstance(v, (str, int, float))},
@@ -1087,6 +1202,8 @@ class MasterWorker:
                         raise MasterStreamError("Source readiness changed during preparation")
                     if is_file:
                         entry["decoder"].cue()  # Decodes; now wait at the start for the take.
+                        if lease.target.get('ad_breaks'):
+                            entry["breaks"] = self._break_plan(lease)
                     self.prepared = key
                     if is_file and after:
                         with self.lock:

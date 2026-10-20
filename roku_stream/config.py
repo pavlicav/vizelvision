@@ -182,6 +182,9 @@ class LibraryRoot:
     id: str
     name: str
     path: Path
+    # Its files may be queued with ad breaks spliced in (library_breaks.py): a show's own
+    # folder (Jellyfin), never TV-Thing's recordings, whose breaks are already cut out live.
+    ad_breaks: bool = False
 
 
 @dataclass(frozen=True)
@@ -284,7 +287,10 @@ def _library(raw: dict[str, Any]) -> LibraryConfig:
             raise ConfigError("library root name must be a non-empty string")
         if not isinstance(path, str) or not Path(path).is_absolute():
             raise ConfigError("library root path must be an absolute directory")
-        roots.append(LibraryRoot(id=root_id, name=name.strip(), path=Path(path)))
+        ad_breaks = value.get("ad_breaks", False)
+        if not isinstance(ad_breaks, bool):
+            raise ConfigError("library root ad_breaks must be true or false")
+        roots.append(LibraryRoot(id=root_id, name=name.strip(), path=Path(path), ad_breaks=ad_breaks))
     if enabled and not roots:
         raise ConfigError("library.enabled requires at least one root")
     return LibraryConfig(enabled=enabled, roots=tuple(roots))

@@ -137,6 +137,8 @@ now adds TV-Thing prepare/take controls, tuner leases, fallback, publisher
 recovery, and a browser master monitor. Its candidate setup is ready for local testing.
 The [media library](docs/media-library.md) plays finished TV-Thing recordings
 (and any other configured folders) to master through the queue, to play now or back to back.
+Shows from Jellyfin can play with [ad breaks spliced in](docs/media-library.md#ad-breaks-for-shows-october-20):
+a scan finds where each episode faded to black for its commercials, and My ads fill them.
 Up next is the only way on air from the page: + Queue, then **Now** or a release time.
 A 30-second [station ID](docs/station-id.md) plays between programs, and a
 [continuity announcer](docs/continuity.md) can voice it: what just played, what is next.

@@ -1,7 +1,7 @@
 // Sources: every channel, game and recording, with the three ways on air beside each.
 (() => {
   'use strict';
-  const {h, api, fmt, toast, label, same, ROKU} = VV;
+  const {h, api, fmt, toast, label, same, ROKU, icon, ICONS} = VV;
   const id = name => document.getElementById(name);
   const state = {sources: [], programs: VV.known.programs, filter: VV.store.get('sourcesFilter', 'all'), query: '', busy: false, master: {}, queue: null};
   const isRoku = sid => ROKU.includes(sid);
@@ -240,34 +240,172 @@
     for (const items of groups.values()) items.sort((a, b) => a.aired && b.aired ? b.aired - a.aired || naturally.compare(a.path, b.path) : naturally.compare(a.path, b.path));
     return [...groups].sort((a, b) => naturally.compare(a[0], b[0]));
   }
+  /* Ad breaks for a show (a folder set up for them: Jellyfin's, never TV-Thing's recordings) ---------- */
+  // "+ Add ads" on a row opens its strip: how long each break runs (15 s steps up to 3 min) and
+  // the scan that finds the breaks (only when asked; what it found is kept). Play and Queue
+  // then ask for ad breaks, once the scan found some.
+  const BREAK = {least: 15, most: 180, step: 15};
+  const ads = new Map();   // item ID -> seconds of ads at each break, while Add ads is on for it
+  const SCANNING = ['scanning', 'waiting'];
+  function showItem(file) {
+    const item = recordingItem(file);
+    Object.defineProperty(item, 'target', {enumerable: true, get() {
+      const found = file.ad_breaks, seconds = ads.get(file.id);
+      return {source_id: 'library', channel_id: file.id, ...(seconds && found?.state === 'ok' ? {ad_breaks: seconds} : {})};
+    }});
+    if (file.ad_breaks?.state === 'ok') item.ad_count = file.ad_breaks.at.length;
+    return item;
+  }
+  function adsButton(file) {
+    const on = ads.has(file.id);
+    const b = h('button', {type: 'button', class: 'sm' + (on ? ' primary' : ''), 'aria-pressed': String(on), 'aria-label': (on ? 'Remove ads from ' : 'Add ads to ') + file.title},
+      on ? '✓ Ads' : '+ Add ads');
+    b.onclick = () => {
+      if (on) ads.delete(file.id); else ads.set(file.id, VV.store.get('adBreakSeconds', 60));
+      renderGuide();
+    };
+    return b;
+  }
+  function breakFinding(found) {
+    const n = found.at.length;
+    return {ok: n + (n === 1 ? ' ad break' : ' ad breaks') + ' · at ' + found.at.map(t => fmt.dur(t)).join(', '),
+      none: 'No ad breaks found in this file: it plays straight through.',
+      failed: 'The scan failed' + (found.reason ? ': ' + found.reason : '') + '.',
+      scanning: 'Scanning for ad breaks… about half a minute.', waiting: 'Waiting to scan…',
+      not_scanned: 'Not scanned yet: the scan finds where the show fades to black for its breaks.'}[found.state] || found.state;
+  }
+  function adsStrip(file) {
+    const seconds = ads.get(file.id), found = file.ad_breaks;
+    const shown = h('strong', {class: 'mono'}, fmt.dur(seconds));
+    const length = h('input', {type: 'range', min: BREAK.least, max: BREAK.most, step: BREAK.step, value: seconds,
+      'aria-label': 'How long each ad break runs', style: {width: '160px'}});
+    length.oninput = () => { const v = Number(length.value); ads.set(file.id, v); VV.store.set('adBreakSeconds', v); shown.textContent = fmt.dur(v); };
+    const scanning = SCANNING.includes(found.state);
+    const scan = h('button', {type: 'button', class: 'sm' + (found.state === 'not_scanned' ? ' primary' : ' quiet'), disabled: scanning},
+      found.state === 'not_scanned' ? 'Scan for ad breaks' : scanning ? 'Scanning…' : 'Scan again');
+    scan.onclick = async () => {
+      scan.disabled = true;
+      try { replaceItem(await api('v1/sources/library/scan', {channel_id: file.id})); renderGuide(); watchScans(); }
+      catch (e) { toast(e.message, {error: true}); scan.disabled = false; }
+    };
+    const finding = h('small', {class: found.state === 'failed' ? 'warn' : '', role: 'status'}, breakFinding(found),
+      found.state !== 'ok' && !scanning ? ' Until it has breaks, Play and Queue put it on without ads.' : '');
+    return h('div', {class: 'media-ads'},
+      h('label', {class: 'ads-length'}, h('span', {class: 'label'}, 'Each break'), length, shown),
+      h('div', {class: 'ads-scan'}, scan, finding));
+  }
+  function replaceItem(item) {
+    const data = state.programs.get('library');
+    if (data?.items) data.items = data.items.map(i => i.id === item.id ? item : i);
+  }
+  // While a scan runs, the listing every 3 s (else every 15 s, below).
+  let scanTimer = null;
+  function watchScans() {
+    if (scanTimer) return;
+    scanTimer = setInterval(async () => {
+      try {
+        const data = await api('v1/sources/library/programs');
+        state.programs.set('library', data); renderGuide();
+        if (!(data.items || []).some(i => SCANNING.includes(i.ad_breaks?.state))) { clearInterval(scanTimer); scanTimer = null; }
+      } catch {}
+    }, 3000);
+  }
+
   const playOrder = items => [...items].sort((a, b) => a.aired && b.aired ? a.aired - b.aired || naturally.compare(a.path, b.path) : naturally.compare(a.path, b.path));
   function renderLibrary(head, body, data) {
     if (data.roots) head.append(h('small', {class: 'muted'}, data.roots.map(r => r.name + ' · ' + (r.available ? r.count + ' files' : r.error || 'unavailable')).join(' · ')));
     const problems = [data.error, ...(data.roots || []).filter(r => r.error).map(r => r.name + ': ' + r.error)].filter(Boolean);
     if (problems.length) body.append(h('div', {style: {padding: '10px 16px'}}, problems.map(p => h('p', {class: 'note warn small'}, p))));
     const matches = item => [item.title, item.collection, item.channel, item.path].filter(Boolean).join(' ').toLowerCase().includes(state.query);
-    const groups = libraryGroups(data).map(([name, items]) => [name, items.filter(matches)]).filter(([, items]) => items.length);
-    if (!groups.length) body.append(h('p', {class: 'hint', style: {padding: '14px 16px'}}, state.query ? 'No matching files.' : 'No finished files in the library yet. Recordings appear here once TV-Thing finishes them.'));
-    for (const [name, items] of groups) {
-      const title = h('div', {class: 'collection'}, h('h3', name), h('small', {class: 'muted'}, items.length + (items.length === 1 ? ' file' : ' files')));
-      if (state.queue?.master_queue && items.length > 1) {
-        const all = h('button', {class: 'sm', type: 'button', 'aria-label': 'Add all of ' + name + ' to the queue in order'}, '+ Add all to queue');
-        all.onclick = () => queueAll(playOrder(items.filter(i => i.playable !== false)), all); title.append(all);
-      }
-      body.append(title);
-      for (const item of items) {
-        const target = {source_id: 'library', channel_id: item.id};
-        const onAir = same(state.master.on_air, target), prepared = same(state.master.prepared, target);
-        const info = h('div', h('strong', item.title), h('small', [item.channel, item.aired ? fmt.full(item.aired) : null, item.variant ? '(' + item.variant + ')' : null].filter(Boolean).join(' · ') || item.path),
-          onAir ? h('small', {style: {color: 'var(--pgm)'}}, 'On master · ' + fmt.dur(state.master.on_air.media?.position_seconds) + ' / ' + fmt.dur(state.master.on_air.media?.duration_seconds))
-            : prepared ? h('small', {style: {color: 'var(--pvw)'}}, state.master.prepared.after_input_id ? 'Cued · plays when the current file ends' : 'Cued at its start for Up next') : null);
-        const meta = h('div', h('small', {class: 'mono'}, item.probe === 'pending' ? 'Checking file…' : item.duration ? fmt.dur(item.duration) : 'Length unknown'),
-          h('small', {class: 'mono'}, (item.bytes / 1e9).toFixed(item.bytes >= 1e10 ? 0 : 1) + ' GB' + (item.video?.height ? ' · ' + item.video.height + 'p' : '')),
-          item.playable === false ? h('small', {style: {color: 'var(--warn)'}}, 'Cannot play: ' + (item.reason || 'unsupported')) : null);
-        const actions = state.queue?.master_queue && item.playable !== false ? OnAir.buttons(recordingItem(item)) : h('div');
-        body.append(h('div', {class: 'media media-row', data: {live: String(onAir), id: item.id}}, info, meta, actions));
+    const visible = (data.items || []).filter(matches);
+    if (!visible.length) body.append(h('p', {class: 'hint', style: {padding: '14px 16px'}}, state.query ? 'No matching files.' : 'No finished files in the library yet. Recordings appear here once TV-Thing finishes them.'));
+    // TV-Thing's recordings (and other plain folders): a list per folder, as always.
+    for (const [name, items] of libraryGroups({items: visible.filter(i => !i.ad_breaks)})) {
+      body.append(collectionTitle('collection', h('h3', name), items.length + (items.length === 1 ? ' file' : ' files'), name, items));
+      for (const item of items) mediaRow(body, item);
+    }
+    // Shows (a folder with ad breaks: Jellyfin's): each show, then each season, closed until opened.
+    for (const [show, seasons] of showTree(visible.filter(i => i.ad_breaks))) {
+      const episodes = [...seasons.values()].flat();
+      const showKey = 'show:' + show;
+      const open = folded(showKey, episodes);
+      const named = [...seasons.keys()].filter(Boolean).length;
+      body.append(foldTitle('collection show-title', showKey, open, h('h3', show),
+        [named ? named + (named === 1 ? ' season' : ' seasons') : null, episodes.length + (episodes.length === 1 ? ' episode' : ' episodes')].filter(Boolean).join(' · '), episodes));
+      if (!open) continue;
+      for (const [season, items] of seasons) {
+        if (!season) { for (const item of items) mediaRow(body, item, true); continue; }
+        const seasonKey = 'season:' + show + '/' + season;
+        const seasonOpen = folded(seasonKey, items);
+        body.append(foldTitle('collection season-title', seasonKey, seasonOpen, h('h4', season),
+          items.length + (items.length === 1 ? ' episode' : ' episodes'), items, show + ' ' + season));
+        if (seasonOpen) for (const item of items) mediaRow(body, item, true);
       }
     }
+  }
+  // Shows by folder: show -> season (null: episodes right in the show's folder) -> episodes, in order.
+  function showTree(items) {
+    const shows = new Map();
+    for (const item of items) {
+      const parts = item.path.split('/');
+      const show = parts.length > 1 ? parts[0] : 'Shows', season = parts.length > 2 ? parts.slice(1, -1).join('/') : null;
+      if (!shows.has(show)) shows.set(show, new Map());
+      const seasons = shows.get(show);
+      if (!seasons.has(season)) seasons.set(season, []);
+      seasons.get(season).push(item);
+    }
+    const order = (a, b) => a == null ? -1 : b == null ? 1 : naturally.compare(a, b);
+    return [...shows].sort((a, b) => naturally.compare(a[0], b[0])).map(([show, seasons]) =>
+      [show, new Map([...seasons].sort((a, b) => order(a[0], b[0])).map(([season, list]) => [season, playOrder(list)]))]);
+  }
+  // Which shows and seasons are open, as opened or closed by hand: remembered in this browser.
+  // Otherwise closed, except the one with an episode on air, cued or with its ads strip open.
+  // A search opens everything it finds.
+  const folds = VV.store.get('libraryFolds', {});
+  function folded(key, items) {
+    if (state.query) return true;
+    if (key in folds) return folds[key];
+    const shown = it => same(state.master.on_air, {source_id: 'library', channel_id: it.id})
+      || same(state.master.prepared, {source_id: 'library', channel_id: it.id}) || ads.has(it.id);
+    return items.some(shown);
+  }
+  function foldTitle(cls, key, open, heading, count, items, name) {
+    const toggle = h('button', {type: 'button', class: 'fold', 'aria-expanded': String(open)}, icon(ICONS.down), heading,
+      h('small', {class: 'muted'}, count));
+    toggle.onclick = () => {
+      if (state.query) return;   // a search shows all it finds
+      folds[key] = !open;
+      VV.store.set('libraryFolds', folds);
+      renderGuide();
+    };
+    const live = items.some(it => same(state.master.on_air, {source_id: 'library', channel_id: it.id}));
+    return collectionTitle(cls, toggle, null, name, name ? items : [], live ? h('span', {class: 'chip solid pgm'}, 'On air') : null);
+  }
+  function collectionTitle(cls, heading, count, name, items, extra) {
+    const title = h('div', {class: cls}, heading, count ? h('small', {class: 'muted'}, count) : null, extra || null);
+    if (state.queue?.master_queue && items.length > 1) {
+      const all = h('button', {class: 'sm', type: 'button', 'aria-label': 'Add all of ' + name + ' to the queue in order'}, '+ Add all to queue');
+      all.onclick = () => queueAll(playOrder(items.filter(i => i.playable !== false)), all); title.append(all);
+    }
+    return title;
+  }
+  function mediaRow(body, item, nested = false) {
+    const target = {source_id: 'library', channel_id: item.id};
+    const onAir = same(state.master.on_air, target), prepared = same(state.master.prepared, target);
+    const info = h('div', h('strong', item.title), h('small', [item.channel, item.aired ? fmt.full(item.aired) : null, item.variant ? '(' + item.variant + ')' : null].filter(Boolean).join(' · ') || (nested ? item.path.split('/').pop() : item.path)),
+      onAir ? h('small', {style: {color: 'var(--pgm)'}}, 'On master · ' + fmt.dur(state.master.on_air.media?.position_seconds) + ' / ' + fmt.dur(state.master.on_air.media?.duration_seconds))
+        : prepared ? h('small', {style: {color: 'var(--pvw)'}}, state.master.prepared.after_input_id ? 'Cued · plays when the current file ends' : 'Cued at its start for Up next') : null);
+    const meta = h('div', h('small', {class: 'mono'}, item.probe === 'pending' ? 'Checking file…' : item.duration ? fmt.dur(item.duration) : 'Length unknown'),
+      h('small', {class: 'mono'}, (item.bytes / 1e9).toFixed(item.bytes >= 1e10 ? 0 : 1) + ' GB' + (item.video?.height ? ' · ' + item.video.height + 'p' : '')),
+      item.playable === false ? h('small', {style: {color: 'var(--warn)'}}, 'Cannot play: ' + (item.reason || 'unsupported')) : null);
+    const show = item.ad_breaks && item.playable !== false;
+    const actions = state.queue?.master_queue && item.playable !== false ? OnAir.buttons(show ? showItem(item) : recordingItem(item)) : h('div');
+    if (show && state.queue?.master_queue) actions.append(adsButton(item));
+    const breaks = state.master.on_air && onAir ? state.master.on_air.break_plan : null;
+    if (breaks) info.append(h('small', {style: {color: 'var(--pgm)'}}, breaks.state === 'held' ? 'In an ad break'
+      : 'Ad breaks · ' + breaks.aired + ' of ' + breaks.count + ' done' + (breaks.next_at != null ? ' · next at ' + fmt.dur(breaks.next_at) : '')));
+    body.append(h('div', {class: 'media media-row' + (nested ? ' nested' : ''), data: {live: String(onAir), id: item.id}}, info, meta, actions));
+    if (show && ads.has(item.id)) body.append(adsStrip(item));
   }
   async function queueAll(items, button) {
     button.disabled = true;

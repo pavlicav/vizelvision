@@ -200,7 +200,9 @@ window.OnAir = (() => {
     part('.onair-error').textContent = '';
     const recording = item.kind === 'recording';
     part('.onair-until').hidden = recording;
-    part('.onair-file').textContent = recording ? 'Plays to the end of the file' + (item.duration ? ' (' + Math.round(item.duration / 60) + ' min)' : '') + '.' : '';
+    const ads = recording && item.target?.ad_breaks;
+    part('.onair-file').textContent = recording ? 'Plays to the end of the file' + (item.duration ? ' (' + Math.round(item.duration / 60) + ' min)' : '')
+      + (ads ? ', stopping at its ' + (item.ad_count ? item.ad_count + ' ' : '') + 'ad breaks for about ' + fmt.dur(ads) + ' of My ads each' : '') + '.' : '';
     part('.onair-file').hidden = !recording;
     renderChoices(item, {});
     part('.onair-sources').replaceChildren();

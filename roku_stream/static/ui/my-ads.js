@@ -350,7 +350,7 @@
         h('td', {class: 'num aired'}, fmt.dur(p.seconds) + ' of ' + fmt.dur(p.length)),
         h('td', {class: 'small muted'}, p.error ? h('span', {class: 'chip pgm', title: p.error}, 'failed') : p.complete ? 'complete'
           : p.wait ? 'cut short: the next program was ready' : 'cut short: the programme came back', p.counted ? null : ' · didn\'t count',
-          p.wait ? ' · while the next program got ready' : null)));
+          p.wait ? ' · while the next program got ready' : p.programme_break ? ' · in a show\'s ad break' : null)));
     VV.fill($('recent'), ...rows);
     $('recent-empty').hidden = rows.length > 0;
     $('card-today').textContent = view.card.seconds_today ? 'Break card in the last day: ' + fmt.dur(view.card.seconds_today) : '';

@@ -1139,6 +1139,12 @@ def handler_factory(
                 elif path in ("/v1/master/prepare", "/v1/master/prepare-take", "/v1/master/take",
                               "/v1/master/take-known", "/v1/master/fallback", "/v1/master/cancel"):
                     self._json(HTTPStatus.ACCEPTED, master.request(path.rsplit("/", 1)[1], data))
+                elif path == "/v1/sources/library/scan":
+                    # Scan a show's file for its ad breaks (library_breaks.py): only when asked.
+                    library = coordinator.library if coordinator else None
+                    if library is None or not library.config.enabled:
+                        raise ConfigError('The media library is not configured')
+                    self._json(HTTPStatus.ACCEPTED, library.scan_breaks(data.get('channel_id')))
                 elif path == "/v1/master/hold":
                     if coordinator is None or not isinstance(playout, SourceQueue):
                         raise ConfigError("The master queue is not configured")
