@@ -103,13 +103,20 @@ Since September 30 only API clients take directly; the page's **Change end time*
 **Take to master** asks how long the source stays on air:
 
 - **:30 or Top of the hour**, whichever comes next.
-- **When the program ends**, for a TV-Thing channel whose guide lists the current program. The server reads the end time from its own guide copy. This also covers sports that TV-Thing lists, such as *NFL Football*. It is the listed time, so an overrun is cut off.
+- **When the next scheduled show starts** (since October 20): the next block, show or game on the schedule, OFF AIR passed over. See below.
+- **When the program ends**, for a TV-Thing channel (or, since October 20, a YouTube TV channel) whose guide lists the current program. The server reads the end time from its own guide copy. This also covers sports that TV-Thing lists, such as *NFL Football*. It is the listed time, so an overrun is cut off.
 - **The game ends**, when the source is carrying an MLB, NFL or NBA game that is live or starts within the hour. This covers an MLB or Sunday Ticket target, a national game on a YouTube TV channel, or an over-the-air station whose name matches a configured channel alias (WTTG-HD is WTTG, which is FOX). Out-of-market Sunday games are not matched to the local station. The end is the game's final status, so overtime stays on air. The latest end is 12 hours after the take.
 - **A custom end time**, up to 12 hours ahead.
 
 The default is the game when one is matched, then the listed program, then the half hour. Until the end, the queue stays paused, and Up next shows *Manual take on air until …*. At the end, the queue resumes. If Up next already has an entry due, or one waiting on the same game, that entry follows. Otherwise the current schedule block goes to the head of Up next, or OFF AIR does when the schedule is off. **Return to schedule now** ends the take early, and **Change end time** sets a new end for whatever is on air.
 
 Preparing or cancelling another source keeps the end. Return to fallback, the operator's **Pause queue**, and manual Roku navigation away from an on-air Roku feed clear it, and the queue then stays paused as before. A take without an end (API clients that omit `until`) also pauses the queue indefinitely. Since October 12 the end is saved, and it holds again after a web restart while its input is still on air (see *Persistence*).
+
+## Until the next scheduled show starts (October 20)
+
+The Play now / Add to queue dialog's **Plays until** offers **The next scheduled show starts** (*Jeopardy · 7:30 PM*): the start of the next block, show or game on the schedule, with any OFF AIR before it passed over. It is the default for a channel or listed program; a game still defaults to its final. It is sent as an end time (`{"kind": "time", "at": <the show's start>}`), so the take is held like any timed take: an OFF AIR change or a Normal block before then does not end it, the station ID and the hand-back run at the show's start, and a show that outranks the take still cuts in (see *Priority*). **No set end** is unchanged: the next change on the schedule, OFF AIR included, takes over. **Change end time** offers the same choice. The server names the show in `end-options` (`next_show`, from `Programming.next_show`).
+
+Before this, playing something through an OFF AIR gap until the evening's next show meant typing that show's start as **A time** (as on October 20, 18:48: 4.1 until 19:30).
 
 ## Priority: a show that outranks what is on air cuts in (October 4)
 
@@ -400,7 +407,7 @@ With master disabled, the existing Roku-only queue and scheduler retain their or
 
 - `GET /v1/queue`: `master_queue`, `paused`, `pause_reason`, `hold` (a manual take's `target`, `until`, `program` or `game`, and game `detail`), `schedule_enabled`, `items`, `master_on_air`; legacy `on_air` remains the last confirmed Roku selection.
 - `POST /v1/master/take` and `/take-known` accept an optional `until`: `{"kind": "time", "at": ISO}`, `{"kind": "program", "program_id"}` or `{"kind": "game", "league", "game_pk", "game_date"}`. `POST /v1/master/hold` with `{until}` changes the end of what is on air.
-- `GET /v1/master/end-options?source_id=&channel_id=[&date=]`: the `games` and TV-Thing `program` a take can end with, and `returns_to` (`schedule` or `off_air`).
+- `GET /v1/master/end-options?source_id=&channel_id=[&date=]`: the `games` and listed `program` (TV-Thing or YouTube TV) a take can end with, `next_show` (`{title, kind, start}`: the next block, show or game after OFF AIR, or null while the schedule is off), and `returns_to` (`schedule` or `off_air`).
 - `GET /v1/networks`: each network on both YouTube TV and the antenna: `network`, `call_sign`, `youtube_tv` (its channel) and `antenna` (`source_id`, `channel_id`, `number`, `name`, or null when TV-Thing does not list it).
 - `POST /v1/queue`: `target` (`source_id`, `channel_id`, optional game `date` / TV `quality`, optional `antenna: false` for YouTube TV only), `release_type`, and `run_at` or `after_game`. `release_type: "now"` needs neither: the entry goes to the head, due in two seconds, and is stored as `at_time`.
 - `next_scheduled` in `GET /v1/queue` is the next schedule change not yet queued, including OFF AIR (`kind: "off_air"`, target `off-air`). Optional `program_id` binds a live-program snapshot. Legacy `channel` requests remain supported.

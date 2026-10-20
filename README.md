@@ -560,6 +560,12 @@ YouTube channels, not YouTube TV listings. Full network schedules would require
 a separate EPG provider such as Gracenote On API or TV Media; the queue does not
 scrape the YouTube TV UI for future airtimes.
 
+Since October 18 TV-Thing reads those listings from the web itself (Gracenote's
+station schedules, two days ahead, no tuner) and serves them in its guide as
+`youtube-tv/NAME` rows. Since October 20 the Sources page shows them for YouTube
+TV's channels (Now, Next, Later), a program there can be scheduled, and Play now
+can end with it ("until SportsCenter ends").
+
 ## Run it
 
 Install the local OCR executable once:

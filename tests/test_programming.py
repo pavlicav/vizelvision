@@ -267,6 +267,23 @@ class ProgrammingTests(unittest.TestCase):
         self.programming.data['enabled'] = False
         self.assertIsNone(self.programming.next_program(NOON))
 
+    def test_next_show_passes_over_off_air_and_counts_shows(self):
+        # News 12-13, OFF AIR 13-15, Sports 15-16: in the news, and in the gap, the next show is Sports.
+        self.load(self.grid(wed=[(cell(12), cell(13), 'news'), (cell(15), cell(16), 'sports')]))
+        at = NOON + timedelta(minutes=10)
+        self.assertEqual(self.programming.next_show(at),
+                         {'title': 'Sports', 'kind': 'block', 'start': (NOON + timedelta(hours=3)).isoformat()})
+        self.assertEqual(self.programming.next_show(NOON + timedelta(hours=2))['title'], 'Sports')
+        # A show starting in the gap comes first; one already under way does not count.
+        self.programming.data['shows'] = [{'id': 's', 'mode': 'program', 'title': 'Special', 'target': ESPN,
+                                           'start': (NOON + timedelta(hours=2)).isoformat(),
+                                           'end': (NOON + timedelta(hours=2, minutes=30)).isoformat()}]
+        self.assertEqual(self.programming.next_show(at), {'title': 'Special', 'kind': 'show',
+                                                          'start': (NOON + timedelta(hours=2)).isoformat()})
+        self.assertEqual(self.programming.next_show(NOON + timedelta(hours=2, minutes=10))['title'], 'Sports')
+        self.programming.data['enabled'] = False
+        self.assertIsNone(self.programming.next_show(at))
+
     def test_upcoming_shows_list_future_shows_not_yet_queued(self):
         self.load(self.grid())
         now = datetime.now(timezone.utc)

@@ -460,24 +460,30 @@ class EndOptionsApiTests(unittest.TestCase):
             'id': 'p1', 'title': 'NFL Football', 'start': 1, 'end': end, 'state': 'current'}}]}
         sports = Mock()
         sports.games_on.return_value = ([{'league': 'nfl', 'game_pk': 401}], [])
-        programming = SimpleNamespace(enabled=True)
+        show = {'title': 'Jeopardy', 'kind': 'block', 'start': soon(3600)}
+        programming = SimpleNamespace(enabled=True, next_show=lambda: show)
         handler, response = self.handler('/v1/master/end-options?source_id=tv-thing-digital&channel_id=wttg',
                                          sources=sources, sports=sports, programming=programming)
         handler.do_GET()
         self.assertEqual(response['status'], 200)
         self.assertEqual(response['payload']['program'], {'id': 'p1', 'title': 'NFL Football', 'start': 1, 'end': end})
         self.assertEqual(response['payload']['returns_to'], 'schedule')
+        self.assertEqual(response['payload']['next_show'], show)
         sports.games_on.assert_called_once_with({'source_id': 'tv-thing-digital', 'channel_id': 'wttg'},
                                                 channel_name='WTTG-HD')
 
-    def test_youtube_tv_has_no_listing_and_schedule_off_goes_off_air(self):
+    def test_youtube_tv_offers_its_listing_and_schedule_off_goes_off_air(self):
+        end = utc_now().timestamp() + 900
         sources, sports = Mock(), Mock()
+        sources.programs.return_value = {'channels': [{'id': 'ESPN', 'name': 'ESPN', 'now': {
+            'id': 'youtube-tv:ESPN:None:1', 'title': 'SportsCenter', 'start': 1, 'end': end, 'state': 'current'}}]}
         sports.games_on.return_value = ([], [])
         handler, response = self.handler('/v1/master/end-options?source_id=youtube-tv&channel_id=ESPN',
                                          sources=sources, sports=sports)
         handler.do_GET()
-        self.assertEqual((response['payload']['program'], response['payload']['returns_to']), (None, 'off_air'))
-        sources.programs.assert_not_called()
+        self.assertEqual(response['payload']['program']['title'], 'SportsCenter')
+        self.assertEqual((response['payload']['next_show'], response['payload']['returns_to']), (None, 'off_air'))
+        sources.programs.assert_called_once_with('youtube-tv')
 
     def test_hold_route_requires_the_master_queue(self):
         coordinator = Mock()

@@ -15,7 +15,7 @@ from .tv_thing import SourceUnavailableError, TvThingClient
 SOURCE_INFO = {
     "tv-thing-digital": ("TV-Thing Digital", "tv_thing:digital", "broadcast"),
     "tv-thing-analog": ("TV-Thing Analog", "tv_thing:analog", "unavailable"),
-    "youtube-tv": ("YouTube TV", "roku:primary", "unavailable"),
+    "youtube-tv": ("YouTube TV", "roku:primary", "broadcast"),
     "mlb": ("Baseball", "roku:primary", "games"),
     "sunday-ticket": ("NFL Sunday Ticket", "roku:primary", "games"),
     "thursday-night-football": ("Thursday Night Football", "roku:primary", "games"),
@@ -27,7 +27,7 @@ def _number(value: object) -> bool:
     return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
 
 
-def normalize_events(channel_id: str, events: object, now: float) -> list[dict]:
+def normalize_events(channel_id: str, events: object, now: float, source_id: str = "tv-thing-digital") -> list[dict]:
     result = []
     for event in events if isinstance(events, list) else []:
         if not isinstance(event, dict):
@@ -39,7 +39,7 @@ def normalize_events(channel_id: str, events: object, now: float) -> list[dict]:
         if not math.isfinite(end) or end <= now:
             continue
         event_id = event.get("event_id")
-        result.append({"id": f"tv-thing-digital:{channel_id}:{event_id}:{start}",
+        result.append({"id": f"{source_id}:{channel_id}:{event_id}:{start}",
                        "event_id": event_id, "title": str(event.get("title") or "Untitled program"),
                        "start": start, "end": end, "end_kind": "scheduled",
                        "state": "current" if start <= now < end else "upcoming"})
@@ -127,10 +127,7 @@ class SourceCatalog:
         if source_id not in SOURCE_INFO:
             raise ChannelNotFoundError("Unknown source", details={"sources": list(SOURCE_INFO)})
         if source_id == "youtube-tv":
-            # TV Thing's Roku lane lists YouTube TV's channels.
-            return {"source_id": source_id, "guide": {"available": False, "reason": "No program guide configured"},
-                    "channels": [{"id": c.name, "number": None, "name": c.name, "now": None,
-                                  "upcoming": []} for c in self.config.youtube_tv_channels()], "stale": False}
+            return self._youtube_tv()
         if source_id == "mlb":
             return self._baseball(requested_date)
         if source_id == "sunday-ticket":
@@ -192,6 +189,40 @@ class SourceCatalog:
                     "coverage_hours": max(0, horizon - now) / 3600 if _number(horizon) else None,
                     "stale": bool(guide and guide["stale"]),
                     "reason": None if data.get("available") is True else "Program listings unavailable"}}
+
+    def _youtube_tv(self) -> dict:
+        """YouTube TV's channels (TV Thing's Roku lane lists them), with the listings TV Thing's
+        guide reads from the web for them since 2026-10-18. Local Now and the like have none."""
+        warnings, guide = [], None
+        try:
+            guide = self.tv.get("guide")
+            if guide["error"]:
+                warnings.append(guide["error"])
+        except SourceUnavailableError as exc:
+            warnings.append(str(exc))
+        now = self.clock()
+        data = guide["data"] if guide else {}
+        rows = data.get("channels") if isinstance(data.get("channels"), dict) else {}
+        by_id = {r["channel_id"]: r for r in rows.values()
+                 if isinstance(r, dict) and r.get("source_id") == "youtube-tv" and isinstance(r.get("channel_id"), str)}
+        channels = []
+        for channel in self.config.youtube_tv_channels():
+            events = normalize_events(channel.name, (by_id.get(channel.name) or {}).get("events"), now, "youtube-tv")
+            current = next((e for e in events if e["state"] == "current"), None)
+            channels.append({"id": channel.name, "number": None, "name": channel.name,
+                             "now": current, "upcoming": [e for e in events if e["state"] == "upcoming"]})
+        listings = data.get("youtube_tv") if isinstance(data.get("youtube_tv"), dict) else {}
+        available = listings.get("available") is True and bool(by_id)
+        if listings.get("last_error"):
+            warnings.append(f"YouTube TV listings: {listings['last_error']}")
+        generated, coverage = listings.get("generated_at"), listings.get("coverage_hours")
+        return {"source_id": "youtube-tv", "channels": channels, "warnings": warnings,
+                "stale": bool(guide and guide["stale"]), "fetched_at": guide["fetched_at"] if guide else None,
+                "guide": {"available": available, "generated_at": generated,
+                          "age_seconds": max(0, now - generated) if _number(generated) else None,
+                          "coverage_hours": coverage if _number(coverage) else None,
+                          "stale": bool(guide and guide["stale"]),
+                          "reason": None if available else "Program listings unavailable"}}
 
     def _sunday_ticket(self, requested_date: str | None, *, source_id="sunday-ticket") -> dict:
         """NFL games of the day; each is found in YouTube TV's guide by its title."""

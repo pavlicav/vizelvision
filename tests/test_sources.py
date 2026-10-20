@@ -155,6 +155,29 @@ class SourceCatalogTests(unittest.TestCase):
             self.assertIsNone(result["channels"][0]["now"])
         self.assertEqual(self.catalog.programs("tv-thing-analog")["channels"][0]["id"], 3)
 
+    def test_youtube_tv_listings_come_from_tv_things_guide(self):
+        self.payloads["guide"]["youtube_tv"] = {"available": True, "generated_at": 400, "coverage_hours": 36.0,
+                                                "last_error": None}
+        self.payloads["guide"]["channels"]["youtube-tv/ESPN"] = {
+            "key": "youtube-tv/ESPN", "kind": "roku", "source_id": "youtube-tv", "channel_id": "ESPN", "events": [
+                {"title": "Earlier", "start": 700, "duration": 200},
+                {"title": "SportsCenter", "start": 900, "duration": 200, "live": True},
+                {"title": "NFL Live", "start": 1100, "duration": 1800}]}
+        result = self.catalog.programs("youtube-tv")
+        channel = result["channels"][0]
+        self.assertEqual((channel["id"], channel["now"]["title"], channel["now"]["end"]), ("ESPN", "SportsCenter", 1100))
+        self.assertEqual(channel["now"]["id"], "youtube-tv:ESPN:None:900")
+        self.assertEqual([e["title"] for e in channel["upcoming"]], ["NFL Live"])
+        self.assertEqual((result["guide"]["available"], result["guide"]["age_seconds"], result["guide"]["coverage_hours"]),
+                         (True, 600, 36.0))
+        # The antenna's rows are not YouTube TV's, and the antenna keeps its own ids.
+        self.assertTrue(self.catalog.programs("tv-thing-digital")["channels"][0]["now"]["id"].startswith("tv-thing-digital:"))
+
+    def test_youtube_tv_without_listings_keeps_its_channels(self):
+        result = self.catalog.programs("youtube-tv")
+        self.assertEqual([(c["id"], c["now"], c["upcoming"]) for c in result["channels"]], [("ESPN", None, [])])
+        self.assertFalse(result["guide"]["available"])
+
     def test_sources_degrade_independently_and_no_stale_selection(self):
         self.stale.add("status")
         result = self.catalog.list()

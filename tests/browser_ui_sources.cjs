@@ -5,7 +5,8 @@ const {open, run, assert, overflow} = require('./ui_harness.cjs');
 const REC = 'tv-recordings/Jeopardy! - 7.1 WJLA - 2026-09-26 0430.mp4';
 
 run(async browser => {
-  const t = await open(browser, '/sources', {api: {'POST /v1/queue': () => ({status: 201, json: {id: 'new'}}), 'POST /v1/programming/shows': () => ({status: 201, json: {}})}});
+  const api = {'POST /v1/queue': () => ({status: 201, json: {id: 'new'}}), 'POST /v1/programming/shows': () => ({status: 201, json: {}})};
+  const t = await open(browser, '/sources', {api});
   const page = t.page;
   await page.waitForSelector('.row-channel[data-channel="wrc_hd_4_1"]');
 
@@ -20,6 +21,17 @@ run(async browser => {
   await dialog.getByRole('button', {name: /Play now and resume/}).click();
   await page.waitForTimeout(200);
   assert.deepEqual(t.posts.at(-1).body, {target: {source_id: 'tv-thing-digital', channel_id: 'wrc_hd_4_1'}, release_type: 'now', resume: true});
+
+  // Until the next scheduled show starts, OFF AIR passed over: once the server names it, the default over the program's end.
+  api['GET /v1/master/end-options'] = () => ({games: [], program: null, warnings: [], next_show: {title: 'Jeopardy', kind: 'block', start: '2026-10-02T03:00:00+00:00'}});
+  await page.getByRole('button', {name: 'Play now 4.1 · WRC-HD'}).click();
+  await dialog.locator('input[value=next]').waitFor();
+  assert.equal(await dialog.locator('input[value=next]').isChecked(), true, 'until the next scheduled show, by default');
+  assert.match(await dialog.locator('.onair-choices').innerText(), /The next scheduled show starts\s+Jeopardy/);
+  await dialog.getByRole('button', {name: /Play now/}).click();
+  await page.waitForTimeout(200);
+  assert.deepEqual(t.posts.at(-1).body.until, {kind: 'time', at: '2026-10-02T03:00:00.000Z'});
+  delete api['GET /v1/master/end-options'];
 
   // NBC, FOX, ABC, CBS and The CW: from YouTube TV or the antenna. Picked from TV-Thing's guide, the antenna.
   await page.getByRole('button', {name: 'Play now 4.1 · WRC-HD'}).click();
@@ -91,9 +103,17 @@ run(async browser => {
   assert.equal(t.posts.at(-1).path, '/v1/programming/shows');
   assert.equal(t.posts.at(-1).body.mode, 'program');
 
-  // The library: a recording plays to its end; a collection can be queued in order.
+  // The library: TV-Thing's recordings fold away, closed until opened (remembered); a recording
+  // plays to its end; a folder can be queued in order.
   await page.locator('#sources [data-source=library]').click();
-  await page.waitForSelector('.media-row');
+  const folder = page.locator('.collection .fold', {hasText: 'TV Recordings'});
+  await folder.waitFor();
+  assert.equal(await folder.getAttribute('aria-expanded'), 'false');
+  assert.equal(await page.locator('.media-row').count(), 0);
+  await folder.click();
+  await page.waitForSelector(`.media-row[data-id="${REC}"]`);
+  assert.equal(await page.locator('.media-row').count(), 5, 'one programme: its recordings straight in the folder');
+  assert.deepEqual(await page.evaluate(() => JSON.parse(localStorage.getItem('vv.libraryFolds'))), {'folder:TV Recordings': true});
   t.posts.length = 0;
   await page.locator(`.media-row[data-id="${REC}"]`).getByRole('button', {name: /^Add to queue/}).click();
   await page.waitForTimeout(150);
@@ -128,6 +148,22 @@ run(async browser => {
   assert.deepEqual(t.errors, []);
   assert.deepEqual(t.unknown, []);
   await t.ctx.close();
+
+  // A folder of several programmes: one recorded more than once folds by itself, the others are rows.
+  const mixed = await open(browser, '/sources', {storage: {sourcesFilter: 'library', libraryFolds: {'folder:TV Recordings': true}}, edit: F => {
+    const library = F.programs.library, one = library.items[0];
+    library.items.push({...one, id: 'tv-recordings/Celtics at Pistons (ad training).mp4', path: 'Celtics at Pistons (ad training).mp4', title: 'Celtics at Pistons (ad training)', aired: one.aired + 86400});
+  }});
+  const jeopardy = mixed.page.locator('.season-title .fold', {hasText: 'Jeopardy!'});
+  await jeopardy.waitFor();
+  assert.equal(await jeopardy.getAttribute('aria-expanded'), 'false');
+  assert.match(await jeopardy.innerText(), /5 recordings/);
+  assert.equal(await mixed.page.locator('.media-row').count(), 1, 'only the programme recorded once');
+  await jeopardy.click();
+  await mixed.page.waitForSelector('.media-row.nested');
+  assert.equal(await mixed.page.locator('.media-row.nested').count(), 5);
+  assert.deepEqual(mixed.errors, []);
+  await mixed.ctx.close();
 
   const phone = await open(browser, '/sources', {width: 390});
   await phone.page.waitForSelector('.row-channel');

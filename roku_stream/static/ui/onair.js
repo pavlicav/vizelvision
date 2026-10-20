@@ -4,7 +4,8 @@
 //   Add to queue  After everything waiting in Up next: it plays when what is before it ends.
 //                 A live source asks first how long it plays; a recording plays to its end.
 //   Schedule      A show or game in the schedule at its start (a recording joins Up next then).
-// "Plays until" is how long a live source holds master once on: its game's final, its listed
+// "Plays until" is how long a live source holds master once on: its game's final, the start of
+// the next scheduled show (OFF AIR passed over: the default when there is no game), its listed
 // program's end, a time, or no set end (then the schedule's next change takes over).
 // "Source", for NBC, FOX, ABC, CBS and The CW and their games: YouTube TV, or the antenna
 // (TV-Thing) if YouTube TV is not ready in time (the default); YouTube TV only; or the antenna.
@@ -50,17 +51,20 @@ window.OnAir = (() => {
     if (!until) return item.kind === 'recording' ? 'to its end' : 'with no set end';
     if (until.kind === 'game') return 'until ' + (item.game?.title || 'the game') + ' is final';
     if (until.kind === 'program') return 'until ' + (item.program?.title || 'the program') + ' ends at ' + fmt.clock(item.program.end);
+    if (until.show) return 'until ' + until.show + ' starts at ' + fmt.clock(until.at);
     return 'until ' + fmt.clock(until.at);
   }
 
   /* The three actions ------------------------------------------------------------------------ */
+  // The server takes a time; the next show's name is only for the toast.
+  const sent = until => until && until.show ? {kind: until.kind, at: until.at} : until;
   async function playNow(item, until = defaultUntil(item), resume = false) {
-    await api('v1/queue', {target: item.target, release_type: 'now', ...(until ? {until} : {}), ...(resume ? {resume: true} : {})});
+    await api('v1/queue', {target: item.target, release_type: 'now', ...(until ? {until: sent(until)} : {}), ...(resume ? {resume: true} : {})});
     toast('Playing next: ' + item.title + ' ' + untilText(until, item) + '. It cuts in as soon as the source is ready.', {ok: true});
     await afterChange();
   }
   async function addToQueue(item, until = defaultUntil(item)) {
-    await api('v1/queue', {target: item.target, release_type: 'after_current', ...(until ? {until} : {})});
+    await api('v1/queue', {target: item.target, release_type: 'after_current', ...(until ? {until: sent(until)} : {})});
     toast('Added to the end of Up next: ' + item.title + ', ' + untilText(until, item) + '.', {ok: true});
     await afterChange();
   }
@@ -117,22 +121,27 @@ window.OnAir = (() => {
   }
   function choice(value, text, detail, extra) {
     const radio = h('input', {type: 'radio', name: 'onair-until', value});
+    radio.addEventListener('change', () => { current.picked = value; });
     const row = h('label', {class: 'check onair-choice'}, radio, h('span', h('strong', text), detail ? h('small', detail) : null), extra || null);
     part('.onair-choices').append(row);
     return radio;
   }
+  // Rendered at once from the item, then again with what the server knows (end-options): a
+  // choice picked meanwhile stays picked.
   function renderChoices(item, options) {
     part('.onair-choices').replaceChildren();
     const game = item.game || options.games?.[0], program = item.program?.end > now() && item.program.start <= now() ? item.program : options.program;
-    current.game = game; current.program = program;
+    const next = options.next_show && secondsOf(options.next_show.start) > now() ? options.next_show : null;
+    current.game = game; current.program = program; current.next = next;
     if (game) choice('game', 'The game is final', [game.title, game.status || game.detail].filter(Boolean).join(' · ') + (game === item.game ? '' : ' · on this channel'));
+    if (next) choice('next', 'The next scheduled show starts', next.title + ' · ' + fmt.when(secondsOf(next.start)) + ' · OFF AIR before it is passed over');
     if (program) choice('program', program.title + ' ends', fmt.clock(program.end) + ' · from the TV guide');
-    choice('open', 'No set end', 'It stays on until the schedule\'s next change or the next thing you play.');
+    choice('open', 'No set end', 'It stays on until the schedule\'s next change (OFF AIR included) or the next thing you play.');
     const at = h('input', {type: 'datetime-local', 'aria-label': 'Plays until this time', style: {maxWidth: '230px', marginLeft: 'auto'}});
-    at.value = fmt.local(new Date(Math.max(Date.now() + 3600e3, nextHalfHour().getTime())));
+    at.value = current.at || fmt.local(new Date(Math.max(Date.now() + 3600e3, nextHalfHour().getTime())));
     const time = choice('time', 'A time', null, at);
-    at.addEventListener('input', () => { time.checked = true; });
-    const preferred = current.picked || (game ? 'game' : program ? 'program' : 'open');
+    at.addEventListener('input', () => { time.checked = true; current.picked = 'time'; current.at = at.value; });
+    const preferred = current.picked || (game ? 'game' : next ? 'next' : program ? 'program' : 'open');
     (dialog.querySelector('input[name=onair-until][value=' + preferred + ']') || dialog.querySelector('input[name=onair-until]')).checked = true;
   }
   // A network's source: YouTube TV with the antenna taking over if it is late (auto), YouTube TV
@@ -165,6 +174,10 @@ window.OnAir = (() => {
     const value = dialog.querySelector('input[name=onair-until]:checked')?.value;
     if (value === 'game') { const g = current.game; return {kind: 'game', league: g.league || 'mlb', game_pk: g.game_pk, game_date: g.game_date}; }
     if (value === 'program') return {kind: 'program', program_id: current.program.id};
+    if (value === 'next') {
+      if (!(secondsOf(current.next.start) > now())) throw Error(current.next.title + ' has started: choose another end.');
+      return {kind: 'time', at: new Date(secondsOf(current.next.start) * 1000).toISOString(), show: current.next.title};
+    }
     if (value === 'time') {
       const d = new Date(dialog.querySelector('.onair-choice input[type=datetime-local]').value);
       if (!Number.isFinite(d.getTime()) || d <= new Date()) throw Error('Choose a future time for it to play until.');
@@ -193,7 +206,7 @@ window.OnAir = (() => {
   async function open(item, {action = 'now', done = null} = {}) {
     if (!dialog) build();
     const token = ++opened;
-    current = {item, done, picked: null, queue: null, master: null, game: null, program: null};
+    current = {item, done, picked: null, at: null, queue: null, master: null, game: null, program: null, next: null};
     part('.onair-kicker').textContent = action === 'queue' ? 'Add to queue · how long it plays' : 'Put on air';
     part('#onair-title').textContent = (item.game ? ICON[item.game.league || 'mlb'] || '' : '') + item.title;
     part('.onair-sub').textContent = item.detail || label(item.target);
@@ -223,20 +236,20 @@ window.OnAir = (() => {
     renderNote();
     dialog.showModal();
     (dialog.querySelector('[data-act=' + main + ']:not(:disabled)') || part('[data-act=cancel]')).focus();
+    // The next scheduled show is asked for every live source; the game and the listed program
+    // only when the item does not carry them.
     const needsGuide = !recording && !item.game && !(item.program?.end > now());
     if (needsGuide) part('.onair-checking').textContent = 'Checking the guide and sports schedules…';
     try {
       const query = new URLSearchParams(['source_id', 'channel_id', 'date'].filter(k => item.target?.[k] != null).map(k => [k, String(item.target[k])]));
       const [queue, master, options] = await Promise.all([api('v1/queue').catch(() => null), api('v1/master').catch(() => null),
-        needsGuide ? api('v1/master/end-options?' + query).catch(() => ({})) : Promise.resolve({}), VV.networks()]);
+        recording ? Promise.resolve({}) : api('v1/master/end-options?' + query).catch(() => ({})), VV.networks()]);
       if (token !== opened) return;
       Object.assign(current, {queue, master});
-      if (!recording) renderSources(item);
-      if (needsGuide) {
-        const checked = dialog.querySelector('input[name=onair-until]:checked')?.value;
-        current.picked = checked === 'open' ? null : checked;
-        renderChoices(item, options || {});
-        part('.onair-checking').textContent = (options?.warnings || []).join(' · ');
+      if (!recording) {
+        renderSources(item);
+        renderChoices(item, needsGuide ? options || {} : {next_show: options?.next_show});
+        if (needsGuide) part('.onair-checking').textContent = (options?.warnings || []).join(' · ');
       }
       renderNote();
     } catch (error) { if (token === opened) part('.onair-checking').textContent = error.message; }
@@ -410,9 +423,10 @@ window.OnAir = (() => {
     const gameSelect = h('select', {id: 'take-game', 'aria-label': 'Game', style: {maxWidth: '260px', marginLeft: 'auto'}});
     const choices = h('div', {class: 'stack tight'},
       radio('boundary', (boundary.getMinutes() === 30 ? ':30' : 'Top of the hour') + ' · ' + fmt.clock(boundary)));
+    const nextRow = radio('next', 'When the next scheduled show starts', 'OFF AIR before it is passed over'); nextRow.hidden = true;
     const programRow = radio('program', 'When the listed program ends', 'End time from the TV guide listing'); programRow.hidden = true;
     const gameRow = radio('game', 'The game ends', 'Follows the live game status, including overtime.', gameSelect); gameRow.hidden = true;
-    choices.append(programRow, gameRow, radio('custom', 'A custom end time', null, custom));
+    choices.append(nextRow, programRow, gameRow, radio('custom', 'A custom end time', null, custom));
     const checking = h('p', {class: 'hint', role: 'status'}, 'Checking the guide and sports schedules…');
     const error = h('p', {class: 'note bad', role: 'alert'});
     const save = h('button', {class: 'primary', type: 'button', id: 'take-confirm'}, 'Save end time');
@@ -423,7 +437,7 @@ window.OnAir = (() => {
       h('div', {class: 'foot'}, cancel, save));
     document.body.append(endDialog);
     const pick = value => { const r = endDialog.querySelector('input[name=take-end][value=' + value + ']'); if (r) r.checked = true; };
-    let touched = false, games = [], program = null;
+    let touched = false, games = [], program = null, next = null;
     endDialog.querySelectorAll('input[name=take-end]').forEach(r => r.addEventListener('click', () => { touched = true; }));
     custom.oninput = () => { touched = true; pick('custom'); };
     gameSelect.onchange = () => { touched = true; pick('game'); };
@@ -436,6 +450,7 @@ window.OnAir = (() => {
         const value = endDialog.querySelector('input[name=take-end]:checked')?.value;
         if (value === 'game') { const g = games[Number(gameSelect.value) || 0]; if (!g) throw Error('No game to follow on this source.'); until = {kind: 'game', league: g.league, game_pk: g.game_pk, game_date: g.game_date}; }
         else if (value === 'program') { if (!program) throw Error('No program listing for this source.'); until = {kind: 'program', program_id: program.id}; }
+        else if (value === 'next') { if (!next || secondsOf(next.start) <= now()) throw Error('No scheduled show coming up.'); until = {kind: 'time', at: new Date(secondsOf(next.start) * 1000).toISOString()}; }
         else if (value === 'custom') { const d = new Date(custom.value); if (!Number.isFinite(d.getTime()) || d <= new Date()) throw Error('Choose a future date and time.'); until = {kind: 'time', at: d.toISOString()}; }
         else until = {kind: 'time', at: nextBoundary().toISOString()};
         save.disabled = true;
@@ -449,6 +464,8 @@ window.OnAir = (() => {
       const options = await api('v1/master/end-options?' + query);
       if (!endDialog?.open) return;
       games = options.games || []; program = options.program && options.program.end > now() ? options.program : null;
+      next = options.next_show && secondsOf(options.next_show.start) > now() ? options.next_show : null;
+      if (next) { nextRow.hidden = false; nextRow.querySelector('strong').textContent = 'When ' + next.title + ' starts · ' + fmt.when(secondsOf(next.start)); }
       if (program) { programRow.hidden = false; programRow.querySelector('strong').textContent = 'When ' + program.title + ' ends · ' + fmt.clock(program.end); }
       if (games.length) {
         gameRow.hidden = false;

@@ -757,11 +757,13 @@ def handler_factory(
                 elif path == "/v1/master":
                     self._json(HTTPStatus.OK, {**master.request(), "preview_enabled": config.master.enabled})
                 elif path == "/v1/master/end-options":
-                    # What a take's "on air until" prompt offers: the game on that source, if any.
+                    # What a take's "on air until" prompt offers: the game on that source, if any,
+                    # its listed program, and the next scheduled show.
                     query = parse_qs(parsed.query)
                     target = {k: query[k][0] for k in ("source_id", "channel_id", "date") if query.get(k)}
                     channel, program = {}, None
-                    if str(target.get("source_id")).startswith("tv-thing-") and sources is not None:
+                    listed = str(target.get("source_id")).startswith("tv-thing-") or target.get("source_id") == "youtube-tv"
+                    if listed and sources is not None:
                         try:
                             listing = sources.programs(target["source_id"])
                             channel = next((c for c in listing.get("channels", [])
@@ -772,9 +774,11 @@ def handler_factory(
                         if now_on.get("id") and now_on.get("end"):
                             program = {k: now_on[k] for k in ("id", "title", "start", "end")}
                     games, warnings = sports.games_on(target, channel_name=channel.get("name")) if sports else ([], [])
+                    scheduled = programming is not None and programming.enabled
                     self._json(HTTPStatus.OK, {
                         "games": games, "program": program, "warnings": warnings,
-                        "returns_to": "schedule" if programming is not None and programming.enabled else "off_air"})
+                        "next_show": programming.next_show() if scheduled else None,
+                        "returns_to": "schedule" if scheduled else "off_air"})
                 elif path.startswith('/v1/inputs/'):
                     parts = path.split('/')
                     if len(parts) != 6 or parts[4] != 'media':

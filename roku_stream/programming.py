@@ -672,6 +672,17 @@ class Programming:
                      if t['kind'] != 'backup' and t['key'] not in exclude
                      and parse_time(t['run_at']) > now), None)
 
+    def next_show(self, now=None):
+        """The next block, show or game to start after now, OFF AIR passed over: what a take
+        played "until the next scheduled show starts" holds until. None while the schedule
+        is off or has nothing in the next week."""
+        now = now or utc_now()
+        if not self.enabled:
+            return None
+        segment = next((s for s in self.timeline(now, now + HISTORY + timedelta(days=1))
+                        if s['start'] > now and s['kind'] != 'off_air'), None)
+        return {'title': segment['title'], 'kind': segment['kind'], 'start': segment['start'].isoformat()} if segment else None
+
     def upcoming_shows(self, now=None, exclude=(), limit=12):
         """Scheduled shows and games that have not started, except those whose id is in exclude."""
         now = now or utc_now()

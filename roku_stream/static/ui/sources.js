@@ -319,10 +319,22 @@
     const matches = item => [item.title, item.collection, item.channel, item.path].filter(Boolean).join(' ').toLowerCase().includes(state.query);
     const visible = (data.items || []).filter(matches);
     if (!visible.length) body.append(h('p', {class: 'hint', style: {padding: '14px 16px'}}, state.query ? 'No matching files.' : 'No finished files in the library yet. Recordings appear here once TV-Thing finishes them.'));
-    // TV-Thing's recordings (and other plain folders): a list per folder, as always.
+    // TV-Thing's recordings (and other plain folders): each folder closed until opened, newest
+    // first, a programme recorded more than once (every Jeopardy!) folded together inside it.
     for (const [name, items] of libraryGroups({items: visible.filter(i => !i.ad_breaks)})) {
-      body.append(collectionTitle('collection', h('h3', name), items.length + (items.length === 1 ? ' file' : ' files'), name, items));
-      for (const item of items) mediaRow(body, item);
+      const folderKey = 'folder:' + name;
+      const open = folded(folderKey, items);
+      body.append(foldTitle('collection', folderKey, open, h('h3', name), items.length + (items.length === 1 ? ' file' : ' files'), items, name));
+      if (!open) continue;
+      const titles = byTitle(items);
+      for (const [title, airings] of titles) {
+        if (airings.length === 1 || titles.length === 1) { for (const item of airings) mediaRow(body, item); continue; }
+        const titleKey = 'title:' + name + '/' + title;
+        const titleOpen = folded(titleKey, airings);
+        body.append(foldTitle('collection season-title', titleKey, titleOpen, h('h4', title),
+          airings.length + ' recordings', airings, title));
+        if (titleOpen) for (const item of airings) mediaRow(body, item, true);
+      }
     }
     // Shows (a folder with ad breaks: Jellyfin's): each show, then each season, closed until opened.
     for (const [show, seasons] of showTree(visible.filter(i => i.ad_breaks))) {
@@ -342,6 +354,13 @@
         if (seasonOpen) for (const item of items) mediaRow(body, item, true);
       }
     }
+  }
+  // A folder's recordings by programme title, in the folder's order (newest first): a programme
+  // sits where its latest recording would.
+  function byTitle(items) {
+    const titles = new Map();
+    for (const item of items) { const key = item.title || item.path; if (!titles.has(key)) titles.set(key, []); titles.get(key).push(item); }
+    return [...titles];
   }
   // Shows by folder: show -> season (null: episodes right in the show's folder) -> episodes, in order.
   function showTree(items) {

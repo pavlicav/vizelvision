@@ -11,6 +11,12 @@ recordings are listed newest first, with their title, channel, air time and
 duplicate marker (`(2)`, `(full)`). Other folders are listed in episode/name order.
 Search matches titles, folders, channels and file names.
 
+Since October 20 a folder of recordings (*TV Recordings · 58 files*) is closed until opened,
+like a show. Inside, a programme recorded more than once folds together (*Jeopardy! · 12
+recordings*, with its own **+ Add all to queue**), where its newest recording would be; one
+recorded once is a row of its own. Folds are remembered and open by themselves as for shows
+(below).
+
 Shows (a root with ad breaks: Jellyfin TV) are listed by show, then season, each closed until
 opened (*How It's Made · 21 seasons · 255 episodes*, then *Season 2 · 13 episodes*, with
 **+ Add all to queue** on each season). What you open or close stays that way in this browser.
