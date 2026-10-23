@@ -8,6 +8,23 @@ vendor/mediamtx/
 config.master.json
 ident/build/
 
+# Built idents and promos, their manifests and voice lines: ident/build.py and
+# ident/promos/build.py make them again (ident/voice.py caches the lines). Only the
+# legal ID stays in git.
+ident/*.mp4
+ident/*.png
+ident/promos/*.mp4
+ident/promos/*.png
+ident/promos/*.wav
+ident/promos/*.json
+!ident/promos/script.json
+!ident/promos/legal.mp4
+!ident/promos/legal.png
+!ident/promos/legal.json
+ident/voice/*
+!ident/voice/promo-legal.wav
+!ident/voice/promo-legal.json
+
 # local secrets and live config (config.example.json is the template)
 auto.key
 auto.crt
