@@ -13,8 +13,9 @@ ident/promos/build.py), aired in the breaks ad mute takes off air, beside My ads
 - **Live text.** Some promos carry text that master draws as they air (promo_overlay.py):
   the time and the temperature, or the programme on air. A promo whose text is not known
   sits out (no temperature reading, no programme name).
-- **Sports.** A promo with `leagues` in its manifest (baseball: mlb; football: nfl, ncaaf)
-  airs only while a game of one of them is on air. Otherwise it sits out.
+- **Sports.** A promo with `leagues` in its manifest (baseball: mlb; football: nfl, ncaaf;
+  basketball: nba, wnba; hockey: nhl) airs only while a game of one of them is on air.
+  Otherwise it sits out.
 - **A voiced name.** 'only-on' also says the programme's name: the web app has it voiced
   (Deepgram, as the continuity announcements are) and mixed into a copy of the promo
   whenever the programme changes (PromoDesk). Until that copy is ready, the promo airs
@@ -29,7 +30,8 @@ is ad_break.py.
     promos-now.json    live values: the temperature, the programme on air (and its league, for a
                        game), its voiced copies
     promos/            those copies (<promo>-<hash>.mp4)
-Plays are logged with My ads' plays (my-ads-plays.jsonl), kind "promo".
+Plays are logged with My ads' plays (my-ads-plays.jsonl), kind "promo"; the page counts
+each promo's plays that counted, all time.
 """
 from __future__ import annotations
 
@@ -46,7 +48,7 @@ import threading
 import time
 
 from .errors import ConfigError
-from .my_ads import read_plays
+from .my_ads import PlayTally, read_plays
 from . import promo_overlay
 
 LIBRARY = Path(__file__).resolve().parent.parent / 'ident' / 'promos'
@@ -227,6 +229,11 @@ def readiness(promo, values):
     return None
 
 
+def counted_promo(row):
+    """A play log row's promo, if it is a promo's play that counted."""
+    return row.get('id') if row.get('kind') == 'promo' and row.get('counted') else None
+
+
 def last_promo(plays):
     """When the last promo that counted started (epoch seconds), or None."""
     return max((p['at'] for p in plays if p.get('kind') == 'promo' and p.get('counted')), default=None)
@@ -247,6 +254,7 @@ class Promos:
         self.values_path = base.with_name('promos-now.json')
         self.folder = base.with_name('promos')
         self.plays_path = base.with_name('my-ads-plays.jsonl')
+        self.tally = PlayTally(self.plays_path, counted_promo)
         self.library = library or Library()
         self.lenient = lenient
         self.lock = threading.RLock()
@@ -506,6 +514,7 @@ class PromoDesk:
     def status(self):
         settings, promos, now = self.store.read(), self.library.read(), self.clock()
         plays = self.store.plays(now - 7 * 86400)
+        totals, since = self.store.tally.read()
         values = fresh(self.store.values(), now)
         with self.lock:
             errors = dict(self.errors)
@@ -523,10 +532,11 @@ class PromoDesk:
             listed.append({**promo, 'enabled': switched_on(settings, promo['id']), 'ready': why is None, 'why': why,
                            'played': {'day': sum(1 for p in mine if p.get('counted') and p['at'] >= now - 86400),
                                       'week': sum(1 for p in mine if p.get('counted')),
+                                      'total': totals.get(promo['id'], 0),
                                       'last': max((p['at'] for p in mine), default=None)}})
         last = last_promo(plays)
         return {'settings': settings, 'promos': listed, 'problems': dict(self.library.problems), 'values': values,
-                'errors': errors, 'master': worker, 'recent': plays[-40:][::-1], 'last': last,
+                'errors': errors, 'master': worker, 'recent': plays[-40:][::-1], 'last': last, 'counted_since': since,
                 'next_due': None if last is None else last + settings['every'] * 60,
                 'due': due(settings, last, now), 'every_choices': list(EVERY_CHOICES), 'now': round(now, 1)}
 

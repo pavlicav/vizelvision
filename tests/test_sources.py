@@ -185,7 +185,7 @@ class SourceCatalogTests(unittest.TestCase):
         self.assertIsNone(result["sources"][0]["selection"])
         self.assertFalse(result["master"]["can_take"])
         self.offline.update(("sources", "status"))
-        self.assertEqual(len(self.catalog.list()["sources"]), 7)
+        self.assertEqual(len(self.catalog.list()["sources"]), 9)
 
     def test_unknown_source(self):
         with self.assertRaises(ChannelNotFoundError):

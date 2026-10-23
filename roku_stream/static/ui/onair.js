@@ -306,7 +306,7 @@ window.OnAir = (() => {
   // A channel row puts its game on air, or the channel, which plays until its current program
   // ends when the guide lists one; with a program, that listed program (to schedule).
   function guideItem(source, channel, data, program) {
-    const target = {source_id: source.id, channel_id: String(channel.id), ...(['mlb', 'sunday-ticket', 'thursday-night-football'].includes(source.id) && data.date ? {date: data.date} : {})};
+    const target = {source_id: source.id, channel_id: String(channel.id), ...(['mlb', 'sunday-ticket', 'thursday-night-football', 'nhl'].includes(source.id) && data.date ? {date: data.date} : {})};
     const where = source.name + ' · ' + (channel.number ? channel.number + ' ' : '') + channel.name;
     if (program) return {kind: 'program', target, title: program.title, detail: where, program};
     const g = channel.game;
@@ -315,10 +315,10 @@ window.OnAir = (() => {
       return {kind: 'game', target, title: g.title || channel.name,
         youtube_tv: g.preferred_source?.provider === 'youtube_tv' ? g.preferred_source.channel : null,
         detail: source.id === 'mlb' ? 'MLB · ' + (g.preferred_source?.label ? 'suggested ' + g.preferred_source.label : 'automatic routing') : source.name,
-        game: {league: source.id === 'mlb' ? 'mlb' : 'nfl', game_pk: pk, game_date: data.date, title: g.title || channel.name, start: g.start, state: g.state, status: g.status}};
+        game: {league: source.id === 'mlb' ? 'mlb' : source.id === 'nhl' ? 'nhl' : 'nfl', game_pk: pk, game_date: data.date, title: g.title || channel.name, start: g.start, state: g.state, status: g.status}};
     }
     const now = channel.now?.id && channel.now.end > Date.now() / 1000 ? channel.now : null;
-    return {kind: 'channel', target, title: (channel.number ? channel.number + ' · ' : '') + channel.name, detail: source.name + (now ? ' · now: ' + now.title : ''), program: now};
+    return {kind: 'channel', target, title: (channel.number ? channel.number + ' · ' : '') + channel.name, detail: source.name + (now ? ' · now: ' + now.title : channel.note ? ' · ' + channel.note : ''), program: now};
   }
   const recordingItem = file => ({kind: 'recording', target: {source_id: 'library', channel_id: file.id}, title: file.title,
     detail: 'Media Library · ' + VV.mediaName(file), duration: file.duration});
@@ -328,7 +328,8 @@ window.OnAir = (() => {
     const target = g.suggested_target || (g.league === 'mlb' ? {source_id: 'mlb', channel_id: String(g.game_id), date: g.game_date} : null);
     return {kind: 'game', target, title: g.title, youtube_tv: g.league === 'mlb' ? g.channels?.[0] || null : null,
       detail: target?.source_id === 'mlb' ? 'MLB · automatic routing (national channel or MLB.TV)' : target?.source_id === 'sunday-ticket' ? 'NFL Sunday Ticket'
-        : target?.source_id === 'thursday-night-football' ? 'Thursday Night Football · Prime Video' : target ? label(target) : 'No channel suggested',
+        : target?.source_id === 'thursday-night-football' ? 'Thursday Night Football · Prime Video'
+        : target?.source_id === 'nhl' ? 'NHL on ESPN Unlimited · YouTube TV' : target ? label(target) : 'No channel suggested',
       game: {league: g.league, game_pk: g.game_id, game_date: g.game_date, title: g.title, start: g.start_time, state: g.state, status: g.status}};
   }
   function sports(host, {scheduled = null, customize = null} = {}) {

@@ -131,6 +131,30 @@ class SourceQueueTests(unittest.TestCase):
         self.assertIn('passed over at', passed.gate_detail)
         self.assertIn('for The View', passed.gate_detail)
 
+    def test_a_blocked_entry_ahead_of_recordings_is_passed_over_once_master_is_free(self):
+        # 2026-10-21/22: a Sunday Ticket game the Roku could not find, blocked since 10/18 at the
+        # head of the recordings that fill time, kept the Seinfeld episodes behind it from
+        # playing, with the test card on air.
+        stuck = self.queue.add_target({'source_id': 'youtube-tv', 'channel_id': 'Sunday Ticket'}, 'after_current')
+        episode = self.queue.add_target({'source_id': 'library', 'channel_id': 'jellyfin-tv/Seinfeld/S07E12.mkv'}, 'after_current')
+        with self.queue._condition:
+            item = self.queue._items[stuck.id]
+            item.status, item.gate_status, item.gate_detail = 'blocked', 'failed', 'The Roku could not find it'
+        self.queue.resume()
+        self.wait(lambda: self.queue.get(episode.id).status == 'succeeded')
+        passed = self.queue.get(stuck.id)
+        self.assertEqual((passed.status, passed.gate_status), ('skipped', 'passed'))
+        self.assertIn('The Roku could not find it · passed over at', passed.gate_detail)
+        self.assertEqual(self.calls, [{'source_id': 'library', 'channel_id': 'jellyfin-tv/Seinfeld/S07E12.mkv'}])
+
+    def test_a_blocked_recording_with_nothing_behind_it_waits_for_retry(self):
+        stuck = self.queue.add_target({'source_id': 'library', 'channel_id': 'tv-recordings/a.mp4'}, 'after_current')
+        with self.queue._condition:
+            self.queue._items[stuck.id].status = 'blocked'
+        self.queue.resume()
+        time.sleep(.1)
+        self.assertEqual(self.queue.get(stuck.id).status, 'blocked')
+
     def test_a_blocked_game_takes_its_return_to_the_schedule_with_it(self):
         game = {'league': 'nfl', 'game_pk': 401872980, 'game_date': '2026-10-08', 'title': 'Buccaneers at Cowboys'}
         self.queue.game_status = lambda *_: {'finished': False, 'status': 'In progress'}

@@ -346,6 +346,25 @@ class SportsIdTests(ServiceFixture):
         self.service.step()
         self.assertEqual((self.master.files[-1], self.cued()['aired_at']), (str(self.service.work_dir / name), None))
 
+    def test_each_id_that_airs_is_logged_once_and_counted(self):
+        self.assertEqual(self.service.status()['played'],
+                         {'station': {'total': 0, 'day': 0}, 'sports': {'total': 0, 'day': 0}, 'since': None})
+        first = time.time() - 7200
+        self.master.state['last_station_id'] = {'file': 'vizelvision-id.mp4', 'at': first}
+        self.service.step()
+        self.service.step()     # The same airing: logged once.
+        self.master.state['last_station_id'] = {'file': 'sports-0123456789abcdef.mp4', 'at': time.time()}
+        self.service.step()
+        played = self.service.status()['played']
+        self.assertEqual(played, {'station': {'total': 2, 'day': 2}, 'sports': {'total': 1, 'day': 1}, 'since': first},
+                         'a sports break is the station ID, then the Sports ID')
+        # After a restart, the log carries on where it was.
+        again = Continuity(self.service.path, self.service.work_dir, voice=self.voice, project=lambda: self.segments,
+                           spoken=lambda s, lang='en': s['title'], master=self.master, video=self.service.video,
+                           music=self.service.music, sports=self.service.sports, start_worker=False)
+        again.step()
+        self.assertEqual(again.status()['played'], played)
+
     def test_a_rebuilt_sports_id_is_cued_under_a_new_name(self):
         self.service.step()
         first = self.master.files[-1]

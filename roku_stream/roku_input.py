@@ -8,8 +8,9 @@ from .errors import ConfigError
 
 
 # Sources played by navigating the shared Roku. NFL source channel IDs are
-# ESPN game IDs, for Sunday Ticket or a Prime Video broadcast respectively.
-ROKU_SOURCE_IDS = ('youtube-tv', 'mlb', 'sunday-ticket', 'thursday-night-football')
+# ESPN game IDs, for Sunday Ticket or a Prime Video broadcast respectively; NHL
+# ones too, for a game ESPN Unlimited streams inside YouTube TV.
+ROKU_SOURCE_IDS = ('youtube-tv', 'mlb', 'sunday-ticket', 'thursday-night-football', 'nhl')
 
 
 def roku_target(data):

@@ -27,19 +27,38 @@ def _nvenc_works(gst):
     """Encodes a few frames once per process: the factory can exist while the GPU or driver cannot."""
     global _NVENC_WORKS
     if _NVENC_WORKS is None:
-        _NVENC_WORKS = False
-        if gst.ElementFactory.find("nvh264enc"):
-            pipeline = gst.parse_launch("videotestsrc num-buffers=5 ! video/x-raw,format=I420,width=320,height=180 "
-                                        "! nvh264enc ! fakesink")
-            try:
-                if pipeline.set_state(gst.State.PLAYING) != gst.StateChangeReturn.FAILURE:
-                    message = pipeline.get_bus().timed_pop_filtered(
-                        10 * gst.SECOND, gst.MessageType.ERROR | gst.MessageType.EOS)
-                    _NVENC_WORKS = message is not None and message.type == gst.MessageType.EOS
-            finally:
-                pipeline.set_state(gst.State.NULL)
-        logging.getLogger(__name__).warning("Master video encoder: %s", "nvh264enc" if _NVENC_WORKS else "x264enc")
+        # An exception here used to skip the log line and leave x264 chosen for good: from
+        # 10/22 to 10/23 master ran x264 ultrafast with nothing in the journal saying why.
+        try:
+            reason = _nvenc_probe(gst)
+        except Exception as exc:   # GLib.Error from parse_launch, for one
+            reason = f"{type(exc).__name__}: {exc}"
+        _NVENC_WORKS = reason is None
+        if _NVENC_WORKS:
+            logging.getLogger(__name__).warning("Master video encoder: nvh264enc")
+        else:
+            logging.getLogger(__name__).warning("Master video encoder: x264enc (NVENC unusable: %s)", reason)
     return _NVENC_WORKS
+
+
+def _nvenc_probe(gst):
+    """None when nvh264enc encoded the test frames, else why not."""
+    if not gst.ElementFactory.find("nvh264enc"):
+        return "no nvh264enc element"
+    pipeline = gst.parse_launch("videotestsrc num-buffers=5 ! video/x-raw,format=I420,width=320,height=180 "
+                                "! nvh264enc ! fakesink")
+    try:
+        if pipeline.set_state(gst.State.PLAYING) == gst.StateChangeReturn.FAILURE:
+            return "the test pipeline would not start"
+        message = pipeline.get_bus().timed_pop_filtered(10 * gst.SECOND, gst.MessageType.ERROR | gst.MessageType.EOS)
+        if message is None:
+            return "no end of stream within 10 s"
+        if message.type != gst.MessageType.EOS:
+            error, debug = message.parse_error()
+            return f"{error.message} ({debug})" if debug else error.message
+        return None
+    finally:
+        pipeline.set_state(gst.State.NULL)
 
 
 def video_encoder(gst, encoder, fps, bitrate):

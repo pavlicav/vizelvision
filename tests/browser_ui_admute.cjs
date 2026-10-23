@@ -234,6 +234,10 @@ run(async browser => {
   await t.page.waitForTimeout(800);
   assert.match(await t.page.locator('#judge-note').textContent(), /looks at the picture when the detector is unsure.*600 calls today \(188 on pictures\), \$0\.04/);
   await t.ctx.close();
+  t = await open(browser, '/ads#admute', {edit: judging({calls_today: 300, skipped_today: 900})});
+  await t.page.waitForTimeout(800);
+  assert.match(await t.page.locator('#judge-note').textContent(), /300 calls today, \$0\.04 of \$1\.00 · 900 not needed \(the detector was already sure\) · 1\.3 s typical/);
+  await t.ctx.close();
 
   // Lookahead: up to 12 s (Haiku's verdicts land before a break's first black frame airs).
   t = await open(browser, '/ads#admute', {api: {'POST /v1/admute': (body, F) => (F.admute = view(F, body))}});

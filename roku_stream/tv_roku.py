@@ -24,6 +24,7 @@ import threading
 import time
 
 from .errors import ControlBusyError, CueCancelledError
+from .espn_unlimited import refused
 from .master import MasterStreamError
 from .tv_control import ROKU_OWNER, same_roku_target
 
@@ -34,6 +35,11 @@ RENEW_SECONDS = 30
 IDLE_RELEASE_SECONDS = 60
 # TV Thing's reading of the Roku's player older than this says nothing about it now.
 PLAYER_MAX_AGE = 30
+
+
+class RokuRefusedError(MasterStreamError):
+    """TV Thing will not play it where the Roku is (a blackout): trying again repeats it."""
+    code = "roku_refused"
 
 
 class RokuHold:
@@ -297,6 +303,8 @@ class TvRoku:
             if state == "succeeded":
                 return
             if state == "failed":
+                if refused(operation.get("error")):
+                    raise RokuRefusedError(str(operation.get("message")))
                 raise MasterStreamError(f"The Roku could not find it: {operation.get('message')}")
             if state == "cancelled":
                 raise CueCancelledError("The Roku's navigation was stopped in TV-Thing")

@@ -76,8 +76,10 @@ PREPARE_FAILED = 'source_prepare_failed'
 # final is skipped at release, and this also covers one whose status cannot be read.
 GAME_EXPIRY = timedelta(hours=12)
 # A Sunday Ticket row reads "Upcoming" until its feed goes live, which can be
-# minutes after the listed start, so it keeps trying longer than a channel.
-SLOW_START_ATTEMPTS = {'sunday-ticket': 10}
+# minutes after the listed start, so it keeps trying longer than a channel. YouTube TV's
+# ESPN page lists an NHL game only once its stream is live; each walk of it is minutes
+# of Roku, so fewer tries. A game blacked out where the Roku is is never retried.
+SLOW_START_ATTEMPTS = {'sunday-ticket': 10, 'nhl': 5}
 # A manual take held "until the game ends" gives master back after this at the latest.
 HOLD_LIMIT = timedelta(hours=12)
 HOLD_REASON = 'On air until its end time'
@@ -852,6 +854,36 @@ class SourceQueue(PlayoutQueue):
                                  + f'passed over at {at} for {item.title or "what follows"}')
             other.prerolled_at = other.prepared_input_id = None
         logging.getLogger(__name__).warning('Passed over blocked entries for %s: %s', item.title or item.channel,
+                                            json.dumps([o.title or o.channel for o in ahead]))
+        self._save_locked()
+        self._condition.notify_all()
+        return True
+
+    def _pass_blocked_fill_locked(self, on_air):
+        """Likewise for the recordings that fill time (after_current): a blocked one waits for
+        Retry or Remove only until master is free for the one queued behind it, then it is
+        passed over, its reason kept, and that one plays. Until 2026-10-22 a blocked one held
+        them all: a Sunday Ticket game the Roku could not find (blocked since 10/18) kept two
+        Seinfeld episodes queued behind it from playing, the test card on air, on 10/21 and 10/22.
+        True when it acted."""
+        ahead = []
+        for item in self._lanes_locked()[1]:
+            if item.status != 'blocked':
+                break
+            ahead.append(item)
+        else:
+            return False  # Nothing behind them is waiting.
+        if not ahead or item.status != 'queued' or not self._master_free(on_air):
+            return False
+        now = utc_now()
+        at = now.astimezone().strftime('%-H:%M')
+        for other in ahead:
+            reason = other.gate_detail
+            other.status, other.gate_status, other.completed_at = 'skipped', 'passed', now.isoformat()
+            other.gate_detail = ((reason + ' · ' if reason else '')
+                                 + f'passed over at {at} for {item.title or "what follows"}')
+            other.prerolled_at = other.prepared_input_id = None
+        logging.getLogger(__name__).warning('Passed over blocked recordings for %s: %s', item.title or item.channel,
                                             json.dumps([o.title or o.channel for o in ahead]))
         self._save_locked()
         self._condition.notify_all()
@@ -1708,6 +1740,7 @@ class SourceQueue(PlayoutQueue):
                 self._expire_locked()
                 if not self.paused:
                     self._pass_blocked_locked()
+                    self._pass_blocked_fill_locked(on_air)
                 timed, fill = self._lanes_locked()
                 if (not self.paused or self.hold is not None) and self._cut_locked(timed):
                     timed, fill = self._lanes_locked()

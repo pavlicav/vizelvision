@@ -99,6 +99,8 @@ Master keeps it (`ad_break.AdBreak`): the page only asks.
 
 ## Order and limits
 
+- **Mix** keeps kinds of ads in balance and rests the ones you've seen most (see The mix,
+  below). It is the shuffle with the mix on (`my-ads-mix.json` `enabled`).
 - **Shuffle** (the default) plays every ad once, in a random order, before any plays
   again. A new round never starts with the ad that just aired.
 - **In list order** goes top to bottom, then around again. **Shuffle the list** puts
@@ -121,6 +123,66 @@ Master keeps it (`ad_break.AdBreak`): the page only asks.
 - **Sitting out:** an ad switched off, or over its limit, sits out. The page shows
   until when. With every ad out, the break card shows.
 
+## The mix
+
+The shuffle treats every ad alike, so an ad that has aired a hundred times comes round as
+often as one uploaded today. The mix (`roku_stream/ad_mix.py`) picks in two steps, and every
+part of it is tuned on the **Mix** tab of the Ads page (`/ads#mix`):
+
+1. **A kind of ad.** Every ad is in one kind (category), or unsorted. Each kind has a share
+   (a weight, 0 to 10; unsorted's is the tuning's `unsorted`). The rotation's last `window`
+   ads (30) are counted by kind, and the kind furthest behind its share goes next. The kind
+   that just aired must be `again` plays (0.25) further behind to go again, so kinds take
+   turns. A kind whose best chance is under `tired` (25%) of the best of all sits that pick
+   out, so a small or worn kind takes less than its share instead of looping its few ads.
+2. **An ad of that kind**, by its chance (a new ad's is 1):
+   - *seen:* its plays from the whole play log, each worth half as much every
+     `half_life_days` (14), times how fast it wears: its kind's `wear` times its own (1 as
+     tuned, 0 never, up to 3).
+   - *worn:* `floor + (1 − floor) / (1 + seen / familiar)^curve`, with `familiar` 6 plays,
+     `curve` 2 (0: nothing wears out) and `floor` 0. An ad seen 40 times lately has about
+     1/60 of a new ad's chance; it still airs now and then, and comes back as its plays fade.
+   - *rest:* `(hours since it aired / rest_hours)²`, at most 1 (`rest_hours` 24). Drawn ahead
+     counts as just aired.
+   - *new:* times `new_boost` (2) for `new_days` (0: off) after its upload.
+   - *boost:* its own, times (0 leaves it out of the mix; queue it by hand).
+
+Limits and switches hold as always: the mix only chooses among the ads allowed now.
+
+**The Mix tab.** Mixer-style faders for each kind's share and wear, the seen-a-lot knobs
+(a chart of every ad's chance against how much it has been seen lately, and the ones held
+back most, each with **Keep fresh**: never wears out), the rest after airing, new uploads'
+boost and the balance. **Your ads** lists every ad with its chance now and why (seen a lot,
+resting, kept fresh, boosted), and its own **Boost** and **Wears out**. Nothing changes on
+air until **Save the mix** (or Ctrl/⌘-S); **Discard** and **Back to defaults** work on the
+draft. A notch marks each fader's default (double-click goes back to it); a fader that differs
+from what is saved lights blue. **The next days** replays 1, 3 or 7 days at the breaks' own
+pace (from the play log) with the draft and with the plain shuffle, side by side: each kind's
+share, the plays going to the 30 most seen ads, different ads, the typical wait to a repeat,
+the most plays of one ad in a day, and how the most seen ads fare. The page works out each
+ad's chance itself as the faders move (`mix.js`, step for step with `ad_mix.chance`; the
+browser test checks they agree); the replay is the server's (`ad_mix.simulate`, about a third
+of a second for 3 days).
+
+On the My ads tab: **Mix** in the order buttons (Off on the Mix tab, or Shuffle, turns it
+off); **The mix** (each kind's last day against its share, and **Tune the mix**); a **Kind**
+on each ad, and **Show** to list one kind (or the unsorted); a **Kind of ad** for uploads.
+Each ad shows its chance, and *Never wears out*, *Boost* or *Left out of the mix* when it has
+its own setting.
+
+The kinds (set up 20 October 2026 from all 316 ads, each looked at, with a second look per
+kind): Trains & transit, Air travel & places, Phones & computers, Shops, food & cars,
+Local & regional (any regional or small business, a mall, a local paper, station or team: it
+wins over what the ad sells, except transit), Energy & the 70s crisis, PSAs, politics & faith,
+TV & sports, Cats & animals (real animals; the PunchingCat series), AI slop & memes (diffusion
+video, AI dubs, memes), Made here (the station's own code-rendered animation). Each kind's
+`about` in `my-ads-mix.json` says what goes in it.
+
+The defaults were set on a replay of the play log (two weeks of breaks from 20 October): the
+30 most aired ads went from 10% of plays to 4%, the big kinds held near 11% each, and no ad
+aired more than four times a day. Until 20 October 2026 the mix had one setting, `rest`
+(off, gentle, normal, strong); a file with it still reads, as `familiar` and `curve`.
+
 ## Uploads
 
 Drop videos on the page, or choose them: MP4, MOV, WebM, MKV, TS, AVI, MPEG and more,
@@ -132,6 +194,7 @@ up to 15 minutes and 4 GB each. The file is the request body
    station's −20 LUFS (as the station ID and the TV recordings), never past −1 dB true
    peak. A per-ad volume trim (±6 dB) adjusts that.
 3. **Pictures:** four, at 15/40/65/90%, as the Ad database has.
+4. **Kind:** the one chosen for uploads (`&category=`), or unsorted.
 
 ## The break card
 
@@ -152,15 +215,19 @@ Beside the master socket (`state/master-candidate/`):
 | `my-ads/card-<hash>.png`, `my-ads/card-own-*.{png,jpg,webp}` | the break card (the station card's words, or your picture) |
 | `my-ads-plays.jsonl` | what aired: `{kind: ad, id, name, at, seconds, length, complete, counted[, error, skipped, queued]}` and `{kind: card, at, seconds}` (master writes it) |
 | `my-ads-queue.json` | what you queued by hand in Next up: `[{kind, id}]` (master writes it, and reads it when it starts) |
+| `my-ads-mix.json` | the mix: `{enabled, tuning: {…}, categories: [{key, name, weight, wear, about}], ads: {id: key}, overrides: {id: {boost, wear}}}` (the web app writes it; master reads it when it changes) |
 
 ## The API
 
 | Route | |
 |---|---|
-| `GET /v1/my-ads` | settings, each ad with `present`, `allowed`, `again` and `played` (hour/day/week/last), master's `status`, ad mute's mode, the last 80 plays |
+| `GET /v1/my-ads` | settings, each ad with `present`, `allowed`, `again`, `played` (hour/day/week/last), `category`, `plays_all`, `seen`, `chance`, `boost` and `wear`; master's `status`, ad mute's mode, the last 80 plays, and `mix` (each kind with its ads and the last day's plays) |
 | `POST /v1/my-ads` | settings: `enabled`, `order`, `pip` {enabled, corner, size}, `card` {text}, `default_limit`, `limits_from` (a time, `"now"`, or `null`) |
-| `POST /v1/my-ads/upload?name=` | an ad (the body is the file) |
-| `POST /v1/my-ads/ads/<id>` · `DELETE` | one ad: `name`, `enabled`, `limit`, `trim_db`, `limits_from` (`"now"`: Reset limit) · delete it, its file and pictures |
+| `POST /v1/my-ads/upload?name=[&category=]` | an ad (the body is the file), in that kind |
+| `POST /v1/my-ads/ads/<id>` · `DELETE` | one ad: `name`, `enabled`, `limit`, `trim_db`, `limits_from` (`"now"`: Reset limit), `category` (a kind's key, or `null`) · delete it, its file and pictures |
+| `GET /v1/my-ads/mix` | the Mix tab: the mix as kept, the tuning's ranges, the breaks' pace, each kind's last day, and every ad with its kind and the times of its plays |
+| `POST /v1/my-ads/mix[?view=mix]` | the mix: `enabled`, `tuning` `{key: value}`, `kinds` `{key: {weight, wear}}`, `weights` `{key: weight}`, `overrides` `{ad id: {boost, wear} or null}`. Answers the My ads view, or with `view=mix` the Mix tab's |
+| `POST /v1/my-ads/mix/preview` | the next `days` (1 to 14, default 3) with a draft (the same keys as above; nothing saved), beside the shuffle (`ad_mix.simulate`) |
 | `POST /v1/my-ads/order` `{ids}` · `/shuffle` `{}` | reorder · a random order |
 | `POST /v1/my-ads/card-image?name=` · `DELETE` | your own card picture · back to the station card |
 | `GET /v1/my-ads/file/<name>` | an ad (`<id>`), a picture, or the card, for the page |
@@ -179,8 +246,10 @@ each with `why` it cannot air now).
 ```bash
 /usr/bin/python3 -m unittest tests.test_my_ads                  # settings, rotation, limits, store, routes, the break with stand-in ads
 /usr/bin/python3 -m unittest tests.test_next_up                 # Next up: drawn ahead, skip, queue by hand, skip on air, the promo's place
+/usr/bin/python3 -m unittest tests.test_ad_mix                  # the mix: the chance, kinds in balance, the tuning, the replay, its file and routes
 nice -n 19 /usr/bin/python3 tests/myads_master_integration.py   # a real master: ads, card, corner, sound, cut short, play log
 node tests/browser_ui_my_ads.cjs <playwright>                   # its tab
+node tests/browser_ui_mix.cjs <playwright>                      # the Mix tab (fixtures: tests/fixtures/ui/make_my_ads_mix.py, from the real ads and plays)
 ```
 
 ## Deploying

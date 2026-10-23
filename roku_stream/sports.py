@@ -302,9 +302,16 @@ class SportsCatalog:
         from .prime_video import prime_nfl_game
         prime = {'source_id': 'thursday-night-football', 'channel_id': str(game['game_id']),
                  'date': start.date().isoformat() if start else None} if prime_nfl_game(game) else None
+        # An NHL game ESPN Unlimited streams inside YouTube TV, found on its ESPN page (2026-10-22).
+        from .espn_unlimited import SOURCE_ID as NHL_SOURCE, note as espn_note, nhl_on_espn_unlimited
+        stream = nhl_on_espn_unlimited(game)
+        espn = {'source_id': NHL_SOURCE, 'channel_id': str(game['game_id']),
+                'date': start.date().isoformat() if start else None} if stream else None
         if prime:
             suggestion = prime
             note = 'Thursday Night Football on Prime Video. Sign in on the Roku if prompted.'
+        elif espn and not channels:
+            suggestion, note = espn, espn_note(stream)
         elif regional and not local:
             suggestion = ticket
             note = ('Out of market: NFL Sunday Ticket (found by reading the YouTube TV guide). '
@@ -315,7 +322,8 @@ class SportsCatalog:
                     None if channels else 'No national broadcast on a configured channel; choose a source.')
         return {**game, 'suggested_target': suggestion, 'channels': channels, 'note': note,
                 'prime_video_target': prime, 'on_sunday_ticket': on_ticket,
-                'sunday_ticket_target': ticket if on_ticket else None}
+                'sunday_ticket_target': ticket if on_ticket else None,
+                'espn_unlimited': stream, 'espn_unlimited_target': espn}
 
     def games(self, league, requested_date=None):
         league, day = self.league(league), _day(requested_date)
@@ -426,8 +434,9 @@ class SportsCatalog:
 
     def games_on(self, target, channel_name=None, now=None):
         """Games a source carries now or within the hour: the game itself
-        for an MLB or Sunday Ticket target, else national games on its channel. A TV-Thing
-        station is matched through channel_name. Returns (games, warnings)."""
+        for a game source's target (MLB, Sunday Ticket, Prime Video, NHL on ESPN Unlimited),
+        else national games on its channel. A TV-Thing station is matched through
+        channel_name. Returns (games, warnings)."""
         now = now or datetime.now(timezone.utc)
         source = target.get('source_id')
         found, warnings = [], []
@@ -436,8 +445,8 @@ class SportsCatalog:
             found.append({'league': league, 'game_pk': game_id, 'game_date': day, 'title': title,
                           'status': status, 'live': live})
 
-        if source in ('mlb', 'sunday-ticket', 'thursday-night-football'):
-            league = 'mlb' if source == 'mlb' else 'nfl'
+        if source in ('mlb', 'sunday-ticket', 'thursday-night-football', 'nhl'):
+            league = {'mlb': 'mlb', 'nhl': 'nhl'}.get(source, 'nfl')
             try:
                 game_id = int(target.get('channel_id'))
                 day = _day(target.get('date'))

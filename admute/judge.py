@@ -22,6 +22,12 @@ On 32 frames from 2026-10-08 (TBS and NBC, labelled by eye) it got 26 of the 27 
 ones right at low effort (medium no better): $0.00012 a call, 1.3 s typical, 2.4 s at p90.
 The traces put the detector unsure in 5-24% of seconds: ~2-5 cents an hour.
 
+Not every chunk is sent. Once the detector has the chunk's own words, a chunk whose
+seconds it is already sure of without the judge (every second's logit at least SURE, one
+way) is skipped: its seconds count as no evidence (the weights' mean, so the answer before
+is not carried over them). On the 10/18-10/20 traces the judge never turned such a second
+(0 of 18,844, 74% of the judged seconds); between 3 and 4 it turned 6 of 3,075.
+
 It runs only when admute.json's ``judge`` is on, the running model has llm_judge (the
 new one), and a key is found: ANTHROPIC_API_KEY in the environment, else in the keys
 file (continuity's). Spending stops for the day at ``judge_budget`` dollars. The key is
@@ -64,6 +70,8 @@ SYSTEM = ("You watch a live US TV channel through its speech transcript (automat
           "you by...\", \"presented by...\", \"stick around for...\") counts as the programme. "
           "Reply with only an integer from 0 to 100, where 0 means the newest piece is certainly the programme "
           "and 100 means it is certainly an advertisement.")
+SURE = 4.0                  # a chunk the detector is this sure of without the judge is not sent
+WAIT_WORDS = 3.0            # ... judged once the detector has its words, or after this long anyway
 PICTURE = "llm_picture"
 PICTURE_EFFORT = "low"
 PICTURE_EVERY = 2           # seconds between asks, per input
@@ -146,13 +154,14 @@ class Judge:
         self.took = collections.deque(maxlen=200)
         self.error = None
         self.dropped = self.failed = 0
-        self.day, self.usd, self.calls, self.pictures = self._today(), 0.0, 0, 0
+        self.day, self.usd, self.calls, self.pictures, self.skipped = self._today(), 0.0, 0, 0, 0
         if self.ledger and self.ledger.exists():
             try:
                 d = json.loads(self.ledger.read_text())
                 if d.get("day") == self.day:
                     self.usd, self.calls = float(d.get("usd", 0.0)), int(d.get("calls", 0))
                     self.pictures = int(d.get("pictures", 0))
+                    self.skipped = int(d.get("skipped", 0))
             except (OSError, ValueError):
                 pass
 
@@ -162,7 +171,7 @@ class Judge:
 
     def _roll(self):
         if self._today() != self.day:
-            self.day, self.usd, self.calls, self.pictures = self._today(), 0.0, 0, 0
+            self.day, self.usd, self.calls, self.pictures, self.skipped = self._today(), 0.0, 0, 0, 0
 
     def why_not(self, budget: float) -> str | None:
         """Why no call can be made now (None: they can)."""
@@ -177,6 +186,12 @@ class Judge:
     def submit(self, done, chunks: list, i: int, what: str):
         """Judge chunk i of ``chunks`` (a copy); ``done(p)`` gets P(ad), or NaN on failure."""
         self._queue(done, SYSTEM, prompt(chunks, i, what), EFFORT)
+
+    def skip(self):
+        """A chunk not sent: the detector was sure without it (SURE)."""
+        with self.cond:
+            self._roll()
+            self.skipped += 1
 
     def submit_picture(self, done, jpegs: list, what: str):
         """Judge the newest of these pictures (JPEG bytes, oldest first)."""
@@ -239,11 +254,12 @@ class Judge:
             self.pictures += system == PICTURE_SYSTEM
             self.took.append(took)
             self.error = None
-            day, spent, calls, pictures = self.day, self.usd, self.calls, self.pictures
+            day, spent, calls, pictures, skipped = self.day, self.usd, self.calls, self.pictures, self.skipped
         if self.ledger:
             try:
                 tmp = self.ledger.with_name("." + self.ledger.name + ".tmp")
-                tmp.write_text(json.dumps({"day": day, "usd": round(spent, 6), "calls": calls, "pictures": pictures}))
+                tmp.write_text(json.dumps({"day": day, "usd": round(spent, 6), "calls": calls, "pictures": pictures,
+                                        "skipped": skipped}))
                 os.replace(tmp, self.ledger)
             except OSError as exc:
                 log.warning("cannot keep the judge's spend: %s", exc)
@@ -253,7 +269,7 @@ class Judge:
         with self.cond:
             self._roll()
             took = sorted(self.took)
-            out = {"model": MODEL, "effort": EFFORT, "calls_today": self.calls, "pictures_today": self.pictures, "usd_today": round(self.usd, 6),
+            out = {"model": MODEL, "effort": EFFORT, "calls_today": self.calls, "pictures_today": self.pictures, "skipped_today": self.skipped, "usd_today": round(self.usd, 6),
                    "budget": budget, "queued": len(self.jobs), "dropped": self.dropped, "failed": self.failed,
                    "error": self.error,
                    "ms_p50": round(1000 * took[len(took) // 2]) if took else None,

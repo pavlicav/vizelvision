@@ -105,4 +105,30 @@ run(async browser => {
   await page.waitForSelector('#sports-list .sports-games li');
   assert.deepEqual(t.errors, []);
   await t.ctx.close();
+
+  // An NHL game on ESPN+ is offered on ESPN Unlimited, inside YouTube TV, with no channel to pick.
+  const espn = {source_id: 'nhl', channel_id: '401802671', date: '2026-10-22'};
+  const kraken = {league: 'nhl', game_id: 401802671, title: 'Utah Mammoth at Seattle Kraken', start_time: '2026-10-23T02:00Z', state: 'pre', status: 'Scheduled',
+    broadcasts: [{name: 'ESPN+', market: 'national'}, {name: 'Hulu', market: 'national'}], channels: [], suggested_target: espn, espn_unlimited_target: espn,
+    espn_unlimited: {exclusive: true, blackout: {}, home: [], away: []}, note: 'NHL on ESPN Unlimited in YouTube TV (an ESPN+ exclusive); the Roku takes 3-4 minutes to find it.'};
+  const nhl = await open(browser, '/schedule', {api: {'GET /v1/sports/games': () => ({games: [kraken]}), 'POST /v1/programming/shows': () => ({status: 201, json: {}})}});
+  await nhl.page.waitForSelector('#grid td[data-day=fri][data-cell="20"]');
+  await nhl.page.locator('[data-tab=add]').click();
+  await nhl.page.locator('[name=mode][value=game]').check();
+  await nhl.page.locator('#league').selectOption('nhl');
+  await nhl.page.locator('#load-games').click();
+  await nhl.page.waitForFunction(() => document.querySelector('#game').options.length > 1);
+  await nhl.page.locator('#game').selectOption('401802671');
+  const source = nhl.page.locator('#game-target select[aria-label=Source]');
+  assert.equal(await source.inputValue(), 'nhl');
+  assert.match(await source.locator('option:checked').textContent(), /NHL on ESPN Unlimited/);
+  assert.ok(await nhl.page.locator('#game-target select[aria-label=Channel]').isHidden(), 'the game is its own channel');
+  assert.match(await nhl.page.locator('#game-note').textContent(), /ESPN Unlimited/);
+  await nhl.page.locator('#add-show').click();
+  await nhl.page.waitForFunction(() => /Game scheduled/.test(document.body.textContent));
+  const hockey = nhl.posts.find(p => p.path === '/v1/programming/shows');
+  assert.deepEqual(hockey.body.target, espn);
+  assert.equal(hockey.body.game.league, 'nhl');
+  assert.deepEqual(nhl.errors, []);
+  await nhl.ctx.close();
 });

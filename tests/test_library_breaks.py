@@ -12,7 +12,7 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock, patch
 
-from roku_stream import library_breaks as lb
+from roku_stream import library_breaks as lb, master_worker
 from roku_stream.config import LibraryConfig, LibraryRoot, MasterConfig, TvThingConfig, _library
 from roku_stream.errors import ConfigError
 from roku_stream.library import FileLease, MediaLibrary, cached_breaks, library_target
@@ -52,6 +52,18 @@ class ChooseTests(unittest.TestCase):
     def test_never_in_the_open_or_the_credits_and_never_close_together(self):
         found = self.found(fade(30), fade(300), fade(380), fade(1290))
         self.assertEqual([round(b['at']) for b in lb.choose(found, 1320)], [300])
+
+    def test_a_sitcoms_long_fades_after_its_cold_open_and_before_its_tag(self):
+        # Seinfeld S03E01 as scanned (a DVD rip): 2-3 s of black and silence at the very
+        # start, after the stand-up, mid-episode, before the closing stand-up, and at the end.
+        found = self.found(fade(0., 2.76, 2.14), fade(47.4, 2.92, 1.44), fade(922.3, 2.32, 1.88),
+                           fade(1250.9, 2.72, 1.25), fade(1292.4, 2., 2.52))
+        breaks = lb.choose(found, 1294.4)
+        self.assertEqual([round(b['at']) for b in breaks], [48, 922, 1251])
+        self.assertEqual({b['kind'] for b in breaks}, {'fade'}, 'under SLUG: fades, so one 3 s black never leaves slugs alone')
+        # A title's dip in the open is a fraction of a second (How It's Made's): still not a break.
+        short = self.found(fade(52.1), fade(72.0), fade(348.2), fade(660.3))
+        self.assertEqual([round(b['at']) for b in lb.choose(short, 1331.5)], [348, 660])
 
     def test_more_transitions_than_breaks_takes_those_nearest_even_spacing(self):
         found = self.found(*map(fade, (200, 330, 500, 650, 800, 990, 1150)))
@@ -243,6 +255,54 @@ class ProgrammeBreakTests(unittest.TestCase):
         self.assertIsNone(self.frame(14.0))
         self.assertEqual(self.b.state, 'idle')
 
+    def test_a_cut_away_lands_where_the_ad_on_air_ends_and_none_starts_after_it(self):
+        # 2026-10-22: a timed show (and its station ID first) came while an ad spliced into a
+        # library show played: the ad plays out, then the cut.
+        self.b.cued = FakeReel(ad(1, duration=45.0), 45 * S, 50)
+        self.b.fill_start(10 * S, length=120)
+        self.assertEqual(self.frame(10.0), 50)
+        self.b.cued = FakeReel(ad(2, duration=30.0), 30 * S, 60)
+        self.assertEqual(self.b.fill_land(40 * S, 90), 55 * S, 'the ad on air ends at 55 s')
+        self.assertEqual(self.b.fill_land(41 * S, 90), 55 * S, 'asked again (the take after the ID): the same')
+        self.assertEqual(self.frame(54.9), 50)
+        self.assertIsNone(self.frame(55.0), 'no ad starts where the cut lands')
+        self.b.fill_stop(55 * S)
+        self.assertIsNone(self.frame(55.1))
+        self.assertEqual([(r['id'], r['complete']) for r in self.b.log], [(ad(1)['id'], True)])
+
+    def test_a_cut_after_the_ad_on_air_ends_waits_for_the_one_that_follows(self):
+        self.b.cued = FakeReel(ad(1, duration=45.0), 45 * S, 50)
+        self.b.fill_start(10 * S, length=120)
+        self.assertEqual(self.frame(10.0), 50)
+        self.b.cued = FakeReel(ad(2, duration=30.0), 30 * S, 60)
+        self.assertEqual(self.b.fill_land(60 * S, 90), 85 * S, 'ad 1 ends before 60 s airs: ad 2 is on there, to 85 s')
+        self.assertEqual(self.frame(55.0), 60)
+        self.b.cued = FakeReel(ad(3, duration=30.0), 30 * S, 70)
+        self.assertEqual(self.frame(84.9), 60)
+        self.assertIsNone(self.frame(85.0), 'ad 3 never starts')
+        self.assertEqual([r['complete'] for r in self.b.log], [True, True])
+
+    def test_cut_at_once_with_nothing_to_wait_for_or_too_long_a_wait(self):
+        self.b.fill_start(10 * S, length=60)
+        self.assertIsNone(self.frame(10.0))
+        self.assertIsNone(self.b.fill_land(11 * S, 90), 'nothing on air: the card, no ad to wait for')
+        self.b.fill_stop(11 * S)
+        self.b.cued = FakeReel(ad(1, duration=120.0), 120 * S, 50)
+        self.b.fill_start(20 * S, length=60)
+        self.assertEqual(self.frame(20.0), 50)
+        self.assertIsNone(self.b.fill_land(25 * S, 90), '115 s left: cut, as before')
+        self.assertIsNone(self.b.fill_land(25 * S, 90))
+        self.assertEqual(self.frame(30.0), 50, 'nothing planned: it plays on until the cut')
+
+    def test_a_cancelled_cut_lets_the_break_go_on(self):
+        self.b.cued = FakeReel(ad(1, duration=20.0), 20 * S, 50)
+        self.b.fill_start(10 * S, length=120)
+        self.assertEqual(self.frame(10.0), 50)
+        self.b.cued = FakeReel(ad(2, duration=30.0), 30 * S, 60)
+        self.assertEqual(self.b.fill_land(15 * S, 90), 30 * S)
+        self.b.fill_unland()
+        self.assertEqual(self.frame(30.0), 60, 'the next ad starts after all')
+
     def test_unprime_puts_the_wait_fill_limit_back(self):
         self.b.fill_prime()
         self.b.fill_unprime()
@@ -358,6 +418,82 @@ class WorkerBreakTests(unittest.TestCase):
         self.at(348.3)
         self.worker._drop('a')
         self.breaks.fill_stop.assert_called_once_with(100 * S)
+
+    def ready(self, key='b', slot=2):
+        """A prepared input to cut to."""
+        decoder, lease = Mock(), Mock()
+        decoder.ready.return_value = lease.check.return_value = True
+        lease.target, lease.generation = {'source_id': 'youtube-tv', 'channel_id': 'NBC'}, 'g1'
+        self.worker.inputs[key] = {'lease': lease, 'decoder': decoder, 'slot': slot}
+        self.worker.prepared, self.worker.busy, self.worker.pending_fallback = key, True, False   # as request() leaves it
+
+    def test_the_station_id_waits_for_the_ad_on_air_and_the_show_waits_with_it(self):
+        self.held()
+        self.breaks.fill_land.return_value = 170 * S
+        self.worker._ident_after = Mock(return_value=True)
+        self.worker._ident_for_timed('a')
+        self.breaks.fill_land.assert_called_once_with(100 * S, master_worker.CUT_WAIT_MOST)
+        self.worker._ident_after.assert_not_called()
+        self.assertEqual(self.worker._ident_status()['waits_for_ad'], 70.0)
+        self.worker.output.running_time.return_value = 165 * S   # the break's minute is up
+        self.at(348.3)
+        self.decoder.thaw.assert_not_called()
+        self.worker._landings()
+        self.worker._ident_after.assert_not_called()
+        self.worker.output.running_time.return_value = 170 * S
+        self.worker._landings()
+        self.worker._ident_after.assert_called_once_with('a', 'schedule')
+        self.assertIsNone(self.worker._ident_status()['waits_for_ad'])
+        self.breaks.fill_unland.assert_not_called()
+
+    def test_no_ad_to_wait_for_the_id_cuts_at_once(self):
+        self.held()
+        self.breaks.fill_land.return_value = None
+        self.worker._ident_after = Mock(return_value=True)
+        self.worker._ident_for_timed('a')
+        self.worker._ident_after.assert_called_once_with('a', 'schedule')
+
+    def test_up_nexts_take_waits_for_the_ad_on_air_a_take_by_hand_does_not(self):
+        self.held()
+        self.ready()
+        self.breaks.fill_land.return_value = 170 * S
+        self.assertFalse(self.worker._defer_take({'prepared_id': 'b'}, 'op0'), 'by hand: at once')
+        self.assertTrue(self.worker._defer_take({'prepared_id': 'b', 'after_ad': True}, 'op1'))
+        self.worker.output.take.assert_not_called()
+        self.worker.output.running_time.return_value = 169 * S
+        self.worker._landings()
+        self.worker.output.take.assert_not_called()
+        self.assertTrue(self.worker.busy, 'the take is still under way')
+        self.worker.output.running_time.return_value = 170 * S
+        self.worker._landings()
+        self.worker.output.take.assert_called_once_with(2)
+        self.assertEqual(self.worker.active, 'b')
+        self.breaks.fill_stop.assert_called_once_with(170 * S)
+        self.assertEqual(self.worker.snapshot['operation'],
+                         {'id': 'op1', 'action': 'take', 'state': 'succeeded', 'error': None, 'error_code': None})
+        self.assertFalse(self.worker.busy)
+
+    def test_a_cancelled_take_ends_failed_and_the_break_goes_on(self):
+        self.held()
+        self.ready()
+        self.breaks.fill_land.return_value = 170 * S
+        self.assertTrue(self.worker._defer_take({'prepared_id': 'b', 'after_ad': True}, 'op1'))
+        self.worker.cancel.set()
+        self.worker._landings()
+        self.worker.output.take.assert_not_called()
+        self.breaks.fill_unland.assert_called_once()
+        self.assertEqual((self.worker.snapshot['operation']['state'], self.worker.snapshot['operation']['error']),
+                         ('failed', 'Take cancelled'))
+        self.assertEqual(self.worker.active, 'a')
+
+    def test_live_tv_and_recordings_never_wait(self):
+        self.ready()
+        self.worker.inputs['a']['breaks'] = None   # no spliced breaks: ad mute over the real ones
+        self.assertFalse(self.worker._defer_take({'prepared_id': 'b', 'after_ad': True}, 'op1'))
+        self.breaks.fill_land.assert_not_called()
+        self.worker.inputs['a']['breaks'] = self.worker._break_plan(self.worker.inputs['a']['lease'])
+        self.assertFalse(self.worker._defer_take({'prepared_id': 'b', 'after_ad': True}, 'op1'), 'not in a break: at once')
+        self.breaks.fill_land.assert_not_called()
 
     def test_unknown_breaks_play_straight_through(self):
         self.worker.inputs['a']['breaks']['points'] = []

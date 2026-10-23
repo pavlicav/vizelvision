@@ -21,6 +21,7 @@ output stream, in a browser or on a Roku.
   Roku: YouTube TV, MLB,  │      ┌───────────────────────────────────┐
     Sunday Ticket, TNF ───┼────▶ │ decode ─▶ switch ─▶ delay ─▶ mute │ ─▶ MediaMTX ─▶ browser,
   recordings (library) ───┤      │ + clock, crawl, captions, promos  │    (HLS/RTSP)   Roku app
+  internet streams ───────┤      │                                   │
   station ID, promos, ────┘      └───────────────────────────────────┘
     My ads, off-air card                │ copy of the picture   ▲ when to mute
                                         ▼ and sound             │
@@ -36,12 +37,15 @@ output stream, in a browser or on a Roku.
 - **Asking for a channel.** VizelVision asks TV Thing for a channel or a game under a lock,
   then plays the feed it gets back.
 - **The Roku.** The Roku lane drives the Roku by remote control (ECP). It reaches YouTube TV,
-  the MLB app, NFL Sunday Ticket and Prime Video's Thursday Night Football. It checks the
-  screen before it accepts that the right thing is playing.
+  the MLB app, NFL Sunday Ticket, Prime Video's Thursday Night Football and, since
+  22 October, NHL games on ESPN Unlimited. It checks the screen before it accepts that
+  the right thing is playing.
 - **The sources Up next can put on air:**
   - `tv-thing-digital` and `tv-thing-analog` (the antenna);
-  - `youtube-tv`, `mlb`, `sunday-ticket` and `thursday-night-football` (the Roku);
+  - `youtube-tv`, `mlb`, `sunday-ticket`, `thursday-night-football` and `nhl` (the Roku);
   - `library` (finished recordings and other files);
+  - `internet` ([internet streams](docs/internet-streams.md): live HLS from the web that TV
+    Thing relays, such as Pentulive on 29);
   - the station's own material: the station ID, promos, My ads, and the off-air card with
     Cairo Radio under it.
 - **When a feed fails.** A live feed that stalls holds its last picture for 8 s. One that
@@ -307,6 +311,12 @@ gate and backup behavior. Prime's public NFL catalog resolves the event's
 Amazon content ID at preparation time, checking both teams, its date, and
 live status. It does not use last week's ID or open a replay when a broadcast
 has ended. See [Prime Video integration](docs/thursday-night-football.md).
+
+**NHL on ESPN Unlimited** (`nhl`) is the suggested source for NHL games whose only
+national broadcast is ESPN+: out-of-market games and ESPN+ exclusives, streamed inside
+YouTube TV. TV Thing finds the game on YouTube TV's ESPN page and never selects a
+blacked-out stream. A blackout is shown in TV Thing's words and is not retried. See
+[NHL on ESPN Unlimited](docs/nhl.md).
 
 The deployed master service at `http://viviserv/vizelvision/` (On Air) has a mixed-source **Up next** queue. Digital/analog TV-Thing, YouTube TV, MLB and Thursday Night Football targets prepare and take to the continuous master stream. Pause/resume, missed/failed entry recovery, and source/program snapshots are on On Air (and, compact, beside Sources). **Set end time** on a live take asks for an end: :30 or the top of the hour, the TV-Thing program's listed end, the game's end, or a custom time. At that time the schedule takes master back. Legacy schedules use the same queue when master is enabled. Every service restart pauses automation for review. See [the source queue workflow](docs/source-queue.md).
 

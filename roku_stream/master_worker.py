@@ -30,6 +30,7 @@ from .ident import (FILL_HOLD_LIMIT, IDENT_HOLD_AT, IDENT_HOLD_LIMIT, IDENT_PATH
                     JOIN_FREEZE_SLACK, IdentLease)
 from .library import FileLease, LIBRARY_SOURCE_ID, cache_path, cached_breaks, library_target
 from .tv_control import RokuLease, SharedLease, TvControl, target_from
+from .internet import SOURCE_ID as INTERNET_SOURCE_ID, StreamLease, internet_target
 from .roku_input import ROKU_SOURCE_IDS, roku_target
 from .production import ProductionSettings
 from .caption_settings import CaptionSettings
@@ -43,6 +44,9 @@ from . import crawl
 # How long the rotation's choice of where the bar runs lasts unless renewed (crawl_desk.py
 # renews it every POSITION_RENEW s): a stopped web app leaves the bar at the bottom.
 CRAWL_POSITION_LEASE = 60
+# A cut away from a library show in one of its ad breaks (to the station ID, or Up next's take)
+# waits for the ad on air to end, at most this long (ad_break.fill_land); then it cuts the ad.
+CUT_WAIT_MOST = 90
 
 
 class MasterWorker:
@@ -115,6 +119,11 @@ class MasterWorker:
         # wait fill under way on the held end card ({'finishing'}; ad_break.py), this airing's.
         self.ident_join = None
         self.ident_fill = None
+        # A cut away from a library show in one of its ad breaks waits for the ad on air to end
+        # (_land): the station ID's ({'key', 'at'}) and a take from Up next's ({'key', 'at',
+        # 'body', 'operation_id'}, its operation still pending), made at running time 'at'.
+        self.ident_land = None
+        self.take_land = None
         # A continuity announcement version of the ID, for its next airing only.
         self.ident_override = None
         self.ident_retry_at = 0.
@@ -260,6 +269,8 @@ class MasterWorker:
                     raise ConfigError('The Roku is played from TV-Thing, which is disabled')
                 # The web app's lease on the Roku lane, by token (tv_roku.py).
                 body = {**roku_target(body), 'roku': body.get('roku')}
+            elif body.get('source_id') == INTERNET_SOURCE_ID:
+                body = internet_target(body)
             else:
                 body = target_from(body)
         if action == "take" and (not isinstance(body.get("prepared_id"), str) or not body["prepared_id"]):
@@ -285,6 +296,27 @@ class MasterWorker:
             self.commands.put_nowait((action, body, operation["id"]))
             return copy.deepcopy(operation)
 
+    def _finish_operation(self, action, operation_id, error, error_code):
+        """An operation ends: master is free again, after any fallback asked for meanwhile."""
+        if self.cancel.is_set() and self.prepared:
+            self._drop(self.prepared)
+            error = error or "Preparation cancelled"
+        # Drain fallback requests while still marked busy. A
+        # request arriving during lease cleanup cannot be lost.
+        while True:
+            with self.lock:
+                fallback = self.pending_fallback
+                self.pending_fallback = False
+                if not fallback:
+                    self.busy = False
+                    self.snapshot["operation"] = {"id": operation_id, "action": action,
+                                                  "state": "failed" if error else "succeeded", "error": error,
+                                                  "error_code": error_code}
+                    self.snapshot["error"] = error
+                    break
+            self._fallback()
+        self._refresh()
+
     def _publish(self, **updates):
         with self.lock:
             self.snapshot.update(updates)
@@ -309,7 +341,7 @@ class MasterWorker:
                       can_prepare=healthy and (self.tv_enabled or self.roku_enabled or self.library_enabled) and not self.busy,
                       can_take=healthy and ready and not self.busy,
                       tracks=self.output.status() if self.output else {},
-                      ident=self._ident_status())
+                      ident=self._ident_status(), take_waits_for_ad=self._cut_waits(self.take_land))
         self._publish(recovery=({"target": self._public(self.recovering),
                                 "message": "Waiting for fresh audio/video from the same source"}
                                if self.recovering else None),
@@ -592,10 +624,11 @@ class MasterWorker:
         if requested and now - requested < 2 and self._ends_first(self.active):
             logging.getLogger(__name__).info('Station ID waits for the end of %s', json.dumps(self._public(self.active)))
         elif requested and now - requested < 2 and self.active and self.active != self.ident_key:
-            self._ident_after(self.active, 'schedule')
+            self._ident_for_timed(self.active)
         elif requested and now - requested < 2 and self.active is None and from_test_card:
             if self._air_ident(None):  # Ends on its own: the next take, or back to the test card.
                 logging.getLogger(__name__).info("Station ID started from the test card")
+        self._landings()
         self._hold_ident()
         self._programme_breaks()
         self._keep_ident()
@@ -754,6 +787,8 @@ class MasterWorker:
     #                                  until the show's first frame airs (a programme delay on)
     BREAK_PRIME = 15
     BREAK_ARM = 2
+    # A cut away from the show in a break (the station ID before a timed entry, or Up next's
+    # take) waits for the ad on air to end instead of cutting it (_land, CUT_WAIT_MOST).
     BREAK_OVERRUN = 15   # the show waits for an ad that ends at most this long past the break's length
 
     def _break_plan(self, lease):
@@ -783,6 +818,8 @@ class MasterWorker:
             return
         log, breaks = logging.getLogger(__name__), self._ad_break()
         if plan['state'] == 'held':
+            if any(land and land['key'] == key for land in (self.ident_land, self.take_land)):
+                return   # a cut away from the show lands where the ad on air ends: it does not come back
             # The show comes back on the input side at the break's time, or where the ad on air
             # then ends (if soon after); what airs is a programme delay behind, and the ads
             # carry on over it until the show's first frame (ad_break.fill_resume).
@@ -841,6 +878,85 @@ class MasterWorker:
                 return skip('none of My ads or station promos may play now')
             decoder.stop_at(point['at'])
             plan['state'] = 'armed'
+
+    def _land(self, key):
+        """Where a cut away from on-air input key should be made (running time) so that no ad of
+        its programme break is cut short (ad_break.fill_land); None: now. Only a library show
+        held in one of its ad breaks waits: live TV and recordings cut as before."""
+        entry = self.inputs.get(key) if key else None
+        plan = entry.get('breaks') if entry else None
+        breaks = self._ad_break()
+        if not plan or plan['state'] != 'held' or breaks is None or not hasattr(breaks, 'fill_land'):
+            return None
+        try:
+            return breaks.fill_land(self.output.running_time(), CUT_WAIT_MOST)
+        except Exception:
+            logging.getLogger(__name__).warning('Where the ad break ends is unknown: cutting now', exc_info=True)
+            return None
+
+    def _ident_for_timed(self, key):
+        """The station ID before a timed entry, over the end of on-air input key: now, or where
+        the ad spliced into its break ends (_landings airs it there)."""
+        land = self._land(key)
+        if land is None:
+            self._ident_after(key, 'schedule')
+            return
+        self.ident_land = {'key': key, 'at': land}
+        logging.getLogger(__name__).info('Station ID waits %.1f s for the ad on air to end',
+                                         (land - self.output.running_time()) / 1e9)
+
+    def _defer_take(self, body, operation_id):
+        """A take from Up next (after_ad) while a library show is in one of its ad breaks waits
+        for the ad on air to end: True when it was put off (_landings makes it, and only then
+        ends its operation). A take by hand cuts at once."""
+        if body.get('after_ad') is not True or not self.active or self.prepared is None \
+                or body.get('prepared_id') != self.prepared:
+            return False
+        land = self._land(self.active)
+        if land is None:
+            return False
+        self.take_land = {'key': self.active, 'at': land, 'body': body, 'operation_id': operation_id}
+        self.ident_land = None   # the take goes there instead of the ID
+        logging.getLogger(__name__).info('The take waits %.1f s for the ad on air to end',
+                                         (land - self.output.running_time()) / 1e9)
+        return True
+
+    def _landings(self):
+        """Make a cut that waited for the ad on air (_land) once it has ended; a show that left
+        air meanwhile, or a cancel, settles it at once."""
+        land = self.ident_land
+        if land is not None and (self.active != land['key'] or self.take_land is not None):
+            self.ident_land = None
+        elif land is not None and self.output.running_time() >= land['at']:
+            self.ident_land = None
+            breaks = self._ad_break()
+            if not self._ident_after(land['key'], 'schedule') and breaks is not None and hasattr(breaks, 'fill_unland'):
+                breaks.fill_unland()   # no ID after all: the show's break goes on as before
+        land = self.take_land
+        if land is None:
+            return
+        error = error_code = None
+        if self.cancel.is_set():
+            error = 'Take cancelled'
+            breaks = self._ad_break()
+            if breaks is not None and hasattr(breaks, 'fill_unland') and self.active == land['key']:
+                breaks.fill_unland()   # the show stays: its break goes on as before
+        elif self.active == land['key'] and self.output.running_time() < land['at']:
+            return
+        else:
+            try:
+                self._take(land['body'])
+            except Exception as exc:
+                error, error_code = str(exc), getattr(exc, 'code', None)
+        self.take_land = None
+        self._finish_operation('take', land['operation_id'], error, error_code)
+
+    def _cut_waits(self, land):
+        """Seconds until a cut that waits for the ad on air is made, for the status."""
+        try:
+            return round(max(0, land['at'] - self.output.running_time()) / 1e9, 1) if land else None
+        except Exception:
+            return None
 
     # ------------------------------------------------------------ station ID
 
@@ -939,6 +1055,7 @@ class MasterWorker:
     def _ident_status(self):
         entry = self.inputs.get(self.ident_key)
         return {"enabled": bool(self.ident_path), "ready": self._ident_ready(),
+                "waits_for_ad": self._cut_waits(self.ident_land),
                 "on_air": self.active is not None and self.active == self.ident_key,
                 "held": bool(entry and entry["decoder"] and getattr(entry["decoder"], "frozen", False)),
                 "file": Path(entry["lease"].path).name if entry else None,
@@ -1131,18 +1248,19 @@ class MasterWorker:
     def _prepare(self, target):
         is_roku = target['source_id'] in ROKU_SOURCE_IDS
         is_file = target['source_id'] == LIBRARY_SOURCE_ID
+        is_stream = target['source_id'] == INTERNET_SOURCE_ID
         after = target.pop('after_input_id', None) if is_file else None
         if not is_roku and not is_file and not self.tv_enabled:
             raise MasterStreamError("TV-Thing is disabled")
         if self.prepared:
             self._drop(self.prepared)
-        lane = ('roku' if is_roku else 'library' if is_file
+        lane = ('roku' if is_roku else 'library' if is_file else 'internet' if is_stream
                 else "digital" if target["source_id"] == "tv-thing-digital" else "analog")
         active = self.inputs.get(self.active)
         # Preparing another channel on the SAME tuner cannot preserve the old
         # feed. This behavior is stated next to the UI's Prepare action.
-        # Files are independent: any number can be open at once.
-        if active and active["lease"].lane == lane and not is_file:
+        # Files and internet streams are independent: any number can be open at once.
+        if active and active["lease"].lane == lane and not is_file and not is_stream:
             self._fallback()
         try:
             if is_file:
@@ -1150,6 +1268,8 @@ class MasterWorker:
                     lease = FileLease(self.library_config, target)
                 except (ConfigError, OSError) as exc:
                     raise MasterStreamError(str(exc)) from exc
+            elif is_stream:
+                lease = StreamLease(self.tv, target)
             else:
                 if is_roku:
                     handoff = target.pop('roku', None)
@@ -1270,6 +1390,7 @@ class MasterWorker:
                         continue
                     error = None
                     error_code = None
+                    deferred = False
                     try:
                         # An explicit command supersedes recovery of the old selection.
                         if self.recovering:
@@ -1277,31 +1398,17 @@ class MasterWorker:
                         if action == "prepare":
                             self._prepare(body)
                         elif action == "take":
-                            self._take(body)
+                            deferred = self._defer_take(body, operation_id)
+                            if not deferred:
+                                self._take(body)
                         elif action == "cancel" and self.prepared:
                             self._drop(self.prepared)
                     except Exception as exc:
                         error = str(exc)
                         error_code = getattr(exc, 'code', None)
                     finally:
-                        if self.cancel.is_set() and self.prepared:
-                            self._drop(self.prepared)
-                            error = error or "Preparation cancelled"
-                        # Drain fallback requests while still marked busy. A
-                        # request arriving during lease cleanup cannot be lost.
-                        while True:
-                            with self.lock:
-                                fallback = self.pending_fallback
-                                self.pending_fallback = False
-                                if not fallback:
-                                    self.busy = False
-                                    self.snapshot["operation"] = {"id": operation_id, "action": action,
-                                                                  "state": "failed" if error else "succeeded", "error": error,
-                                                                  "error_code": error_code}
-                                    self.snapshot["error"] = error
-                                    break
-                            self._fallback()
-                        self._refresh()
+                        if not deferred:   # a take put off ends its operation where it lands (_landings)
+                            self._finish_operation(action, operation_id, error, error_code)
                 except Exception as exc:
                     self._publish(state="reconnecting", error=str(exc), can_take=False, can_prepare=False,
                                   publisher_ready=False, on_air=None, prepared=None)
@@ -1313,6 +1420,7 @@ class MasterWorker:
                     self.publisher_ready = False
                     # A command accepted immediately before a failure must not
                     # tune after reconnect or remain permanently pending.
+                    self.ident_land = self.take_land = None
                     with self.lock:
                         if (self.snapshot.get("operation") or {}).get("state") == "pending":
                             self.snapshot["operation"].update(state="failed", error=str(exc))

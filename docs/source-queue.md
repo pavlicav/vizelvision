@@ -87,6 +87,12 @@ game, two days old, went on air.
   blocked game's own return to the schedule (its `after_game` entry) is passed over with
   it. Entries without a time (recordings, an entry queued after a game) never force this.
   A paused queue changes nothing.
+- **Likewise for the recordings that fill time** (since October 22, `_pass_blocked_fill_locked`).
+  A blocked entry at the head of the *after current* lane waits for Retry or Remove only until
+  master is free for the one queued behind it; then it is passed over the same way and that one
+  plays. Before, it held the whole lane: a Sunday Ticket game the Roku could not find, blocked
+  since 10/18, kept two Seinfeld episodes queued behind it from playing on 10/21 and 10/22, with
+  the test card on air. A blocked recording with nothing behind it still waits.
 - **A game that is over never airs** (`_over`). At release, a game entry's game is checked.
   If it is final (or postponed), the entry is skipped as `over`: *The game is over
   (<score line> · Final)*. If the status cannot be read, the game airs
@@ -105,7 +111,7 @@ Since September 30 only API clients take directly; the page's **Change end time*
 - **:30 or Top of the hour**, whichever comes next.
 - **When the next scheduled show starts** (since October 20): the next block, show or game on the schedule, OFF AIR passed over. See below.
 - **When the program ends**, for a TV-Thing channel (or, since October 20, a YouTube TV channel) whose guide lists the current program. The server reads the end time from its own guide copy. This also covers sports that TV-Thing lists, such as *NFL Football*. It is the listed time, so an overrun is cut off.
-- **The game ends**, when the source is carrying an MLB, NFL or NBA game that is live or starts within the hour. This covers an MLB or Sunday Ticket target, a national game on a YouTube TV channel, or an over-the-air station whose name matches a configured channel alias (WTTG-HD is WTTG, which is FOX). Out-of-market Sunday games are not matched to the local station. The end is the game's final status, so overtime stays on air. The latest end is 12 hours after the take.
+- **The game ends**, when the source is carrying an MLB, NFL, NBA or NHL game that is live or starts within the hour. This covers an MLB, Sunday Ticket or [NHL on ESPN Unlimited](nhl.md) target, a national game on a YouTube TV channel, or an over-the-air station whose name matches a configured channel alias (WTTG-HD is WTTG, which is FOX). Out-of-market Sunday games are not matched to the local station. The end is the game's final status, so overtime stays on air. The latest end is 12 hours after the take.
 - **A custom end time**, up to 12 hours ahead.
 
 The default is the game when one is matched, then the listed program, then the half hour. Until the end, the queue stays paused, and Up next shows *Manual take on air until …*. At the end, the queue resumes. If Up next already has an entry due, or one waiting on the same game, that entry follows. Otherwise the current schedule block goes to the head of Up next, or OFF AIR does when the schedule is off. **Return to schedule now** ends the take early, and **Change end time** sets a new end for whatever is on air.

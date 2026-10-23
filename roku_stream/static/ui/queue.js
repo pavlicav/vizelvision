@@ -15,7 +15,8 @@ window.UpNext = (() => {
     return 'until ' + (hold.program ? hold.program.title + ' ends · ' : '') + fmt.clock(hold.until);
   }
   const showTarget = t => (t?.source_id === 'mlb' ? 'MLB · automatic routing' : t?.source_id === 'sunday-ticket' ? 'NFL Sunday Ticket'
-    : t?.source_id === 'thursday-night-football' ? 'Thursday Night Football · Prime Video' : label(t)) + (t?.antenna === false ? ' · YouTube TV only' : '');
+    : t?.source_id === 'thursday-night-football' ? 'Thursday Night Football · Prime Video'
+    : t?.source_id === 'nhl' ? 'NHL on ESPN Unlimited · YouTube TV' : label(t)) + (t?.antenna === false ? ' · YouTube TV only' : '');
   // A network on YouTube TV waiting in Up next: the antenna takes over if YouTube TV is late.
   function antennaNote(item) {
     const n = VV.networkOf(item.target);

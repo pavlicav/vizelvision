@@ -35,9 +35,11 @@ def picture(promo_id):
 NEW = ('watching', 'metro', 'dupont', 'meridian-hill', 'now-in-hd', 'cat-remote', 'cat-laser', 'seventy-six',
        'eighty-six', 'ninety-six', 'twenty-sixteen', 'the-cairo', 'cairo-1894', 'baseball', 'football',
        'hail-mary', 'cat-field-goal', 'halftime', 'happy-little', 'forecast', 'popcorn',
-       'metro-5', 'baseball-5', 'cat-remote-5')
+       'metro-5', 'baseball-5', 'cat-remote-5', 'basketball', 'hockey', 'all-are-welcome',
+       'wnba', 'mnba', 'non-denom', 'elca', 'presbyterian', 'shinto', 'robot', 'lds')
 SPORTS = {'baseball': {'mlb'}, 'football': {'nfl', 'ncaaf'}, 'hail-mary': {'nfl', 'ncaaf'},
-          'cat-field-goal': {'nfl', 'ncaaf'}, 'halftime': {'nfl', 'ncaaf'}, 'baseball-5': {'mlb'}}
+          'cat-field-goal': {'nfl', 'ncaaf'}, 'halftime': {'nfl', 'ncaaf'}, 'baseball-5': {'mlb'},
+          'basketball': {'nba', 'wnba'}, 'hockey': {'nhl'}, 'wnba': {'wnba'}, 'mnba': {'nba'}, 'robot': {'nfl'}}
 CUTDOWNS = ('metro-5', 'baseball-5', 'cat-remote-5')
 
 

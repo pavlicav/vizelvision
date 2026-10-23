@@ -88,7 +88,7 @@
       const choices = providers.flatMap(provider => {
         const data = state.programs.get(provider.id);
         return (data?.channels || []).map(c => ({label: (c.number ? c.number + ' · ' : '') + c.name, provider: provider.name,
-          target: {source_id: provider.id, channel_id: String(c.id), ...(['mlb', 'sunday-ticket', 'thursday-night-football'].includes(provider.id) && data.date ? {date: data.date} : {})}}));
+          target: {source_id: provider.id, channel_id: String(c.id), ...(['mlb', 'sunday-ticket', 'thursday-night-football', 'nhl'].includes(provider.id) && data.date ? {date: data.date} : {})}}));
       });
       const signature = JSON.stringify(choices);
       if (signature !== card.signature) {
@@ -172,7 +172,8 @@
   const PREVIEW_ROWS = 8, expanded = new Set();
   function programCell(program, title, source, channel, data) {
     const cell = h('div', {class: 'prog'}, h('span', {class: 'label'}, title));
-    if (!program) { cell.append(h('small', 'Listings unavailable')); return cell; }
+    // An internet stream is live around the clock and has no listings.
+    if (!program) { cell.append(h('small', data?.guide?.kind === 'streams' ? (title === 'Now' ? 'Live stream' : 'No listings') : 'Listings unavailable')); return cell; }
     cell.append(h('strong', program.title), h('small', fmt.when(program.start) + (program.end ? ' – ' + fmt.clock(program.end) : '')));
     if (program.status) cell.append(h('small', program.status));
     if (program.preferred_source) cell.append(h('small', 'Suggested source: ' + (program.preferred_source.label || program.preferred_source.provider)));
@@ -213,7 +214,7 @@
       for (const channel of rows) {
         const live = same(state.master.on_air, {source_id: source.id, channel_id: String(channel.id), date: state.master.on_air?.date});
         const name = h('div', {class: 'ch stack tight', style: {gap: '6px'}}, h('div', live ? h('span', {class: 'chip solid pgm', style: {marginBottom: '4px'}}, 'On air') : null,
-          h('strong', channel.number || channel.name), channel.number ? h('small', channel.name) : null),
+          h('strong', channel.number || channel.name), channel.number ? h('small', channel.name) : null, channel.note ? h('small', {class: 'muted'}, channel.note) : null),
           state.queue?.master_queue ? OnAir.buttons(guideItem(source, channel, data), {compact: true}) : null);
         const now = programCell(channel.now || ((channel.game && !channel.upcoming.length) ? channel.game : null), channel.game && !channel.now ? 'Game status' : 'Now', source, channel, data);
         const upcoming = programCell(channel.upcoming[0], 'Next', source, channel, data);

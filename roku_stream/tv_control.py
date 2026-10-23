@@ -61,9 +61,19 @@ class TvControl:
                 raise ValueError("Invalid tuner status")
             return result
         except HTTPError as exc:
-            message = "TV-Thing tuner is reserved by another owner" if exc.code == 423 else f"TV-Thing rejected {path} (HTTP {exc.code})"
+            # TV Thing says why it refused ({"error": {"code", "message"}}): "This NHL game is
+            # not on ESPN Unlimited" reads better than its HTTP status.
+            try:
+                refusal = json.loads(exc.read(64 * 1024)).get("error")
+            except (OSError, ValueError, AttributeError):
+                refusal = None
             exc.close()
-            raise MasterStreamError(message, details={"http_status": exc.code}) from exc
+            refusal = refusal if isinstance(refusal, dict) else {}
+            details = {"http_status": exc.code, **({"code": refusal["code"]} if isinstance(refusal.get("code"), str) else {})}
+            message = ("TV-Thing tuner is reserved by another owner" if exc.code == 423
+                       else f"TV-Thing refused {path}: {refusal['message']}" if isinstance(refusal.get("message"), str)
+                       else f"TV-Thing rejected {path} (HTTP {exc.code})")
+            raise MasterStreamError(message, details=details) from exc
         except (URLError, OSError, ValueError) as exc:
             raise MasterStreamError(f"TV-Thing {path} failed ({type(exc).__name__}); no automatic tune retry") from exc
 

@@ -38,7 +38,7 @@ EARLIEST, START, END = 0.8, 1.2, 9.0
 MODEL = 'aura-2-jupiter-en'
 PREFIX = 'join-'
 MIX_VERSION = 1
-GAME_SOURCES = {'thursday-night-football': 'nfl', 'sunday-ticket': 'nfl', 'mlb': 'mlb'}
+GAME_SOURCES = {'thursday-night-football': 'nfl', 'sunday-ticket': 'nfl', 'mlb': 'mlb', 'nhl': 'nhl'}
 ORDINALS = ('first', 'second', 'third', 'fourth', 'fifth', 'sixth', 'seventh', 'eighth', 'ninth', 'tenth',
             'eleventh', 'twelfth', 'thirteenth', 'fourteenth', 'fifteenth', 'sixteenth', 'seventeenth',
             'eighteenth', 'nineteenth', 'twentieth')

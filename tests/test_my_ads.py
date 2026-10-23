@@ -212,6 +212,21 @@ class StoreTests(unittest.TestCase):
             f.write('not json\n')
         self.assertEqual([r['at'] for r in self.store.plays(101)], [101., 102.])
 
+    def test_play_tally_reads_only_what_was_appended_and_starts_again_when_the_log_is_replaced(self):
+        tally = my_ads.PlayTally(self.store.plays_path, lambda row: row.get('id') if row.get('counted') else None)
+        self.assertEqual(tally.read(), ({}, None))
+        for i, (ad_id, counted) in enumerate((('x', True), ('y', True), ('x', False), ('x', True))):
+            my_ads.append_play(self.store.plays_path, {'kind': 'ad', 'id': ad_id, 'at': 100. + i, 'counted': counted})
+        self.assertEqual(tally.read(), ({'x': 2, 'y': 1}, 100.))
+        with open(self.store.plays_path, 'a') as f:
+            f.write('not json\n{"id": "y", "counted": true, "at": 1')     # half written
+        self.assertEqual(tally.read(), ({'x': 2, 'y': 1}, 100.))
+        with open(self.store.plays_path, 'a') as f:
+            f.write('10.0}\n')
+        self.assertEqual(tally.read(), ({'x': 2, 'y': 2}, 100.))
+        self.store.plays_path.write_text('{"id": "z", "counted": true, "at": 200.0}\n')
+        self.assertEqual(tally.read(), ({'z': 1}, 200.))
+
 
 class ApiTests(unittest.TestCase):
     def setUp(self):

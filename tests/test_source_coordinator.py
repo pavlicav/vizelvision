@@ -19,9 +19,9 @@ from unittest.mock import Mock
 from roku_stream.config import MasterConfig, TvThingConfig
 from roku_stream.errors import ConfigError, ControlBusyError, CueCancelledError
 from roku_stream.master import MasterStreamError
-from roku_stream.source_coordinator import SourceCoordinator
+from roku_stream.source_coordinator import SourceCoordinator, SourcePrepareError
 from roku_stream.tv_control import ROKU_OWNER, RokuLease
-from roku_stream.tv_roku import RokuHold, TvRoku
+from roku_stream.tv_roku import RokuHold, RokuRefusedError, TvRoku
 
 
 TARGET = {'source_id': 'youtube-tv', 'channel_id': 'NBC'}
@@ -138,6 +138,7 @@ class FakeTvRoku:
         source = target['source_id']
         call = {'sunday-ticket': lambda: self.controller.play_sunday_ticket(target),
                 'thursday-night-football': lambda: self.controller.play_prime_game(target),
+                'nhl': lambda: self.controller.play_espn_game(target),
                 'mlb': lambda: self.controller.play_baseball_game(target)}.get(
             source, lambda: self.controller.play(target['channel_id']))
         outcome = {}
@@ -160,6 +161,8 @@ class FakeTvRoku:
             thread.join(.01)
         if stopped or isinstance(outcome.get('error'), CueCancelledError):
             raise CueCancelledError(f'Roku navigation stopped ({stopped or "cancelled"})')
+        if isinstance(outcome.get('error'), RokuRefusedError):
+            raise outcome['error']  # TvRoku: TV Thing refused it where the Roku is.
         if 'error' in outcome:
             raise MasterStreamError(f"The Roku could not find it: {outcome['error']}")
         verification = (outcome.get('result') or {}).get('verification') or {}
@@ -193,7 +196,7 @@ class CoordinatorTests(unittest.TestCase):
         def play(*_):
             self.assertIsNone(self.master.state['on_air'], 'a Roku feed goes to fallback before the Roku moves')
             return self.result
-        for method in ('play', 'play_baseball_game', 'play_sunday_ticket', 'play_prime_game'):
+        for method in ('play', 'play_baseball_game', 'play_sunday_ticket', 'play_prime_game', 'play_espn_game'):
             getattr(self.controller, method).side_effect = play
 
     def finish(self):
@@ -223,6 +226,38 @@ class CoordinatorTests(unittest.TestCase):
         self.coordinator.sports.game.return_value = {**GAME, 'broadcasts': [{'name': 'NBC'}]}
         self.coordinator.request('prepare', {**target, 'force': True})
         self.assertIn('not listed on Prime Video', self.finish()['operation']['error'])
+
+    def test_nhl_game_prepares_its_exact_target(self):
+        from tests.test_espn_unlimited import GAME, ON_TNT
+        target = {'source_id': 'nhl', 'channel_id': str(GAME['game_id']), 'date': '2026-10-22'}
+        self.coordinator.sports = Mock()
+        self.coordinator.sports.game.return_value = GAME
+        self.result['verification'] = {'player_state': 'play', 'selected_game_card': {'matched': True},
+                                       'playback_evidence': 'roku_player_play_after_verified_selection'}
+        self.coordinator.request('prepare', target)
+        self.assertEqual(self.finish()['operation']['state'], 'succeeded')
+        self.controller.play_espn_game.assert_called_once_with(target)
+        self.coordinator.sports.game.assert_called_once_with('nhl', GAME['game_id'], '2026-10-22')
+        self.assertEqual(self.roku.selection, target)
+        self.coordinator.sports.game.return_value = ON_TNT
+        self.coordinator.request('prepare', {**target, 'force': True})
+        self.assertIn('not on ESPN Unlimited', self.finish()['operation']['error'])
+
+    def test_a_blacked_out_game_is_not_left_to_the_queue_to_retry(self):
+        from tests.test_espn_unlimited import POWER_PLAY
+        target = {'source_id': 'nhl', 'channel_id': str(POWER_PLAY['game_id']), 'date': '2026-10-22'}
+        self.coordinator.sports = Mock()
+        self.coordinator.sports.game.return_value = POWER_PLAY
+        refusal = RokuRefusedError('Detroit Red Wings at Vancouver Canucks is blacked out on YouTube TV where the Roku is')
+        self.controller.play_espn_game.side_effect = refusal
+        self.coordinator.queue = Mock()
+        self.coordinator.queue.take_guard = lambda _: contextlib.nullcontext()
+        with self.assertRaisesRegex(RokuRefusedError, 'blacked out on YouTube TV'):
+            self.coordinator.execute_queue(SimpleNamespace(id='q', target=target))
+        # A game not live yet is retried as before.
+        self.controller.play_espn_game.side_effect = MasterStreamError('it may not have started')
+        with self.assertRaises(SourcePrepareError):
+            self.coordinator.execute_queue(SimpleNamespace(id='q', target=target))
 
     def test_navigation_is_followed_by_media_preparation_of_that_generation_then_explicit_take(self):
         self.master.state.update(state='live', on_air={'source_id': 'tv-thing-digital'})
@@ -368,6 +403,16 @@ class CoordinatorTests(unittest.TestCase):
         self.assertEqual([a for a, _ in self.master.calls], ['prepare', 'take'])
         self.assertEqual(self.roku.navigations, [])
 
+    def test_prepare_take_works_for_an_internet_stream(self):
+        # TV Thing's relay: no tuner quality, no Roku; only a stream ID is accepted.
+        self.coordinator.request('prepare-take', {'source_id': 'internet', 'channel_id': 'pentulive', 'quality': 'high'})
+        state = self.finish()
+        self.assertEqual(state['on_air']['channel_id'], 'pentulive')
+        self.assertEqual(self.master.calls[0], ('prepare', {'source_id': 'internet', 'channel_id': 'pentulive'}))
+        self.assertEqual(self.roku.navigations, [])
+        with self.assertRaises(ConfigError):
+            self.coordinator.request('prepare-take', {'source_id': 'internet', 'channel_id': '../digital'})
+
     def test_prepare_take_never_takes_a_source_that_is_not_ready(self):
         target = {'source_id': 'tv-thing-digital', 'channel_id': 'wjla_7_1'}
         original = self.master.request
@@ -500,7 +545,8 @@ class CoordinatorTests(unittest.TestCase):
         self.coordinator.queue.take_guard = lambda _: contextlib.nullcontext()
         result = self.coordinator.execute_queue(SimpleNamespace(id='q', target=target))
         self.assertEqual(result['on_air']['channel_id'], '123')
-        self.assertEqual(self.master.calls, [('take', {'prepared_id': 'prepared'})])
+        # Up next's take lets an ad spliced into a library show play out first (a take by hand does not).
+        self.assertEqual(self.master.calls, [('take', {'prepared_id': 'prepared', 'after_ad': True})])
         self.baseball.game.assert_not_called()
         self.controller.play_baseball_game.assert_called_once()
         self.coordinator.queue.check_before_take.assert_called_once_with('q')
@@ -733,6 +779,16 @@ class TvRokuTests(unittest.TestCase):
         self.navigation(state='failed')
         with self.assertRaisesRegex(MasterStreamError, 'not found'):
             self.roku.prepare(TARGET)
+
+    def test_a_blackout_is_a_refusal_not_a_failure_to_find_it(self):
+        self.navigation(state='failed')
+        operation = {'id': 'op1', 'state': 'failed', 'active': False, 'error': {'code': 'navigation_failed', 'message': (
+            'Detroit Red Wings at Vancouver Canucks is blacked out on YouTube TV where the Roku is')}}
+        operation['message'] = operation['error']['message']
+        self.control.tune_response = lambda body: (self.control.lane['roku'].update(operation=operation)
+                                                   or {'ok': True, 'reused': False, 'operation': dict(operation)})
+        with self.assertRaisesRegex(RokuRefusedError, '^Detroit Red Wings at Vancouver Canucks is blacked out'):
+            self.roku.prepare({'source_id': 'nhl', 'channel_id': '401802672', 'date': '2026-10-22'})
 
     def test_stop_cancels_the_navigation_on_tv_thing(self):
         self.navigation(polls_until_done=1000)

@@ -26,8 +26,8 @@ UNKNOWN_LENGTH = timedelta(minutes=30)
 # An entry released this long after it was due joins in progress (source_queue.LATE).
 LATE = timedelta(seconds=60)
 OFF_AIR = {'source_id': 'off-air', 'channel_id': 'off-air'}
-# Sources whose channel id is a game's id (NFL on ESPN, MLB gamePk).
-GAME_SOURCES = {'thursday-night-football': 'nfl', 'sunday-ticket': 'nfl', 'mlb': 'mlb'}
+# Sources whose channel id is a game's id (NFL and NHL on ESPN, MLB gamePk).
+GAME_SOURCES = {'thursday-night-football': 'nfl', 'sunday-ticket': 'nfl', 'mlb': 'mlb', 'nhl': 'nhl'}
 # A show's priority rank (programming.PRIORITIES); a take held by hand ranks above normal
 # and favorites' games, below high (source_queue.HELD).
 NORMAL = 1

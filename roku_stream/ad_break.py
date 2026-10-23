@@ -19,7 +19,8 @@ left, each once a break. A promo's live text (the time, the temperature, the pro
 is blended into its frames as they decode (PromoReel). With My ads off, a due promo still
 plays, and the break then carries on as ad mute has it ('pass': nothing replaced).
 
-**Next up.** The rotation's ads are drawn AHEAD at a time into a queue (self.queue), so the
+**Next up.** The rotation's ads (my_ads.Rotation, or with the mix on ad_mix.Mix: kinds of ads
+in balance, the ads seen most rested) are drawn AHEAD at a time into a queue (self.queue), so the
 page shows what is coming and the operator can change it: an entry skipped never airs (a
 drawn ad is out of this round), and an ad or a promo queued by hand airs before the
 rotation's ads and before a due promo, whatever its switch or limit. The rotation's next
@@ -59,6 +60,7 @@ gi.require_version('PangoCairo', '1.0')
 from gi.repository import GstVideo, Pango, PangoCairo  # noqa: E402
 import cairo  # noqa: E402
 
+from .ad_mix import Mix, MixStore
 from .admute_link import apply_gain
 from .errors import ConfigError
 from .my_ads import Rotation, allowed, append_play, card_file, counts, played, read_plays
@@ -415,6 +417,7 @@ class AdBreak:
     AHEAD = 5                        # the rotation's ads kept drawn in Next up
     QUEUED_MOST = 20                 # entries queued by hand, at most
     JOIN_GRACE = 3 * SECOND          # a take late for the bumper's end finds its last (black) frame
+    LAND_SLACK = SECOND // 4         # no ad starts this close before a cut that lands there (fill_land)
 
     def __init__(self, output, folder, plays_path):
         self.output, self.gst = output, output.gst
@@ -449,6 +452,8 @@ class AdBreak:
         self.cued = None                     # the next ad, decoded up to its first frames
         self.cued_promo = None               # the next promo, likewise
         self.rotation, self.promo_rotation = Rotation(), Rotation()
+        # The mix (ad_mix.py): with it on, the shuffle balances kinds of ads and rests the most seen
+        self.mix, self.mix_store = Mix(self.plays_path), MixStore(self.plays_path, lenient=True)
         self.left_out = {}                   # ad or promo id -> (until, why): it would not play
         # Next up: entries {key, kind (ad|promo), id, by (you|rotation)} in the order they air,
         # those queued by hand first; the rotation's next promo, placed by its timing
@@ -752,6 +757,47 @@ class AdBreak:
             self.filling = False
         self.wake.set()
 
+    def fill_land(self, pts, most):
+        """A cut away from a show in its programme break (to the station ID, or to the next
+        program) is asked for at running time pts: the running time to make it at instead,
+        where an ad ends, so that none is cut short. The ad that would be on air at pts plays
+        out (the one on air now, or the one that follows it) and none starts after it; the cut
+        then closes the window (fill_stop). None: cut at pts (no ad would be on air there, or
+        it would run on past `most` seconds). Asked again, the same answer."""
+        with self.lock:
+            request = self.fill_request
+            if request is None or request.get('length') is None or request['stop'] is not None:
+                return None
+            if request.get('last') is not None:
+                return request['last']
+            window = self.fill
+            if window is not None and window['request'] is request:
+                if self.reel is None or self.reel_kind == 'join' or self.reel_start_pts is None:
+                    return None          # the card, or between two ads: nothing to cut short
+                ends = self.reel_start_pts + int(self.reel.ad['duration'] * SECOND)
+            else:
+                ends = request['start']  # what airs has not reached the break: its first ad opens it
+            if ends < pts:
+                # The one on air ends before the cut would air: the next (Next up's first, or a
+                # due promo) is on there instead.
+                choice = self._choice(time.time(), fill=True)
+                reel = self.cued_promo if choice == 'promo' else self.cued if choice == 'cued' else None
+                if reel is None or reel.failed:
+                    return None
+                ends += int(reel.ad['duration'] * SECOND)
+            if ends < pts or ends - pts > most * SECOND:
+                return None
+            request['last'] = ends
+        self.wake.set()
+        return ends
+
+    def fill_unland(self):
+        """The cut that fill_land planned for will not come (cancelled): ads go on as before."""
+        with self.lock:
+            if self.fill_request is not None:
+                self.fill_request.pop('last', None)
+        self.wake.set()
+
     def fill_end(self):
         """{'end': running time the window closes at, 'take': the take lands there (a join
         bumper) rather than the ID irising out, 'fixed': it will not move}; None until the
@@ -1016,7 +1062,10 @@ class AdBreak:
         if self.reel is None and window['joined']:
             return self.blank                # the bumper has ended: black until the take
         if self.reel is None and pts is not None:
-            if window['end'] is None:
+            last = window['request'].get('last')
+            if last is not None and pts >= last - self.LAND_SLACK:
+                pass                         # a cut lands here (fill_land): no ad starts
+            elif window['end'] is None:
                 self._fill_next(due, pts)
             elif window['join_at'] is not None and not window['joined'] and pts >= window['join_at']:
                 self._fill_join(due, pts, window)
@@ -1252,14 +1301,22 @@ class AdBreak:
         them. A new order (or list order) puts the rotation's back and draws them again. The
         limits are weighed outside the lock: the programme-delay thread takes from Next up."""
         ads = {a['id']: a for a in settings['ads']}
-        order = (settings['order'], tuple(ads) if settings['order'] == 'list' else None)
-        # Only plays that a limit can still see count (the longest limit, not the week).
+        mix = self.mix_store.read()
+        mixing = mix['enabled'] and settings['order'] == 'shuffle'
+        picker = self.mix if mixing else self.rotation
+        order = (settings['order'], tuple(ads) if settings['order'] == 'list' else None,
+                 json.dumps(mix, sort_keys=True) if mixing else None)
+        # Only plays that a limit can still see count (the longest limit, not the week); the mix
+        # weighs the last day's too.
         horizon = max((a['limit']['minutes'] for a in settings['ads'] if a.get('limit')), default=0) * 60
+        if mixing:
+            horizon = max(horizon, 86400)
         plays = [p for p in plays if p.get('kind', 'ad') == 'ad' and played(p) and p.get('at', 0) >= now - horizon]
         with self.lock:
             if order != self.queue_order:
                 if self.queue_order is not None:
-                    self.rotation.undraw([e['id'] for e in self.queue if e['by'] == 'rotation'], self.last_aired)
+                    drawer = self.mix if self.queue_order[2] is not None else self.rotation   # back to who drew them
+                    drawer.undraw([e['id'] for e in self.queue if e['by'] == 'rotation'], self.last_aired)
                 self.queue = [e for e in self.queue if e['by'] != 'rotation']
                 self.queue_order = order
             self.left_out = {k: v for k, v in self.left_out.items() if v[0] > now}
@@ -1278,10 +1335,11 @@ class AdBreak:
                 gone.add(e['key'])
         new = []
         while drawn < self.AHEAD:            # the rotation is the helper's alone
-            ad = self.rotation.pick(settings, plays + ahead, now, skip=left_out)
+            ad = (self.mix.pick(settings, plays + ahead, now, skip=left_out, mix=mix) if mixing
+                  else self.rotation.pick(settings, plays + ahead, now, skip=left_out))
             if ad is None:
                 break
-            self.rotation.played(ad['id'])
+            picker.played(ad['id'])
             new.append(_entry('ad', ad['id'], 'rotation'))
             ahead.append({'kind': 'ad', 'id': ad['id'], 'at': now, 'counted': True})
             drawn += 1

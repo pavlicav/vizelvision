@@ -1,6 +1,6 @@
 // Ads › Idents: the ID card, what is on air and cued for the next break, every ident with its
 // picture and preview, and what aired. node tests/browser_ui_idents.cjs /path/to/playwright
-const {open, run, assert, overflow} = require('./ui_harness.cjs');
+const {open, run, assert, overflow, NOW} = require('./ui_harness.cjs');
 
 run(async browser => {
   let t = await open(browser, '/ads#idents');
@@ -34,6 +34,7 @@ run(async browser => {
   assert.doesNotMatch(await idents.nth(1).locator('h3').textContent(), /next break|on air/);
   assert.match(await idents.nth(1).textContent(), /VizelVision Sports.*voiced by Jupiter/);
   assert.match(await idents.nth(2).locator('h3').textContent(), /Time & Temperature.*cued/);
+  assert.doesNotMatch(await page.locator('#idt-grid').textContent(), /played/, 'no counts from a server without them');
   await page.waitForFunction(() => [...document.querySelectorAll('#idt-grid .still img')].every(i => i.src.startsWith('blob:')));
   for (const f of ['/v1/idents/station-id.png', '/v1/idents/sports-id.png', '/v1/promos/still/legal.png']) assert.ok(t.frames.includes(f), f);
 
@@ -51,7 +52,7 @@ run(async browser => {
   await page.waitForFunction(() => document.querySelector('dialog.ident-preview video').src.startsWith('blob:'));
   assert.ok(t.frames.includes('/v1/idents/station-id.mp4'));
   await page.locator('dialog.ident-preview').getByRole('button', {name: 'Close'}).click();
-  assert.equal(await page.locator('dialog.ident-preview').count(), 0);
+  await page.waitForSelector('dialog.ident-preview', {state: 'detached', timeout: 2000});   // removed on its close event
   await idents.nth(2).locator('.still').click();
   await page.waitForSelector('dialog.promo-preview video');
   assert.equal(await page.locator('dialog.promo-preview .stage img').count(), 4, 'its four live texts');
@@ -67,6 +68,8 @@ run(async browser => {
   t = await open(browser, '/ads#idents', {width: 390, height: 844, edit: F => {
     F.master.ident = {...F.master.ident, on_air: true, held: true, file: 'sports-65d45ff77e80f0e7.mp4'};
     F.continuity.next = {...F.continuity.next, kind: 'sports', name: 'Amélie, then VizelVision Sports'};
+    F.continuity.played = {station: {total: 41, day: 6}, sports: {total: 1, day: 1}, since: NOW / 1000 - 3 * 86400};
+    for (const p of F.promos.promos) p.played = {...p.played, total: p.id === 'legal' ? 23 : 0};
   }});
   page = t.page;
   await page.waitForSelector('#idt-grid .ident');
@@ -76,6 +79,13 @@ run(async browser => {
   assert.match(await page.locator('#idt-lamp').getAttribute('class'), /pgm/);
   assert.match(await page.locator('#idt-grid .ident').nth(1).locator('h3').textContent(), /VizelVision Sports.*on air/);
   assert.doesNotMatch(await page.locator('#idt-grid .ident').nth(0).locator('h3').textContent(), /on air|next break/);
+  // How often each has aired: the IDs since their log began, the promos all time.
+  const counts = await page.locator('#idt-grid .ident .tiny').allTextContents();
+  assert.match(counts[0], /^played 41 times since \w+, \w+ \d+ · 30 s · voiced by DJ Low Tide · today 6/);
+  assert.match(counts[1], /^played 1 time since .* · today 1 · last /);
+  const legal = page.locator('#idt-grid .ident', {hasText: 'Legal ID'});
+  assert.match(await legal.locator('.tiny').textContent(), /^played 23 times · 0:05 · in ad breaks · today \d/);
+  assert.equal(await page.locator('#idt-grid .ident .tiny strong', {hasText: /^played 0 times$/}).count(), t.F.promos.promos.length - 1);
   assert.equal(await overflow(page), 0, 'no sideways scroll on a phone');
   assert.deepEqual(t.errors, []);
   await t.ctx.close();

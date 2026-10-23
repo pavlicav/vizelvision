@@ -301,6 +301,43 @@ def append_play(path, row):
         f.write(json.dumps(row) + '\n')
 
 
+class PlayTally:
+    """Plays counted all time, by key(row) (None: not counted): the log read once, then only
+    what was appended since. A line still being written waits for the next read."""
+
+    def __init__(self, path, key):
+        self.path, self.key = Path(path), key
+        self.offset, self.counts, self.first = 0, {}, None
+        self.lock = threading.Lock()
+
+    def read(self):
+        """({key: plays}, when the earliest counted play was, or None)."""
+        with self.lock:
+            try:
+                with open(self.path, 'rb') as f:
+                    size = f.seek(0, 2)
+                    if size < self.offset:  # Replaced or cut: count again from the top.
+                        self.offset, self.counts, self.first = 0, {}, None
+                    f.seek(self.offset)
+                    chunk = f.read(size - self.offset)
+            except OSError:
+                return dict(self.counts), self.first
+            end = chunk.rfind(b'\n') + 1
+            for line in chunk[:end].splitlines():
+                try:
+                    row = json.loads(line)
+                except ValueError:
+                    continue
+                key = self.key(row) if isinstance(row, dict) else None
+                if key is not None:
+                    self.counts[key] = self.counts.get(key, 0) + 1
+                    at = row.get('at')
+                    if isinstance(at, (int, float)) and (self.first is None or at < self.first):
+                        self.first = at
+            self.offset += end
+            return dict(self.counts), self.first
+
+
 # ---------------------------------------------------------------- the store
 
 def card_file(settings):

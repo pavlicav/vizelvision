@@ -165,6 +165,64 @@ run(async browser => {
   assert.deepEqual(mixed.errors, []);
   await mixed.ctx.close();
 
+  // NHL on ESPN Unlimited: a Roku source whose rows are the day's games; queued, a game keeps
+  // its date and holds until its final.
+  const kraken = {end: null, end_kind: 'game_status', id: 'nhl:401802671', networks: [], start: 1792720800, state: 'live', status: 'In Progress',
+    title: 'Utah Mammoth at Seattle Kraken', note: 'NHL on ESPN Unlimited in YouTube TV (an ESPN+ exclusive)', espn_unlimited: {exclusive: true, blackout: {}, home: [], away: []}};
+  const espn = {source_id: 'nhl', channel_id: '401802610', date: '2026-10-01'};
+  const upcoming = {league: 'nhl', games: [{league: 'nhl', game_id: 401802610, title: 'Detroit Red Wings at Vancouver Canucks', short_title: 'DET @ VAN',
+    start_time: '2026-10-02T02:00Z', game_date: '2026-10-01', state: 'in', status: 'In Progress', channels: [], suggested_target: espn, espn_unlimited_target: espn,
+    broadcasts: [{name: 'ESPN+', market: 'national'}, {name: 'SNP', market: 'home'}],
+    note: 'NHL on ESPN Unlimited in YouTube TV (out of market); the Roku takes 3-4 minutes to find it. Blacked out if YouTube TV places the Roku in Lansing (DET).'}]};
+  const hockey = await open(browser, '/sources', {storage: {sourcesFilter: 'nhl', sportsLeague: 'nhl'}, api: {...api, 'GET /v1/sports/upcoming': () => upcoming}, edit: F => {
+    F.sources.sources.push({...F.sources.sources.find(s => s.id === 'sunday-ticket'), id: 'nhl', name: 'NHL on ESPN Unlimited', selection: null});
+    F.programs.nhl = {source_id: 'nhl', date: '2026-10-22', guide: {available: true, kind: 'games'}, stale: false,
+      channels: [{id: '401802671', name: kraken.title, number: null, now: kraken, upcoming: [], game: kraken}]};
+  }});
+  await hockey.page.waitForSelector('.row-channel[data-channel="401802671"]');
+  await hockey.page.getByRole('button', {name: 'Add to queue Utah Mammoth at Seattle Kraken'}).click();
+  await hockey.page.locator('.onair-dialog').waitFor();
+  await hockey.page.locator('.onair-dialog').getByRole('button', {name: /Add to queue/}).click();
+  await hockey.page.waitForTimeout(200);
+  const queued = hockey.posts.find(p => p.path === '/v1/queue').body;
+  assert.deepEqual(queued.target, {source_id: 'nhl', channel_id: '401802671', date: '2026-10-22'});
+  assert.deepEqual(queued.until, {kind: 'game', league: 'nhl', game_pk: 401802671, game_date: '2026-10-22'});
+  await hockey.page.locator('#sources [data-source=roku]').click();
+  assert.equal(await hockey.page.locator('.input-card[data-source=roku] optgroup[label="NHL on ESPN Unlimited"]').count(), 1, 'one of the Roku services');
+  // Sports: an ESPN+ game says where it goes on air, and where it is blacked out.
+  await hockey.page.locator('#sources [data-source=sports]').click();
+  const row = hockey.page.locator('.sports-games li', {hasText: 'DET @ VAN'});
+  await row.waitFor();
+  assert.match(await row.textContent(), /ESPN\+, SNP → NHL on ESPN Unlimited · YouTube TV/);
+  assert.match(await row.textContent(), /Blacked out if YouTube TV places the Roku in Lansing/);
+  hockey.posts.length = 0;
+  await row.getByRole('button', {name: 'Add to queue Detroit Red Wings at Vancouver Canucks'}).click();
+  await hockey.page.locator('.onair-dialog').getByRole('button', {name: /Add to queue/}).click();
+  await hockey.page.waitForTimeout(200);
+  assert.deepEqual(hockey.posts.at(-1).body.target, espn);
+  assert.deepEqual(hockey.errors, []);
+  await hockey.ctx.close();
+
+  // Internet streams: TV Thing's relays, numbered as in its lineup; live around the clock, no listings.
+  const web = await open(browser, '/sources', {api, storage: {sourcesFilter: 'internet'}, edit: F => {
+    F.sources.sources.push({...F.sources.sources.find(s => s.id === 'tv-thing-digital'), id: 'internet', name: 'Internet streams',
+      resource_id: 'tv_thing:internet', guide_kind: 'streams', selection: null, count: 1});
+    F.programs.internet = {source_id: 'internet', stale: false, warnings: [], guide: {available: false, kind: 'streams', reason: 'Live streams have no listings'},
+      channels: [{id: 'pentulive', number: '29', name: 'Pentulive', note: "Yle's puppy cam, 24/7 through early December 2026", now: null, upcoming: []}]};
+  }});
+  const pentulive = web.page.locator('.row-channel[data-channel="pentulive"]');
+  await pentulive.waitFor();
+  assert.match(await pentulive.textContent(), /29Pentulive.*puppy cam.*Live stream.*No listings/);
+  assert.equal(await web.page.locator('.input-card[data-source=internet] select option').textContent(), '29 · Pentulive');
+  await web.page.getByRole('button', {name: 'Play now 29 · Pentulive'}).click();
+  await web.page.locator('.onair-dialog').waitFor();
+  assert.match(await web.page.locator('.onair-dialog').textContent(), /Internet streams · Yle's puppy cam/);
+  await web.page.locator('.onair-dialog').getByRole('button', {name: /Play now/}).click();
+  await web.page.waitForTimeout(200);
+  assert.deepEqual(web.posts.at(-1).body.target, {source_id: 'internet', channel_id: 'pentulive'});
+  assert.deepEqual(web.errors, []);
+  await web.ctx.close();
+
   const phone = await open(browser, '/sources', {width: 390});
   await phone.page.waitForSelector('.row-channel');
   assert.equal(await overflow(phone.page), 0);

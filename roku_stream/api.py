@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 
+import copy
 import hmac
 import json
 import re
@@ -45,6 +46,7 @@ from .input_preview import InputPreview
 from .production import ProductionSettings
 from .caption_settings import CaptionSettings, MODELS as CAPTION_MODELS, LANGUAGES as CAPTION_LANGUAGES
 from .admute_settings import AdMuteSettings
+from . import ad_mix
 from . import my_ads as my_ads_module
 from .my_ads import MyAds
 from .promos import PromoDesk, Promos
@@ -166,6 +168,8 @@ def handler_factory(
     admute_dir = Path(config.master.socket_path).parent
     worker_client = MasterClient(config.master)
     my_ads = MyAds(config.master.socket_path)
+    my_ads_mix = ad_mix.MixStore(config.master.socket_path)
+    my_ads_seen = ad_mix.Exposure(my_ads.plays_path)       # every play of each ad, for the mix's numbers
     # Station promos (promos.py): the desk keeps their live values; without one (tests), a quiet one.
     promo_desk = promo_desk or PromoDesk(Promos(config.master.socket_path), master=master, start_worker=False)
 
@@ -348,13 +352,25 @@ def handler_factory(
                         'played': {'hour': sum(1 for t in counted if t >= now - 3600),
                                    'day': sum(1 for t in counted if t >= now - 86400), 'week': len(counted),
                                    'last': max((p['at'] for p in mine), default=None)}})
+        mix = my_ads_mix.read()
+        mix_view = my_ads_mix_summary(mix, settings, plays, now)
+        times, t = my_ads_seen.read(), mix['tuning']
+        kind = ad_mix.kinds_of(mix, ads)
+        wear, boost = ad_mix.own(mix, kind)
+        for ad in ads:
+            mine = times.get(ad['id'], [])
+            seen = ad_mix.seen(mine, now, t['half_life_days'])
+            ad.update({'category': mix['ads'].get(ad['id']), 'plays_all': len(mine), 'seen': round(seen, 1),
+                       'boost': boost[ad['id']], 'wear': wear[ad['id']],
+                       'chance': round(ad_mix.chance(seen, max(mine) if mine else None, now, t, wear=wear[ad['id']],
+                                                     boost=boost[ad['id']], added=ad.get('added')), 4)})
         cards = [p for p in plays if p.get('kind') == 'card']
         # The station promos, for Next up's picker: each with whether it may air now.
         promo_settings, values = promo_desk.store.read(), promos_module.fresh(promo_desk.store.values(), now)
         promos = [{'id': p['id'], 'name': p['name'], 'duration': p['duration'], 'still': p['still'],
                    'enabled': promos_module.switched_on(promo_settings, p['id']), 'why': promos_module.readiness(p, values)}
                   for p in promo_desk.library.read()]
-        return {'settings': {k: v for k, v in settings.items() if k != 'ads'}, 'ads': ads, 'status': worker,
+        return {'settings': {k: v for k, v in settings.items() if k != 'ads'}, 'ads': ads, 'status': worker, 'mix': mix_view,
                 'promos': {'enabled': promo_settings['enabled'], 'every': promo_settings['every'], 'list': promos},
                 'admute_mode': admute_settings.read()['mode'], 'on_air': on_air,
                 'recent': [{**p, 'counted': my_ads_module.played(p)} if p.get('kind', 'ad') == 'ad' else p for p in plays[-80:][::-1]],
@@ -372,6 +388,96 @@ def handler_factory(
             probe['card'] = {**probe['card'], 'text': text}
             my_ads.card(probe)
         my_ads.update(data)
+
+    def my_ads_mix_summary(mix, settings, plays, now):
+        """The mix, for the My ads tab: on or off, and each kind with its ads and the last day's plays."""
+        kind = ad_mix.kinds_of(mix, settings['ads'])
+        day, sizes = {}, {}
+        for p in plays:
+            if p.get('kind', 'ad') == 'ad' and p.get('at', 0) >= now - 86400 and my_ads_module.played(p) and p.get('id') in kind:
+                day[kind[p['id']]] = day.get(kind[p['id']], 0) + 1
+        for k in kind.values():
+            sizes[k] = sizes.get(k, 0) + 1
+        return {'enabled': mix['enabled'], 'aired_day': sum(day.values()),
+                'categories': [{**c, 'ads': sizes.get(c['key'], 0), 'day': day.get(c['key'], 0)} for c in mix['categories']],
+                'unsorted': {'ads': sizes.get(ad_mix.UNSORTED, 0), 'day': day.get(ad_mix.UNSORTED, 0),
+                             'weight': mix['tuning']['unsorted']}}
+
+    def my_ads_mix_view():
+        """Ads › Mix: the mix as kept, the tuning's ranges, and every ad with its plays, so the page
+        works out each one's chance itself as the sliders move (ad_mix.chance)."""
+        settings, mix, now = my_ads.read(), my_ads_mix.read(), time.time()
+        rows = my_ads.plays(now - 7 * 86400)
+        times, kind = my_ads_seen.read(), ad_mix.kinds_of(mix, settings['ads'])
+        breaks, per_break = ad_mix.pace(rows, now)
+        return {'mix': mix, 'now': round(now, 1), 'order': settings['order'],
+                'summary': my_ads_mix_summary(mix, settings, rows, now),
+                'ranges': {'tuning': {k: v for k, v in ad_mix.TUNING.items()}, 'weight': ad_mix.WEIGHT,
+                           'wear': ad_mix.WEAR, 'boost': ad_mix.BOOST},
+                'pace': {'breaks_a_day': round(breaks, 1), 'per_break': per_break},
+                'ads': [{'id': a['id'], 'name': a['name'], 'kind': kind[a['id']], 'enabled': a['enabled'],
+                         'duration': a['duration'], 'added': a.get('added'), 'pics': a.get('pics', 0),
+                         'plays': [round(t) for t in times.get(a['id'], [])]} for a in settings['ads']]}
+
+    def my_ads_mix_draft(data, base=None):
+        """The mix with these changes: enabled, tuning {key: value}, kinds {key: {weight, wear}},
+        weights {key: weight} (the kinds' shares alone), overrides {ad id: {boost, wear} or null}."""
+        if not isinstance(data, dict) or not data or not set(data) <= {'enabled', 'tuning', 'kinds', 'weights', 'overrides'}:
+            raise ConfigError('The mix takes enabled, tuning, kinds, weights and overrides')
+        mix = copy.deepcopy(base or my_ads_mix.read())
+        if 'enabled' in data:
+            mix['enabled'] = data['enabled']
+        tuning = data.get('tuning', {})
+        if not isinstance(tuning, dict):
+            raise ConfigError('tuning maps its settings to values')
+        mix['tuning'].update(tuning)
+        kinds = {k: {'weight': w} for k, w in data.get('weights', {}).items()} if isinstance(data.get('weights', {}), dict) else None
+        if kinds is None or not isinstance(data.get('kinds', {}), dict):
+            raise ConfigError('kinds maps each kind to its weight and wear')
+        for key, change in data.get('kinds', {}).items():
+            if not isinstance(change, dict) or not set(change) <= {'weight', 'wear'}:
+                raise ConfigError('A kind takes weight and wear')
+            kinds.setdefault(key, {}).update(change)
+        known = {c['key']: c for c in mix['categories']}
+        for key, change in kinds.items():
+            if key not in known:
+                raise ConfigError(f'No kind {key!r}')
+            known[key].update(change)
+        overrides = data.get('overrides', {})
+        if not isinstance(overrides, dict):
+            raise ConfigError('overrides maps ad ids to their boost and wear')
+        for ad_id, own in overrides.items():
+            if own is None:
+                mix['overrides'].pop(ad_id, None)
+            else:
+                mix['overrides'][ad_id] = {**mix['overrides'].get(ad_id, {}), **own} if isinstance(own, dict) else own
+        return ad_mix.validate(mix, ad_ids={a['id'] for a in my_ads.read()['ads']})
+
+    def my_ads_mix_preview(data):
+        """The next days with a draft of the mix (nothing saved): ad_mix.simulate."""
+        if not isinstance(data, dict):
+            raise ConfigError('A preview takes the draft and days')
+        data = dict(data)
+        days = data.pop('days', 3)
+        if isinstance(days, bool) or not isinstance(days, (int, float)) or not 1 <= days <= 14:
+            raise ConfigError('days is 1 to 14')
+        mix = my_ads_mix_draft(data) if data else my_ads_mix.read()
+        settings, now = my_ads.read(), time.time()
+        return ad_mix.simulate(settings, my_ads.plays(), mix, now, days=float(days))
+
+    def my_ads_category(ad_id, key):
+        """Puts an ad in a category (None: unsorted)."""
+        if key is not None and not any(c['key'] == key for c in my_ads_mix.read()['categories']):
+            raise ConfigError(f'No category {key!r}')
+        if not any(a['id'] == ad_id for a in my_ads.read()['ads']):
+            raise ConfigError('No such ad')
+
+        def change(mix):
+            if key is None:
+                mix['ads'].pop(ad_id, None)
+            else:
+                mix['ads'][ad_id] = key
+        my_ads_mix.change(change)
 
     def promos_view():
         """Station promos for Presentation's Promos tab, with ad mute's mode (they play only when it is On)."""
@@ -682,6 +788,8 @@ def handler_factory(
                         shutil.copyfileobj(stream, self.wfile, 1 << 20)
                 elif path == '/v1/my-ads':
                     self._json(HTTPStatus.OK, my_ads_view())
+                elif path == '/v1/my-ads/mix':
+                    self._json(HTTPStatus.OK, my_ads_mix_view())
                 elif path.startswith('/v1/my-ads/file/'):
                     found = my_ads_file(path[len('/v1/my-ads/file/'):])
                     if found is None:
@@ -816,7 +924,7 @@ def handler_factory(
                     catalog["master"] = master.request()
                     catalog["master"]["preview_enabled"] = config.master.enabled
                     for source in catalog["sources"]:
-                        independent = source["id"].startswith('tv-thing-') or source["id"] == 'library'
+                        independent = source["id"].startswith('tv-thing-') or source["id"] in ('library', 'internet')
                         source["capabilities"]["master_queue"] = bool(
                             isinstance(playout, SourceQueue) and source["configured"] and
                             (independent or coordinator.roku_enabled))
@@ -964,12 +1072,16 @@ def handler_factory(
             if path in ('/v1/my-ads/upload', '/v1/my-ads/card-image'):
                 # The file itself is the body, streamed to disk: not JSON, and far over 64 KiB.
                 try:
-                    name = (parse_qs(urlsplit(self.path).query).get('name') or [''])[0][-200:]
+                    query = parse_qs(urlsplit(self.path).query)
+                    name = (query.get('name') or [''])[0][-200:]
+                    category = (query.get('category') or [''])[0] or None
                     try:
                         length = int(self.headers.get('Content-Length') or 0)
                     except ValueError as exc:
                         raise ConfigError('Invalid Content-Length') from exc
                     card = path.endswith('card-image')
+                    if category and not any(c['key'] == category for c in my_ads_mix.read()['categories']):
+                        raise ConfigError(f'No category {category!r}')
                     ext = Path(name).suffix.lower()
                     if ext not in (my_ads_module.IMAGE_EXT if card else my_ads_module.VIDEO_EXT):
                         raise ConfigError('Upload ' + ('a picture: ' if card else 'a video: ')
@@ -981,6 +1093,8 @@ def handler_factory(
                         self._json(HTTPStatus.OK, my_ads_view())
                     else:
                         _, ad = my_ads.add(upload, name)
+                        if category:
+                            my_ads_category(ad['id'], category)
                         self._json(HTTPStatus.OK, {**my_ads_view(), 'added': ad['id']})
                 except Exception as exc:
                     self._handle_error(exc)
@@ -1061,8 +1175,19 @@ def handler_factory(
                     my_ads_settings(data)
                     self._json(HTTPStatus.OK, my_ads_view())
                 elif path.startswith('/v1/my-ads/ads/'):
-                    my_ads.edit(path.rsplit('/', 1)[1], data)
+                    ad_id = path.rsplit('/', 1)[1]
+                    if isinstance(data, dict) and 'category' in data:     # the mix's, beside the ad's own settings
+                        data = dict(data)
+                        my_ads_category(ad_id, data.pop('category'))
+                    if data:
+                        my_ads.edit(ad_id, data)
                     self._json(HTTPStatus.OK, my_ads_view())
+                elif path == '/v1/my-ads/mix':
+                    my_ads_mix.save(my_ads_mix_draft(data), {a['id'] for a in my_ads.read()['ads']})
+                    as_mix = (parse_qs(urlsplit(self.path).query).get('view') or [''])[0] == 'mix'
+                    self._json(HTTPStatus.OK, my_ads_mix_view() if as_mix else my_ads_view())
+                elif path == '/v1/my-ads/mix/preview':
+                    self._json(HTTPStatus.OK, my_ads_mix_preview(data))
                 elif path == '/v1/my-ads/order':
                     if set(data) != {'ids'}:
                         raise ConfigError('order takes ids: every ad, in their new order')
@@ -1309,7 +1434,10 @@ def handler_factory(
                     else:
                         self._json(HTTPStatus.OK, asdict(job))
                 elif path.startswith('/v1/my-ads/ads/'):
-                    my_ads.remove(path.rsplit('/', 1)[1])
+                    ad_id = path.rsplit('/', 1)[1]
+                    my_ads.remove(ad_id)
+                    if ad_id in my_ads_mix.read()['ads']:
+                        my_ads_mix.change(lambda mix: mix['ads'].pop(ad_id, None))
                     self._json(HTTPStatus.OK, my_ads_view())
                 elif path == '/v1/my-ads/card-image':
                     my_ads.clear_card_image()

@@ -96,7 +96,7 @@
       h('span', null, c.seed && c.breaks < 2 ? 'from ' : 'heard ', c.seed && c.breaks < 2 ? source(c) : `${c.breaks}×`),
       c.seed && c.breaks < 2 ? null : [dot(), h('span', null, 'from ', marked(source(c), words))], dot(),
       h('span', {title: fmt.full(c.last)}, (c.breaks > 1 ? 'last heard ' : c.seed ? 'added ' : 'heard ') + fmt.when(c.last)));
-    return h('section', {class: 'panel ad', 'aria-label': title(c).text},
+    return h('section', {class: 'panel clip', 'aria-label': title(c).text},
       h('div', {class: 'body'}, heading(c), pictures(c), facts, script(c, words),
         h('div', {class: 'foot'}, h('span', {class: 'mach machinery'}, `clip ${c.id} · ${c.hashes} hashes` + (c.seed ? ' · ' + c.seed : '')
             + (c.script_from ? ' · words from ' + (c.script_from === 'recording' ? 'a recording' : 'the broadcast') : '')),

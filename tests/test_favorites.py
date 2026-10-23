@@ -309,11 +309,12 @@ class PeacockTests(unittest.TestCase):
         event['competitions'][0]['broadcasts'] = [{'market': 'national', 'names': ['NBC', 'Peacock']}]
         game, = SportsCatalog(config, None, scoreboard=EspnScoreboard(opener=opener)).games('nfl', '2026-10-18')['games']
         self.assertEqual(game['channels'], ['NBC'])
-        # ESPN+ is streaming, not ESPN (a lookup that drops the "+" finds ESPN).
+        # ESPN+ is streaming, not ESPN (a lookup that drops the "+" finds ESPN): since
+        # 2026-10-22 an NHL game there airs from ESPN Unlimited inside YouTube TV.
         known['espn+'] = known['espn'] = 'ESPN'
         event['competitions'][0]['broadcasts'] = [{'market': 'national', 'names': ['ESPN+']}]
         game, = SportsCatalog(config, None, scoreboard=EspnScoreboard(opener=opener)).games('nhl', '2026-10-18')['games']
-        self.assertEqual((game['channels'], game['suggested_target']), ([], None))
+        self.assertEqual((game['channels'], game['suggested_target']['source_id']), ([], 'nhl'))
         event['competitions'][0]['broadcasts'] = [{'market': 'national', 'names': ['Peacock']}]
         event['season']['type'] = 3
         game, = SportsCatalog(config, None, scoreboard=EspnScoreboard(opener=opener)).games('nba', '2026-10-17')['games']

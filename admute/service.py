@@ -204,6 +204,7 @@ class Session:
         self.speech = []             # [(t0, t1, words)] transcribed, in order
         self.judged = {}             # second -> llm_judge (the judge's logit), as answers come
         self.judging = {}            # chunk index (or ("picture", s)) -> its first second, while Haiku is asked
+        self.judge_wait = []         # chunks heard, waiting for the detector to have their words (_judge_ready)
         self.pictured = {}           # second -> llm_picture (Haiku's logit for the pictures), as answers come
         self.picture_at = -math.inf  # the last second whose pictures were sent
         self.windows = W.Windower()  # the sound, cut into Whisper's windows
@@ -325,27 +326,52 @@ class Session:
             self.service.speech.submit(self, gen, t0, audio, upto)
 
     def heard(self, gen, t0, t1, words):
-        job = None
         with self.lock:
             if gen == self.gen:
                 self.speech.append((t0, t1, words))
-                if words and J.FEATURE in self.det.image_features:
+                if words and J.FEATURE in self.det.image_features and self.service.judge_ok:
                     i = len(self.speech) - 1
                     recent = [c for c in self.speech[-40:] if c[1] > t1 - J.CONTEXT]
-                    job = (recent, len(recent) - 1, J.show(self.game, self.title), i, t0)
-        if job is not None:
-            self._ask_judge(gen, *job)
+                    self.judging[i] = int(math.floor(t0))       # the detector waits for it
+                    self.judge_wait.append((recent, len(recent) - 1, J.show(self.game, self.title), i, t0, t1,
+                                            time.monotonic()))
 
-    def _ask_judge(self, gen, chunks, at, what, i, t0):
+    def _judge_ready(self):
+        """Under the lock: the chunks heard whose own words the detector now has (or that have
+        waited WAIT_WORDS). One whose seconds it is already sure of without the judge
+        (judge.SURE) is not sent: its seconds count as no evidence. The rest, to send."""
+        det, now, send, keep = self.det, time.monotonic(), [], []
+        for job in self.judge_wait:
+            chunks, at, what, i, t0, t1, since = job
+            if det.text.known is not None and t1 > det.text_done and now - since < J.WAIT_WORDS:
+                keep.append(job)
+                continue
+            secs = range(int(math.floor(t0)), int(math.ceil(t1)))
+            zs = []
+            for s in secs:
+                if s >= len(det.lp_ad):
+                    break
+                terms = det.evidence(s)
+                zs.append(sum(terms.values()) - terms.get(J.FEATURE, 0.0))
+            if len(zs) == len(secs) and zs and (min(zs) >= J.SURE or max(zs) <= -J.SURE):
+                self.judging.pop(i, None)
+                for s in secs:
+                    m = det.weights(s)
+                    if J.FEATURE in m["features"]:
+                        self.judged[s] = m["mean"][m["features"].index(J.FEATURE)]    # no term
+                self.service.judge.skip()
+            else:
+                send.append((self.gen, chunks, at, what, i, t0, t1))
+        self.judge_wait = keep
+        return send
+
+    def _ask_judge(self, gen, chunks, at, what, i, t0, t1):
         """Send chunk i to the transcript judge (admute/judge.py), if it may be asked."""
         svc = self.service
         if not svc.judge_ok:
+            with self.lock:
+                self.judging.pop(i, None)
             return
-        with self.lock:
-            if gen != self.gen:
-                return
-            self.judging[i] = int(math.floor(t0))
-        t1 = chunks[at][1]
         svc.judge.submit(lambda p: self._judged(gen, i, t0, t1, p), chunks, at, what)
 
     def _judged(self, gen, i, t0, t1, p):
@@ -439,7 +465,7 @@ class Session:
 
     # decisions ---------------------------------------------------------------
     def tick(self):
-        picture = None
+        picture, judge_jobs = None, []
         with self.lock:
             if self.base is None:
                 return None
@@ -455,6 +481,7 @@ class Session:
             self.det.lookahead = self.lookahead      # a late answer counts until its second airs
             self.det.update(self.src, edge)
             picture = self._picture_job(edge)
+            judge_jobs = self._judge_ready()
             self.sig.trim(edge - 20)
             self.sig.trim_seconds(edge - max(D.TEXT_HOLD, self.lookahead))
             self.lookahead = self.service.lookahead(self.info)
@@ -476,6 +503,8 @@ class Session:
                 self._learn()
         if picture is not None:
             self._ask_picture(*picture)
+        for job in judge_jobs:
+            self._ask_judge(*job)
         try:
             self.learn_game()
         except Exception:

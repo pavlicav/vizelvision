@@ -8,17 +8,21 @@ from datetime import datetime, timezone
 from typing import Callable
 
 from .config import AppConfig
-from .errors import ChannelNotFoundError
+from .errors import ChannelNotFoundError, ConfigError
+from .internet import SOURCE_ID as INTERNET_SOURCE_ID, internet_target
 from .tv_thing import SourceUnavailableError, TvThingClient
 
 
 SOURCE_INFO = {
     "tv-thing-digital": ("TV-Thing Digital", "tv_thing:digital", "broadcast"),
     "tv-thing-analog": ("TV-Thing Analog", "tv_thing:analog", "unavailable"),
+    # Live HLS from the web that TV Thing relays (internet.py), Pentulive on 29 the first.
+    INTERNET_SOURCE_ID: ("Internet streams", "tv_thing:internet", "streams"),
     "youtube-tv": ("YouTube TV", "roku:primary", "broadcast"),
     "mlb": ("Baseball", "roku:primary", "games"),
     "sunday-ticket": ("NFL Sunday Ticket", "roku:primary", "games"),
     "thursday-night-football": ("Thursday Night Football", "roku:primary", "games"),
+    "nhl": ("NHL on ESPN Unlimited", "roku:primary", "games"),
     "library": ("Media Library", "library:files", "library"),
 }
 
@@ -118,6 +122,11 @@ class SourceCatalog:
                         stream = state.get("stream")
                         item["stream_state"] = stream.get("state") if isinstance(stream, dict) else None
                 item["count"] = match.get("count")
+            internet = next(s for s in sources if s["id"] == INTERNET_SOURCE_ID)
+            streams = self._streams(discovery) if discovery else []
+            internet["availability"] = ("unknown" if not discovery or discovery["stale"] else
+                                        "available" if streams else "unavailable")
+            internet["count"] = len(streams) if discovery else None
             warnings.extend(r["error"] for r in responses.values() if r["error"])
         return {"sources": sources, "warnings": warnings,
                 "master": {"state": "not_configured", "can_take": False,
@@ -130,15 +139,46 @@ class SourceCatalog:
             return self._youtube_tv()
         if source_id == "mlb":
             return self._baseball(requested_date)
-        if source_id == "sunday-ticket":
-            return self._sunday_ticket(requested_date)
-        if source_id == "thursday-night-football":
-            return self._sunday_ticket(requested_date, source_id=source_id)
+        if source_id in ("sunday-ticket", "thursday-night-football", "nhl"):
+            return self._espn_games(source_id, requested_date)
         if source_id == "library":
             if not self.library or not self.library.config.enabled:
                 raise SourceUnavailableError("The media library is not configured")
             return self.library.listing()
+        if source_id == INTERNET_SOURCE_ID:
+            return self._internet()
         return self._television(source_id)
+
+    @staticmethod
+    def _streams(discovery: dict) -> list[dict]:
+        """The internet streams in TV Thing's source catalog (its lineup's), playable ones only."""
+        lineup = discovery["data"].get("lineup")
+        streams = lineup.get("internet") if isinstance(lineup, dict) else None
+        result = []
+        for stream in streams if isinstance(streams, list) else []:
+            try:
+                internet_target({"source_id": INTERNET_SOURCE_ID, "channel_id": (stream or {}).get("channel_id")})
+            except (ConfigError, AttributeError):
+                continue
+            result.append(stream)
+        return result
+
+    def _internet(self) -> dict:
+        """TV Thing's internet streams, numbered as in its lineup (Pentulive is 29). Live
+        streams have no listings."""
+        discovery = self.tv.get("sources")
+        channels = []
+        for stream in self._streams(discovery):
+            number = stream.get("tv_number")
+            channels.append({"id": stream["channel_id"],
+                             "number": str(number) if isinstance(number, int) and not isinstance(number, bool) else "",
+                             "name": str(stream.get("name") or stream["channel_id"]),
+                             "note": stream.get("note") if isinstance(stream.get("note"), str) else None,
+                             "now": None, "upcoming": []})
+        return {"source_id": INTERNET_SOURCE_ID, "channels": channels,
+                "warnings": [discovery["error"]] if discovery["error"] else [],
+                "stale": discovery["stale"], "fetched_at": discovery["fetched_at"],
+                "guide": {"available": False, "kind": "streams", "reason": "Live streams have no listings"}}
 
     def _television(self, source_id: str) -> dict:
         digital = source_id == "tv-thing-digital"
@@ -224,25 +264,31 @@ class SourceCatalog:
                           "stale": bool(guide and guide["stale"]),
                           "reason": None if available else "Program listings unavailable"}}
 
-    def _sunday_ticket(self, requested_date: str | None, *, source_id="sunday-ticket") -> dict:
-        """NFL games of the day; each is found in YouTube TV's guide by its title."""
+    def _espn_games(self, source_id: str, requested_date: str | None) -> dict:
+        """The day's games a Roku game source carries, by ESPN game id: NFL games, found in
+        YouTube TV's guide or Prime Video by their title; NHL games, on YouTube TV's ESPN page."""
         if self.sports is None:
             raise SourceUnavailableError("Sports schedules are not configured")
-        catalog = self.sports.games("nfl", requested_date)
+        league = "nhl" if source_id == "nhl" else "nfl"
+        catalog = self.sports.games(league, requested_date)
         channels = []
         for game in catalog["games"]:
             if source_id == 'thursday-night-football' and not game.get('prime_video_target'):
                 continue
             if source_id == 'sunday-ticket' and game.get('on_sunday_ticket') is False:
                 continue  # a national exclusive: Sunday Ticket does not carry it
+            if source_id == 'nhl' and not game.get('espn_unlimited_target'):
+                continue  # on ESPN, ABC, TNT or NHL Network: on that channel instead
             try:
                 start = datetime.fromisoformat(str(game["start_time"]).replace("Z", "+00:00")).timestamp()
             except (KeyError, ValueError):
                 continue
             state = {"pre": "preview", "in": "live", "post": "final"}.get(game["state"], game["state"])
-            program = {"id": f"nfl:{game['game_id']}", "title": game["title"], "start": start, "end": None,
+            program = {"id": f"{league}:{game['game_id']}", "title": game["title"], "start": start, "end": None,
                        "end_kind": "game_status", "state": state, "status": game["status"],
                        "networks": game["channels"], "note": game["note"]}
+            if source_id == "nhl":
+                program["espn_unlimited"] = game["espn_unlimited"]
             channels.append({"id": str(game["game_id"]), "name": game["title"], "number": None,
                              "now": program if state == "live" else None,
                              "upcoming": [program] if state == "preview" else [], "game": program})

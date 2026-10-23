@@ -1,4 +1,4 @@
-// Ads: ad mute, the ad database and my ads, a tab each (admute.js, ad-database.js, my-ads.js).
+// Ads: ad mute, the ad database, my ads and the mix, a tab each (admute.js, ad-database.js, my-ads.js, mix.js).
 // Each tab script puts in AdsTabs a function that starts polling what the tab shows and returns
 // its stop, so only the tab on screen asks the server for anything.
 (() => {

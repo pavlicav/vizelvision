@@ -110,14 +110,19 @@ an ordinary cut keeps its narration or music going, so it never counts. The scan
 whole sound track for quiet moments (seconds), then decodes only a couple of seconds of picture
 around each one to check for black. Fades less than 45 s apart are one transition (the fade,
 the show's "How It's Made" return bumper, the next product's title), and the break goes at the
-first. None in the first or last 90 s; about one break every 7 minutes (3 in a half hour),
+first. None in the first or last 90 s (the open and the credits), except a long fade to black
+(1.5 s or more), which can be a break anywhere but the first and last 20 s: a sitcom breaks
+after its cold open and before its tag. About one break every 7 minutes (3 in a half hour),
 picking the transitions nearest even spacing, at least 2.5 minutes apart. Some files (Season 31's
-web copies) still have the network's ~6 s slugs of black and silence: those are the breaks
-exactly, and the show plays on from the end of the slug's black.
+web copies) still have the network's ~6 s slugs of black and silence (4 s or more): those are the
+breaks exactly, and the show plays on from the end of the slug's black.
 
 Checked on six How It's Made episodes from seasons 1, 2, 10, 15, 21 and 31: every one got 3
 breaks, at about 5:45, 11:00 and 16:00-16:35, each at the end of a segment just before the
-return bumper.
+return bumper. Seinfeld's DVD rips hold 2-4 s of black and silence at each of its three
+original breaks (after the stand-up, mid-episode, before the closing stand-up); until
+October 21 the 90 s rule and a 2 s slug left each episode one break. Checked on episodes from
+seasons 1, 3, 4, 6 and 9: three each, How It's Made unchanged.
 
 **On master** ([master_worker.py](../roku_stream/master_worker.py)): 15 s before a break the
 first ad is cued (any length, unlike a wait fill's), 2 s before the file is told where to stop,
@@ -127,7 +132,17 @@ it waits, the file stays paused on the next frame (it does not decode on). At th
 on master's input side (or where the ad then on air ends, if within 15 s), the file seeks to
 the break's resume point and plays on, with an unbroken timeline; what airs is the programme
 delay (13 s) behind, and the ads carry on over it until the show's first frame airs. With none
-of My ads or promos able to play, the break is skipped. Taking another source mid-break ends it.
+of My ads or promos able to play, the break is skipped.
+
+**Leaving a show mid-break** (October 22). A timed entry in Up next (a show set for 2:30, say),
+and the station ID 30 s before it, wait for the ad on air to finish instead of cutting it: the
+cut lands where that ad ends (`ad_break.fill_land`), no other ad starts after it, and the show
+does not come back in between. Since what airs is 13 s behind, the ad that counts is the one
+that will be on air when the cut airs: the one on air now, or the one cued after it. At most
+90 s (`CUT_WAIT_MOST`); an ad running longer is cut as before, and so is the card. Up next's
+take stays under way while it waits (its operation pending, `take_waits_for_ad` in master's
+status; the ID's wait is `ident.waits_for_ad`). A take by hand, a fallback, and live TV and
+recordings (ad mute over real ads, no spliced breaks) cut at once.
 
 Fixed on the first evening (October 20): the end of a break was decided on what aired, so the
 show came back a programme delay late and the held black frame filled 5-10 s; and the paused

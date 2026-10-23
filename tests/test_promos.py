@@ -314,13 +314,17 @@ class DeskTests(unittest.TestCase):
         append_play(self.store.plays_path, {'kind': 'promo', 'id': 'legal', 'at': self.now - 300, 'counted': True,
                                             'seconds': 5, 'length': 5, 'complete': True})
         append_play(self.store.plays_path, {'kind': 'ad', 'id': 'a' * 12, 'at': self.now - 200, 'counted': True})
+        for when, counted in ((self.now - 30 * 86400, True), (self.now - 100, False)):   # a month ago; cut short
+            append_play(self.store.plays_path, {'kind': 'promo', 'id': 'legal', 'at': when, 'counted': counted})
         with patch('roku_stream.continuity.seconds', return_value=2.8):
             self.desk.step()
         view = self.desk.status()
-        self.assertEqual([p['id'] for p in view['recent']], ['legal'], 'promos only')
+        self.assertEqual([p['id'] for p in view['recent']], ['legal', 'legal'], 'promos only, this week')
         self.assertEqual((view['last'], view['next_due'], view['due']), (self.now - 300, self.now + 600, False))
         legal = next(p for p in view['promos'] if p['id'] == 'legal')
-        self.assertEqual((legal['ready'], legal['played']['day']), (True, 1))
+        self.assertEqual((legal['ready'], legal['played']['day'], legal['played']['week'], legal['played']['total']),
+                         (True, 1, 1, 2))
+        self.assertEqual(view['counted_since'], self.now - 30 * 86400)
         self.assertEqual(view['master'], {'promos': {'cued': 'legal'}})
 
 

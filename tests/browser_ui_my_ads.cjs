@@ -1,5 +1,5 @@
 // My ads (a tab of Ads): what is on air, Next up (skip, queue by hand), the list with its limits and order,
-// uploads, the break card and the corner picture, and what aired. node tests/browser_ui_my_ads.cjs /path/to/playwright
+// uploads, the break card and the corner picture, what aired, and the mix (kinds of ads). node tests/browser_ui_my_ads.cjs /path/to/playwright
 const {open, run, overflow, assert} = require('./ui_harness.cjs');
 
 const VINNY = '3f9c1a2b4d5e', ROCKET = '7a1e0c9d8b2f', HARDWARE = 'c0ffee123456';
@@ -36,8 +36,8 @@ run(async browser => {
   // Next up: what you queued, the promo where its timing puts it. Skip one, skip what is on air, queue by hand.
   const next = page.locator('#nextup li');
   assert.equal(await next.count(), 3);
-  assert.match(await next.nth(0).innerText(), /Rocket Lawn Care[\s\S]*Queued by you[\s\S]*0:15[\s\S]*in 0:18/);
-  assert.match(await next.nth(1).innerText(), /The VizelVision Line[\s\S]*Station promo[\s\S]*0:10[\s\S]*in 0:33/);
+  assert.match(await next.nth(0).innerText(), /Rocket Lawn Care[\s\S]*Queued by you[\s\S]*0:15[\s\S]*in 0:18/i);
+  assert.match(await next.nth(1).innerText(), /The VizelVision Line[\s\S]*Station promo[\s\S]*0:10[\s\S]*in 0:33/i);
   assert.match(await page.locator('#next-when').textContent(), /In this break/);
   assert.ok(t.frames.some(f => f.endsWith('/v1/promos/file/metro.png')), 'the promo\'s still');
   assert.deepEqual(await posted(t, () => next.nth(1).getByRole('button', {name: 'Skip The VizelVision Line'}).click()),
@@ -136,6 +136,59 @@ run(async browser => {
   assert.match(await t.page.locator('#mode-note').innerText(), /Ad mute is in shadow: it mutes nothing/);
   assert.equal(await t.page.locator('#my-unmute').isDisabled(), true, 'no quick fixes while ad mute is not On');
   assert.equal(await overflow(t.page), 0, 'fits a phone');
+  assert.deepEqual(t.errors, []);
+  await t.ctx.close();
+
+  // The mix (ad_mix.py; tuned on the Mix tab, browser_ui_mix.cjs): each ad's kind and chance, the kinds' shares, a kind on upload.
+  const MIX = {enabled: true, aired_day: 10,
+    categories: [{key: 'local', name: 'Local & regional', weight: 1, wear: 1, about: 'Someone\'s local ad', ads: 2, day: 8},
+      {key: 'cats', name: 'Cats & animals', weight: 2, wear: 1, about: 'Real animals', ads: 0, day: 0},
+      {key: 'slop', name: 'AI slop & memes', weight: 0, wear: 1, about: 'Diffusion video', ads: 0, day: 0}],
+    unsorted: {ads: 1, day: 2, weight: 1}};
+  t = await open(browser, '/ads#my-ads', {width: 390, edit: F => {
+    F.my_ads.mix = MIX;
+    Object.assign(F.my_ads.ads[0], {category: 'local', plays_all: 50, seen: 30, chance: 0.004, boost: 1, wear: 1});
+    Object.assign(F.my_ads.ads[1], {category: 'local', plays_all: 3, seen: 3, chance: 0.6, boost: 2, wear: 0});
+    Object.assign(F.my_ads.ads[2], {category: null, plays_all: 0, seen: 0, chance: 1, boost: 0, wear: 1, enabled: true, allowed: true});
+  }, api: {'POST /v1/my-ads/mix': (body, F) => F.my_ads, 'POST /v1/my-ads/ads/*': (body, F) => F.my_ads, 'POST /v1/my-ads': (body, F) => F.my_ads,
+    'POST /v1/my-ads/upload': (body, F) => ({...F.my_ads, ads: [...F.my_ads.ads, {...added, category: 'cats'}], added: added.id})}});
+  const mp = t.page;
+  const uploadUrls = [];
+  mp.on('request', r => { if (r.url().includes('/v1/my-ads/upload')) uploadUrls.push(new URL(r.url()).search); });
+  await mp.waitForSelector('#mix-list li');
+  assert.equal(await mp.locator('#order [data-order=mix]').getAttribute('aria-pressed'), 'true', 'mix on, order shuffle: Mix');
+  assert.match(await mp.locator('#order-note').textContent(), /Kinds of ads in balance/);
+  const kinds = mp.locator('#mix-list li');
+  assert.equal(await kinds.count(), 4, 'three kinds and the unsorted');
+  assert.match(await kinds.nth(0).innerText(), /Local & regional\s+2 ads[\s\S]*80% · due 50% · by count 67%/);
+  assert.match(await kinds.nth(1).innerText(), /Cats & animals\s+0 ads\s+×2/);
+  assert.match(await kinds.nth(2).innerText(), /AI slop & memes[\s\S]*off[\s\S]*0% · due 0%/);
+  assert.ok((await kinds.nth(2).getAttribute('class')).includes('off'));
+  assert.match(await kinds.nth(3).innerText(), /Unsorted\s+1 ad[\s\S]*20% · due 50% · by count 33%/);
+  assert.match(await mp.locator('#mix-unsorted').textContent(), /1 ad has no kind yet/);
+  assert.equal(await mp.getByRole('link', {name: 'Tune the mix'}).getAttribute('href'), '#mix', 'the knobs are on the Mix tab');
+  const list = mp.locator('#my-list li.ad');
+  assert.equal(await list.nth(0).locator('select[aria-label=Kind]').inputValue(), 'local');
+  assert.match(await list.nth(0).innerText(), /50 in all\s+·\s+chance <1%/);
+  assert.match(await list.nth(1).innerText(), /Never wears out[\s\S]*Boost ×2[\s\S]*chance 60%/i);
+  assert.match(await list.nth(2).innerText(), /Left out of the mix/i);
+  assert.deepEqual(await posted(t, () => list.nth(2).locator('select[aria-label=Kind]').selectOption('cats')),
+    {method: 'POST', path: `/v1/my-ads/ads/${HARDWARE}`, body: {category: 'cats'}});
+  await mp.locator('#kind-filter').selectOption('unsorted');
+  assert.deepEqual(await mp.locator('#my-list li.ad h3').allTextContents(), ['Hometown Hardware']);
+  assert.equal(await mp.locator('#my-list li.ad').getByRole('button', {name: 'Move up'}).isDisabled(), true, 'no reordering a part of the list');
+  await mp.locator('#kind-filter').selectOption('');
+  assert.equal(await mp.locator('#my-list li.ad').count(), 3);
+  // Shuffle turns the mix off; Mix turns it back on.
+  assert.deepEqual(await posted(t, () => mp.locator('#order [data-order=shuffle]').click()),
+    {method: 'POST', path: '/v1/my-ads/mix', body: {enabled: false}});
+  // An upload goes in with the kind chosen for it.
+  await mp.locator('#upload-kind').selectOption('cats');
+  await mp.locator('#files').setInputFiles([{name: 'tabby.mp4', mimeType: 'video/mp4', buffer: Buffer.alloc(1024, 7)}]);
+  await mp.locator('#uploads li.done').waitFor();
+  assert.deepEqual(uploadUrls, ['?name=tabby.mp4&category=cats']);
+  assert.match(await mp.locator('#uploads li.done').innerText(), /Added · 0:30 · once an hour · Cats & animals/);
+  assert.equal(await overflow(mp), 0, 'fits a phone');
   assert.deepEqual(t.errors, []);
   await t.ctx.close();
 });

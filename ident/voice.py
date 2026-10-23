@@ -93,8 +93,9 @@ def check_wav(path):
 
 def render(script, keys_file=None, force=False):
     VOICE_DIR.mkdir(exist_ok=True)
-    model, key = script['model'], None
+    key = None
     for line in script['lines']:
+        model = line.get('model', script['model'])   # a line may have its own voice
         wav, meta = VOICE_DIR / f"{line['id']}.wav", VOICE_DIR / f"{line['id']}.json"
         digest = fingerprint(model, line['text'])
         try:

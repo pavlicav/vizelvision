@@ -153,6 +153,18 @@ run(async browser => {
   assert.deepEqual(dropped.errors, []);
   await dropped.ctx.close();
 
+  // An NHL game queued from ESPN Unlimited says where it comes from.
+  const hockey = await open(browser, '/air', {edit: F => {
+    const queued = F.playback.segments.find(s => s.item === QUEUED);
+    Object.assign(queued, {kind: 'game', title: 'Utah Mammoth at Seattle Kraken', target: {source_id: 'nhl', channel_id: '401802671', date: '2026-10-22'},
+      game: {league: 'nhl', game_pk: 401802671, game_date: '2026-10-22', title: 'Utah Mammoth at Seattle Kraken'}});
+  }});
+  const kraken = hockey.page.locator(`#queue-items .proj[data-id="${QUEUED}"]`);
+  await kraken.waitFor();
+  assert.match(await kraken.textContent(), /Utah Mammoth at Seattle Kraken.*NHL on ESPN Unlimited · YouTube TV/);
+  assert.deepEqual(hockey.errors, []);
+  await hockey.ctx.close();
+
   // A held game in its closing stretch: the schedule's block is prepared on the Roku meanwhile.
   const held = await open(browser, '/air', {edit: F => {
     F.queue.hold = {id: 'h', target: {source_id: 'tv-thing-digital', channel_id: 'wttg_dt_5_1'}, detail: 'Top 9th', until: null,

@@ -16,6 +16,8 @@
       where: 'Before every game, after the announcer says what is next: “The following is a presentation of VizelVision Sports.”'},
   ];
   const isSports = file => typeof file === 'string' && file.startsWith('sports-');
+  // How often an ident aired, all time: {total, day} (promos: counted plays; IDs: since the log began).
+  const timesPlayed = (n, since) => h('strong', null, `played ${n} ${n === 1 ? 'time' : 'times'}` + (since ? ' since ' + fmt.day(since) : ''));
 
   /* The ID card ----------------------------------------------------------------------------------------- */
   function hear(file, button) {
@@ -130,7 +132,7 @@
     const onAir = id.on_air && (ident.what === 'sports') === isSports(id.file);
     const cued = !onAir && (ident.what === 'sports' ? next?.kind === 'sports' : !!next && next.kind !== 'sports');
     const ready = ident.what === 'sports' ? continuity?.ready?.sports : continuity?.ready?.id ?? id.ready;
-    const last = rows.find(r => r.what === ident.what);
+    const last = rows.find(r => r.what === ident.what), count = continuity?.played?.[ident.what];
     return h('article', {class: 'ident' + (onAir ? ' onair' : cued ? ' cued' : '')},
       still(`v1/idents/${ident.id}.png`, ident.name, ident.length, () => playId(ident)),
       h('div', {class: 'text'},
@@ -138,7 +140,8 @@
           onAir ? h('span', {class: 'chip solid pgm'}, 'on air') : cued ? h('span', {class: 'chip pvw'}, 'next break') : null,
           ready === false ? h('span', {class: 'chip warn'}, 'not built') : null),
         h('p', {class: 'small muted'}, ident.where),
-        h('p', {class: 'tiny muted'}, `${ident.length} s · voiced by ${ident.voice}` + (last ? ` · last ${fmt.rel(last.at)}` : ''))));
+        h('p', {class: 'tiny muted'}, ...(count ? [timesPlayed(count.total, continuity.played.since), ' · '] : []),
+          `${ident.length} s · voiced by ${ident.voice}` + (count ? ` · today ${count.day}` : '') + (last ? ` · last ${fmt.rel(last.at)}` : ''))));
   }
   function promoCard(promo) {
     const w = promos.master || {}, onAir = w.promo?.id === promo.id, cued = !onAir && w.promos?.cued === promo.id;
@@ -150,14 +153,15 @@
           promo.enabled ? null : h('span', {class: 'chip'}, 'off')),
         h('p', {class: 'small muted'}, promo.description),
         !promo.present ? h('p', {class: 'small why'}, 'Not built yet') : promo.enabled && promo.why ? h('p', {class: 'small why'}, 'Sits out now: ' + promo.why) : null,
-        h('p', {class: 'tiny muted'}, `${fmt.dur(promo.duration)} · in ad breaks · today ${promo.played.day}` + (promo.played.last ? ` · last ${fmt.rel(promo.played.last)}` : ''))));
+        h('p', {class: 'tiny muted'}, ...(Number.isFinite(promo.played.total) ? [timesPlayed(promo.played.total), ' · '] : []),
+          `${fmt.dur(promo.duration)} · in ad breaks · today ${promo.played.day}` + (promo.played.last ? ` · last ${fmt.rel(promo.played.last)}` : ''))));
   }
 
   function render() {
     renderCard(); renderAir();
     const rows = aired();
     const w = promos?.master || {}, id = master?.ident || {};
-    const key = JSON.stringify([id.on_air, id.file, continuity?.next?.kind, !!continuity?.next, continuity?.ready, rows.slice(0, 40).map(r => [r.what, r.at]),
+    const key = JSON.stringify([id.on_air, id.file, continuity?.next?.kind, !!continuity?.next, continuity?.ready, continuity?.played, rows.slice(0, 40).map(r => [r.what, r.at]),
       (promos?.promos || []).map(p => [p.id, p.enabled, p.present, p.why, p.played, p.built_at]), w.promo?.id, w.promos?.cued, Math.floor(Date.now() / 60000)]);
     if (key !== drawn) {
       drawn = key;

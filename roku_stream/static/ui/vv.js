@@ -242,7 +242,7 @@ window.VV = (() => {
   /* Naming targets -------------------------------------------------------------------------- */
   // Pages that load the catalog share it here, so every page (and the top bar) names things alike.
   const known = {sources: [], programs: new Map(), networks: []};
-  const ROKU = ['youtube-tv', 'mlb', 'sunday-ticket', 'thursday-night-football'];
+  const ROKU = ['youtube-tv', 'mlb', 'sunday-ticket', 'thursday-night-football', 'nhl'];
   const same = (a, b) => !!a && !!b && ['source_id', 'channel_id', 'date'].every(k => (a[k] ?? null) === (b[k] ?? null));
   function libraryItem(id) { return known.programs.get('library')?.items?.find(i => i.id === id); }
   function mediaName(item) {

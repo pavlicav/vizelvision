@@ -738,6 +738,23 @@ class SundayTicketRetryTests(unittest.TestCase):
         self.wait(lambda: self.queue.get(item.id).status == 'succeeded')
         self.assertEqual(len([e for e in self.events if e[0] == 'take']), 7)
 
+    def test_an_nhl_game_keeps_trying_until_espn_lists_it_unless_it_is_blacked_out(self):
+        from roku_stream.source_coordinator import SourcePrepareError
+        from roku_stream.tv_roku import RokuRefusedError
+        self.preroll_results = ['skipped'] * 50
+        self.execute_results = [SourcePrepareError('it may not have started')] * 4 + [{}]
+        item = self.add({'source_id': 'nhl', 'channel_id': '401802671', 'date': '2026-10-22'}, .05)
+        self.queue.resume()
+        self.wait(lambda: self.queue.get(item.id).status == 'succeeded')
+        self.assertEqual(len([e for e in self.events if e[0] == 'take']), 5)
+        self.events.clear()
+        self.execute_results = [RokuRefusedError('Detroit Red Wings at Vancouver Canucks is blacked out on YouTube TV where the Roku is')]
+        blacked = self.add({'source_id': 'nhl', 'channel_id': '401802672', 'date': '2026-10-22'}, .05)
+        self.wait(lambda: self.queue.get(blacked.id).status == 'blocked')
+        self.assertEqual(([e for e in self.events if e[0] == 'take'], self.queue.get(blacked.id).prepare_attempts),
+                         ([('take', '401802672')], 0))
+        self.assertIn('blacked out on YouTube TV', self.queue.get(blacked.id).gate_detail)
+
 
 class FollowGamesTests(unittest.TestCase):
     """Scheduled games follow MLB and ESPN until they start."""

@@ -16,7 +16,10 @@ Picking them (choose):
   - otherwise candidates closer than CLUSTER seconds belong to one transition (the fade,
     the show's return bumper, the next segment's title), and the break goes at the first:
     where the segment ended, before the bumper;
-  - none in the first LEAD_IN or the last LEAD_OUT seconds (the open and the credits);
+  - none in the first LEAD_IN or the last LEAD_OUT seconds (the open and the credits), but
+    for a long fade to black (STRONG seconds or more), never within EDGE of either end: a
+    sitcom breaks after its cold open and before its tag (Seinfeld's DVD rips hold 2-4 s of
+    black at both), where a title's dip is a fraction of a second (How It's Made's);
   - about one break every SPACING seconds (3 in a half hour), the transitions nearest
     evenly spaced points, none closer than MIN_APART.
 
@@ -34,10 +37,12 @@ SILENCE_MIN = .2
 BLACK_MIN = .1
 BLACK_PIXEL = .10
 GAP = .25
-SLUG = 2.
+SLUG = 4.         # How It's Made's web slugs run 5-6 s; Seinfeld's 2-4 s fades are fades (until 21 October 2026, 2 s)
 CLUSTER = 45.
 LEAD_IN = 90.
 LEAD_OUT = 90.
+STRONG = 1.5      # seconds of black: a fade in the open or the credits that is a break all the same
+EDGE = 20.        # never this close to the start or the end, however long the black
 SPACING = 420.
 MIN_APART = 150.
 WINDOW_PAD = 1.
@@ -45,7 +50,7 @@ WINDOW_LONGEST = 14.
 RESUME_BEFORE = .25
 PASS_TIMEOUT = 600
 WINDOW_TIMEOUT = 60
-VERSION = 1   # a cached result from another version is found again
+VERSION = 2   # a cached result from another version is found again (2: long fades near the ends, SLUG 4 s)
 
 _SILENCE = re.compile(r'silence_(start|end): (-?[\d.]+)')
 _BLACK = re.compile(r'black_start:\s*(-?[\d.]+)\s+black_end:\s*(-?[\d.]+)')
@@ -132,7 +137,7 @@ def candidates(black, quiet):
             at = o0 + min(.1, max(0., o1 - o0) / 2) if o1 > o0 else (b0 + b1) / 2
             slug = b1 - b0 >= SLUG and s1 - s0 >= SLUG
             found.append({'at': round(at, 3), 'resume': round(max(at, b1 - RESUME_BEFORE) if slug else at, 3),
-                          'kind': 'slug' if slug else 'fade',
+                          'kind': 'slug' if slug else 'fade', 'black': round(b1 - b0, 3),
                           'score': round(max(0., o1 - o0) + .25 * min(s1 - s0, 2.) + .25 * min(b1 - b0, 2.), 3)})
             break
     found.sort(key=lambda c: c['at'])
@@ -143,7 +148,8 @@ def choose(found, duration):
     """The breaks among the candidates (see the module doc)."""
     if not duration or duration < LEAD_IN + LEAD_OUT + 60:
         return []
-    inside = [c for c in found if LEAD_IN <= c['at'] <= duration - LEAD_OUT]
+    inside = [c for c in found if LEAD_IN <= c['at'] <= duration - LEAD_OUT
+              or (EDGE <= c['at'] <= duration - EDGE and c.get('black', 0) >= STRONG)]
     slugs = [c for c in inside if c['kind'] == 'slug']
     if slugs:
         return _apart(slugs)

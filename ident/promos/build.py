@@ -36,7 +36,9 @@ PROMOS = ('time-temp', 'watching', 'only-on', 'legal', 'press-start', 'metro', '
           'now-in-hd', 'cat-remote', 'cat-laser', 'seventy-six', 'eighty-six', 'ninety-six', 'twenty-sixteen',
           'the-cairo', 'cairo-1894', 'baseball', 'football', 'hail-mary', 'cat-field-goal', 'halftime',
           'happy-little', 'forecast', 'popcorn', 'metro-5', 'baseball-5', 'cat-remote-5',
-          'heure-decimale', 'cat-witching-hour')
+          'heure-decimale', 'cat-witching-hour', 'basketball', 'hockey', 'all-are-welcome',
+          'wnba', 'mnba', 'non-denom', 'elca', 'presbyterian', 'shinto',
+          'robot', 'lds')
 BUILD = IDENT / 'build' / 'promos'
 LOUDNESS, TRUE_PEAK = id_build.LOUDNESS, id_build.TRUE_PEAK
 VERSION = 1

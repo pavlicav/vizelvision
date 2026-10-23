@@ -310,6 +310,7 @@
       : !j.used ? 'Ready, but the detector running has no weight for it (the classic one never asks).'
       : [`Claude Haiku reads what is said (and looks at the picture when the detector is unsure) and calls it ad or programme`,
          `${j.calls_today} calls today${j.pictures_today ? ` (${j.pictures_today} on pictures)` : ''}, ${usd(j.usd_today)} of ${usd(j.budget)}`,
+         j.skipped_today ? `${j.skipped_today} not needed (the detector was already sure)` : null,
          j.ms_p50 != null ? `${(j.ms_p50 / 1000).toFixed(1)} s typical, ${(j.ms_p95 / 1000).toFixed(1)} s slow` : null,
          j.failed ? `${j.failed} failed${j.error ? ' (' + j.error + ')' : ''}` : null].filter(Boolean).join(' · ') + '.';
   }

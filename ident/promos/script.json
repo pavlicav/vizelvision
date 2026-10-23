@@ -363,5 +363,308 @@
         "text": "Happy Halloween."
       }
     ]
+  },
+  "basketball": {
+    "host": "Arcas, the play-by-play",
+    "model": "aura-2-arcas-en",
+    "lines": [
+      {
+        "id": "promo-basketball-1",
+        "at": 2.5,
+        "text": "Vizzle Vision, for three!"
+      },
+      {
+        "id": "promo-basketball-2",
+        "at": 4.45,
+        "text": "Nothing but net!"
+      }
+    ]
+  },
+  "hockey": {
+    "host": "Odysseus, the play-by-play",
+    "model": "aura-2-odysseus-en",
+    "lines": [
+      {
+        "id": "promo-hockey-1",
+        "at": 1.0,
+        "text": "Vizzle Vision shoots..."
+      },
+      {
+        "id": "promo-hockey-2",
+        "at": 3.35,
+        "text": "...and scores!"
+      }
+    ]
+  },
+  "all-are-welcome": {
+    "host": "Pandora, the Rev. Mother; and the people",
+    "model": "aura-2-pandora-en",
+    "lines": [
+      {
+        "id": "promo-all-are-welcome-1",
+        "at": 3.0,
+        "text": "VizzleVision be with you."
+      },
+      {
+        "id": "promo-all-are-welcome-people-athena",
+        "at": 5.0,
+        "model": "aura-2-athena-en",
+        "gain": 0.32,
+        "text": "And also with you."
+      },
+      {
+        "id": "promo-all-are-welcome-people-hera",
+        "at": 5.04,
+        "model": "aura-2-hera-en",
+        "gain": 0.32,
+        "text": "And also with you."
+      },
+      {
+        "id": "promo-all-are-welcome-people-mars",
+        "at": 5.09,
+        "model": "aura-2-mars-en",
+        "gain": 0.32,
+        "text": "And also with you."
+      },
+      {
+        "id": "promo-all-are-welcome-people-orion",
+        "at": 5.02,
+        "model": "aura-2-orion-en",
+        "gain": 0.32,
+        "text": "And also with you."
+      },
+      {
+        "id": "promo-all-are-welcome-people-cora",
+        "at": 5.12,
+        "model": "aura-2-cora-en",
+        "gain": 0.32,
+        "text": "And also with you."
+      },
+      {
+        "id": "promo-all-are-welcome-people-helena",
+        "at": 5.06,
+        "model": "aura-2-helena-en",
+        "gain": 0.32,
+        "text": "And also with you."
+      },
+      {
+        "id": "promo-all-are-welcome-people-saturn",
+        "at": 5.03,
+        "model": "aura-2-saturn-en",
+        "gain": 0.32,
+        "text": "And also with you."
+      },
+      {
+        "id": "promo-all-are-welcome-people-zeus",
+        "at": 5.1,
+        "model": "aura-2-zeus-en",
+        "gain": 0.32,
+        "text": "And also with you."
+      },
+      {
+        "id": "promo-all-are-welcome-2",
+        "at": 8.15,
+        "text": "Coffee hour to follow."
+      }
+    ]
+  },
+  "wnba": {
+    "host": "Thalia, the courtside correspondent",
+    "model": "aura-2-thalia-en",
+    "lines": [
+      {
+        "id": "promo-wnba-1",
+        "at": 0.35,
+        "text": "Tonight's tunnel walk... number nineteen."
+      },
+      {
+        "id": "promo-wnba-2",
+        "at": 4.05,
+        "text": "Head to toe... Vizzle Vision."
+      }
+    ]
+  },
+  "mnba": {
+    "host": "Luna, a community-sports narrator, very supportive",
+    "model": "aura-2-luna-en",
+    "lines": [
+      {
+        "id": "promo-mnba-1",
+        "at": 0.4,
+        "text": "The MNBA. It's like the WNBA... but for men."
+      },
+      {
+        "id": "promo-mnba-2",
+        "at": 4.75,
+        "text": "Give them a chance."
+      },
+      {
+        "id": "promo-mnba-3",
+        "at": 6.8,
+        "text": "Vizzle Vision supports men's sports."
+      }
+    ]
+  },
+  "non-denom": {
+    "host": "Apollo, Pastor Brayden",
+    "model": "aura-2-apollo-en",
+    "lines": [
+      {
+        "id": "promo-non-denom-1",
+        "at": 3.1,
+        "text": "It's not a religion."
+      },
+      {
+        "id": "promo-non-denom-2",
+        "at": 4.55,
+        "text": "It's a relationship."
+      },
+      {
+        "id": "promo-non-denom-3",
+        "at": 5.95,
+        "text": "With channel nineteen."
+      },
+      {
+        "id": "promo-non-denom-4",
+        "at": 8.0,
+        "text": "Come on, church!"
+      }
+    ]
+  },
+  "elca": {
+    "host": "Hera, the pastor",
+    "model": "aura-2-hera-en",
+    "lines": [
+      {
+        "id": "promo-elca-1",
+        "at": 2.95,
+        "text": "Here I stand. I can do no other..."
+      },
+      {
+        "id": "promo-elca-2",
+        "at": 5.15,
+        "text": "...than watch Vizzle Vision."
+      },
+      {
+        "id": "promo-elca-3",
+        "at": 7.8,
+        "text": "There's bars downstairs."
+      }
+    ]
+  },
+  "presbyterian": {
+    "host": "Draco, the moderator of session; and four elders",
+    "model": "aura-2-draco-en",
+    "lines": [
+      {
+        "id": "promo-presbyterian-1",
+        "at": 0.45,
+        "text": "All in favour?"
+      },
+      {
+        "id": "promo-presbyterian-aye-hera",
+        "at": 1.49,
+        "model": "aura-2-hera-en",
+        "gain": 0.55,
+        "text": "Aye."
+      },
+      {
+        "id": "promo-presbyterian-aye-mars",
+        "at": 1.74,
+        "model": "aura-2-mars-en",
+        "gain": 0.55,
+        "text": "Aye."
+      },
+      {
+        "id": "promo-presbyterian-aye-cora",
+        "at": 1.99,
+        "model": "aura-2-cora-en",
+        "gain": 0.55,
+        "text": "Aye."
+      },
+      {
+        "id": "promo-presbyterian-aye-orion",
+        "at": 2.49,
+        "model": "aura-2-orion-en",
+        "gain": 0.55,
+        "text": "Aye."
+      },
+      {
+        "id": "promo-presbyterian-2",
+        "at": 3.1,
+        "text": "The motion carries."
+      },
+      {
+        "id": "promo-presbyterian-3",
+        "at": 4.45,
+        "text": "As it was always going to."
+      },
+      {
+        "id": "promo-presbyterian-4",
+        "at": 7.3,
+        "text": "Decently, and in order."
+      }
+    ]
+  },
+  "shinto": {
+    "host": "Uzume, delighted; Izanami, the shrine's voice",
+    "model": "aura-2-izanami-ja",
+    "lines": [
+      {
+        "id": "promo-shinto-1",
+        "at": 4.12,
+        "model": "aura-2-uzume-ja",
+        "text": "だいきち！"
+      },
+      {
+        "id": "promo-shinto-2",
+        "at": 6.3,
+        "text": "ヴィズルヴィジョン、十九チャンネル。"
+      }
+    ]
+  },
+  "robot": {
+    "host": "Pluto, as Unit 19 (robotized in the cue)",
+    "model": "aura-2-pluto-en",
+    "lines": [
+      {
+        "id": "promo-robot-1",
+        "at": 0.2,
+        "text": "Incoming."
+      },
+      {
+        "id": "promo-robot-2",
+        "at": 2.78,
+        "text": "Vizzle Vision... football..."
+      },
+      {
+        "id": "promo-robot-3",
+        "at": 5.15,
+        "text": "...activated."
+      }
+    ]
+  },
+  "lds": {
+    "host": "Orion and Hermes, the elders",
+    "model": "aura-2-orion-en",
+    "lines": [
+      {
+        "id": "promo-lds-1",
+        "at": 2.65,
+        "text": "Hi! Have you heard about channel nineteen?"
+      },
+      {
+        "id": "promo-lds-2",
+        "at": 5.72,
+        "model": "aura-2-hermes-en",
+        "text": "Families can watch together..."
+      },
+      {
+        "id": "promo-lds-3",
+        "at": 7.45,
+        "model": "aura-2-hermes-en",
+        "text": "Forever."
+      }
+    ]
   }
 }

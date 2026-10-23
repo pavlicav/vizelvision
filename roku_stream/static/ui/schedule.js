@@ -38,7 +38,7 @@
     const list = await channelsFor(t.source_id), c = list.find(c => String(c.id) === String(t.channel_id));
     return {...t, label: c ? (c.number ? c.number + ' ' : '') + c.name : t.channel_id};
   }
-  function targetPicker(host, initial, auto, ticket, schedule, prime) {
+  function targetPicker(host, initial, auto, ticket, schedule, prime, espn) {
     const ss = h('select', {'aria-label': 'Source'}), cs = h('select', {'aria-label': 'Channel'});
     const sl = h('label', {class: 'field'}, h('span', 'Source'), ss), cl = h('label', {class: 'field'}, h('span', 'Channel'), cs);
     // NBC, FOX, ABC, CBS and The CW are also on the antenna (TV-Thing), which tunes in seconds.
@@ -58,9 +58,10 @@
     if (auto) ss.append(new Option('Automatic · MLB national channel or MLB.TV', 'auto')); else ss.append(new Option('OFF AIR · test card', 'off-air'));
     if (ticket) ss.append(new Option('NFL Sunday Ticket · this game (read from the guide)', 'sunday-ticket'));
     if (prime) ss.append(new Option('Thursday Night Football · this game on Prime Video', 'thursday-night-football'));
-    for (const s of sources.filter(s => !['mlb', 'sunday-ticket', 'thursday-night-football'].includes(s.id) && s.configured)) ss.append(new Option(s.name, s.id));
+    if (espn) ss.append(new Option('NHL on ESPN Unlimited · this game in YouTube TV', 'nhl'));
+    for (const s of sources.filter(s => !['mlb', 'sunday-ticket', 'thursday-night-football', 'nhl'].includes(s.id) && s.configured)) ss.append(new Option(s.name, s.id));
     async function fill(selected) {
-      cs.replaceChildren(); cl.hidden = ['off-air', 'auto', 'sunday-ticket', 'thursday-night-football', 'schedule'].includes(ss.value); host.dispatchEvent(new Event('change'));
+      cs.replaceChildren(); cl.hidden = ['off-air', 'auto', 'sunday-ticket', 'thursday-night-football', 'nhl', 'schedule'].includes(ss.value); host.dispatchEvent(new Event('change'));
       showLate();
       if (cl.hidden) return;
       cs.append(new Option('Loading…', ''));
@@ -73,6 +74,7 @@
     host.source = () => ss.value;
     ss.onchange = () => fill();
     ss.value = initial?.source_id === 'thursday-night-football' && prime ? 'thursday-night-football' : initial?.source_id === 'sunday-ticket' && ticket ? 'sunday-ticket'
+      : initial?.source_id === 'nhl' && espn ? 'nhl'
       : initial?.source_id === 'schedule' && schedule ? 'schedule' : initial && sources.some(s => s.id === initial.source_id) ? initial.source_id : schedule ? 'schedule' : auto ? 'auto' : 'off-air';
     fill(initial?.channel_id);
     host.value = () => {
@@ -80,6 +82,7 @@
       if (ss.value === 'schedule') return {source_id: 'schedule', channel_id: 'schedule'};
       if (ss.value === 'sunday-ticket') return {...ticket};
       if (ss.value === 'thursday-night-football') return {...prime};
+      if (ss.value === 'nhl') return {...espn};
       if (ss.value === 'off-air') return {...OFF};
       if (!cs.value) throw Error('Choose a channel');
       return {source_id: ss.value, channel_id: cs.value, ...(ss.value === 'youtube-tv' && !host.antenna() ? {antenna: false} : {})};
@@ -137,7 +140,7 @@
   const offAir = s => s.kind === 'off_air' || s.target?.source_id === 'off-air';
   // A block's own target carries its channel's name.
   const named = t => draft?.blocks.find(b => b.target.source_id === t?.source_id && String(b.target.channel_id) === String(t?.channel_id))?.target || t;
-  const routed = t => t?.source_id === 'mlb' ? 'automatic routing' + (t.antenna === false ? ' · YouTube TV only' : '') : t?.source_id === 'sunday-ticket' ? 'NFL Sunday Ticket' : t?.source_id === 'thursday-night-football' ? 'Prime Video' : targetLabel(t);
+  const routed = t => t?.source_id === 'mlb' ? 'automatic routing' + (t.antenna === false ? ' · YouTube TV only' : '') : t?.source_id === 'sunday-ticket' ? 'NFL Sunday Ticket' : t?.source_id === 'thursday-night-football' ? 'Prime Video' : t?.source_id === 'nhl' ? 'ESPN Unlimited' : targetLabel(t);
   function airDetail(s) {
     const cut = (s.notes || []).some(n => n.startsWith('Cut when'));
     const parts = s.kind === 'game' ? [(s.game?.league || 'mlb').toUpperCase() + ' · ' + routed(s.target), score(s), cut ? '' : 'until its final' + (s.estimated ? ' (estimated)' : '')]
@@ -239,7 +242,7 @@
   let games = [];
   function gamePicker() {
     const g = games.find(g => String(g.game_id) === $('game').value);
-    targetPicker($('game-target'), g?.suggested_target, $('league').value === 'mlb', g?.sunday_ticket_target, false, g?.prime_video_target);
+    targetPicker($('game-target'), g?.suggested_target, $('league').value === 'mlb', g?.sunday_ticket_target, false, g?.prime_video_target, g?.espn_unlimited_target);
     $('game-note').textContent = g ? [g.broadcasts.length ? 'On ' + [...new Set(g.broadcasts.map(b => b.name))].join(', ') : 'No TV listing', g.note].filter(Boolean).join('. ') : '';
   }
   $('league').onchange = () => { games = []; $('game').replaceChildren(new Option('Load a date first', '')); gamePicker(); };

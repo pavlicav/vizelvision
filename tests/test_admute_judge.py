@@ -148,6 +148,12 @@ class JudgeTests(unittest.TestCase):
             st = j.status(1.0)
             self.assertEqual((st["calls_today"], st["pictures_today"]), (1, 1))
 
+    def test_skips_are_counted(self):
+        j = J.Judge()
+        j.skip()
+        j.skip()
+        self.assertEqual(j.status(1.0)["skipped_today"], 2)
+
     def test_a_backlog_drops_the_oldest(self):
         j = J.Judge()
         got = []
@@ -196,8 +202,8 @@ class SessionTests(unittest.TestCase):
         if with_judge:
             model = {**model, "features": model["features"] + [J.FEATURE, J.PICTURE], "mean": model["mean"] + [0.0, 0.0],
                      "scale": model["scale"] + [1.0, 1.0], "coef": model["coef"] + [0.6, 0.85]}
-        asked = []
-        judge = SimpleNamespace(why_not=lambda budget: None,
+        asked, skipped = [], []
+        judge = SimpleNamespace(why_not=lambda budget: None, skip=lambda: skipped.append(1),
                                 submit=lambda done, chunks, i, what: asked.append((done, chunks, i, what)),
                                 submit_picture=lambda done, jpegs, what: asked.append((done, jpegs, what)))
         svc = SimpleNamespace(embed=None, model=model, models={"classic": model}, engine="classic",
@@ -209,13 +215,24 @@ class SessionTests(unittest.TestCase):
         svc.lookahead = lambda info: 3.0
         s = Session(svc, "k" * 32, {"lookahead": 3})
         s.game = {"league": "mlb"}
+        s.det.text.known = None                  # no words coming (tick: speech unusable): nothing to wait for
+        s.skipped = skipped
         return s, asked
+
+    @staticmethod
+    def release(s):
+        """What tick does with the chunks heard: send those the detector is unsure of."""
+        with s.lock:
+            jobs = s._judge_ready()
+        for job in jobs:
+            s._ask_judge(*job)
 
     def test_each_chunk_with_words_is_judged_and_the_answer_is_late_evidence(self):
         s, asked = self.session()
         s.heard(s.gen, 10.0, 14.0, words("and he strikes him out", 10.0))
         s.heard(s.gen, 14.0, 18.0, [])
         s.heard(s.gen, 18.0, 22.0, words("call now for fifty percent off", 18.0))
+        self.release(s)
         self.assertEqual(len(asked), 2, "a chunk without words is not sent")
         done, chunks, i, what = asked[1]
         self.assertEqual((len(chunks), i, what), (3, 2, J.SHOWS["mlb"]))
@@ -228,6 +245,45 @@ class SessionTests(unittest.TestCase):
         asked[0][0](math.nan)                    # a failed call: nothing known, nothing waited for
         self.assertEqual(s.src.extras_pending((J.FEATURE,), 30.0), math.inf)
         self.assertTrue(math.isnan(s.src.image(J.FEATURE, 12)))
+
+    def test_a_chunk_the_detector_is_already_sure_of_is_not_sent(self):
+        # On the 10/18-10/20 traces the judge never turned a second the detector was this
+        # sure of without it (0 of 18,844): 74% of the calls.
+        s, asked = self.session()
+        s.det.lp_ad = [0.0] * 40                 # seconds the detector has scored
+        z = {}
+        s.det.evidence = lambda k: {"bias": z.get(k, -6.0), J.FEATURE: 9.0}     # the judge's own term left out
+        s.judged[9] = 3.0                        # the chunk before's answer
+        s.heard(s.gen, 10.0, 14.0, words("and he strikes him out", 10.0))
+        self.release(s)
+        self.assertEqual((asked, s.skipped), ([], [1]))
+        self.assertEqual(s.judging, {}, "nothing waited for")
+        self.assertEqual([s.src.image(J.FEATURE, k) for k in range(10, 14)], [0.0] * 4,
+                         "no evidence (the weights' mean): the answer before is not carried over them")
+        z[12] = -2.0                             # one second it is not sure of: asked
+        s.heard(s.gen, 10.0, 14.0, words("and he strikes him out", 10.0))
+        self.release(s)
+        self.assertEqual(len(asked), 1)
+        z.clear()
+        s.heard(s.gen, 38.0, 42.0, words("call now", 38.0))      # past what the detector has scored: asked
+        self.release(s)
+        self.assertEqual(len(asked), 2)
+
+    def test_a_chunk_waits_for_the_detector_to_have_its_words(self):
+        s, asked = self.session()
+        s.det.lp_ad = [0.0] * 40
+        s.det.evidence = lambda k: {"bias": 6.0}
+        s.det.text.known, s.det.text_done = 30.0, 12
+        s.heard(s.gen, 10.0, 14.0, words("call now", 10.0))
+        self.release(s)
+        self.assertEqual((asked, s.skipped, len(s.judge_wait)), ([], [], 1), "its words are not in yet")
+        s.det.text_done = 14
+        self.release(s)
+        self.assertEqual((asked, s.skipped, s.judge_wait), ([], [1], []))
+        s.heard(s.gen, 18.0, 22.0, words("call now", 18.0))
+        with mock.patch.object(J, "WAIT_WORDS", 0.0):
+            self.release(s)
+        self.assertEqual(s.skipped, [1, 1], "not for ever")
 
     def test_the_detectors_update_runs_under_the_sessions_lock(self):
         # 2026-10-07 20:26: extras_pending took the session's lock again inside tick() and the
@@ -289,6 +345,7 @@ class SessionTests(unittest.TestCase):
     def test_an_answer_for_an_earlier_timeline_is_dropped(self):
         s, asked = self.session()
         s.heard(s.gen, 10.0, 14.0, words("buy now", 10.0))
+        self.release(s)
         s._reset()
         asked[0][0](0.9)
         self.assertEqual(s.judged, {})
@@ -297,6 +354,7 @@ class SessionTests(unittest.TestCase):
         for kw in ({"on": False}, {"with_judge": False}):
             s, asked = self.session(**kw)
             s.heard(s.gen, 10.0, 14.0, words("buy now", 10.0))
+            self.release(s)
             self.assertEqual(asked, [], kw)
 
 

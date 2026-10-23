@@ -21,6 +21,9 @@ holds while the game's source is prepared, so the Sports ID opens the game once 
 ready. It plays even from the test card, and is cued the same way, from the announcements
 folder (sports-<hash>.mp4); the source coordinator starts it from the test card.
 
+Each ID that airs (master's last_station_id) is logged in ident-plays.jsonl, beside the
+settings, kind "station" or "sports" (a sports break), for the Idents page's counts.
+
 Nothing here touches another station's code or data: the personalities are settings,
 the voices are Deepgram's.
 """
@@ -46,6 +49,7 @@ import wave
 
 from .errors import ConfigError
 from .ident import IDENT_PATH, SPORTS_IDENT_PATH, SPORTS_PREFIX, file_identity
+from .my_ads import PlayTally, append_play, read_plays
 
 MUSIC_PATH = IDENT_PATH.parent / 'build' / 'music.wav'
 # The ID's voice slots (ident/script.json); the last word ends before its end card (27.9 s).
@@ -393,6 +397,9 @@ class Continuity:
         self.recent = []      # Announcements rendered, newest first, with when they aired.
         self.error = None
         self.sent = None      # The file the worker was last given.
+        self.aired_path = self.path.with_name('ident-plays.jsonl')
+        self.tally = PlayTally(self.aired_path, lambda row: row['kind'] if row.get('kind') in ('station', 'sports') else None)
+        self.logged = max((row['at'] for row in read_plays(self.aired_path)), default=0.)
         self.thread = None
         if start_worker:
             self.start()
@@ -427,12 +434,21 @@ class Continuity:
             self.wake.notify_all()
         return self.status()
 
+    def played(self):
+        """How often each ID aired: all time (since the log began) and in the last day. A sports
+        break is the station ID then the Sports ID, so it counts for both."""
+        counts, since = self.tally.read()
+        day = [row['kind'] for row in read_plays(self.aired_path, time.time() - 86400)]
+        return {'station': {'total': counts.get('station', 0) + counts.get('sports', 0), 'day': len(day)},
+                'sports': {'total': counts.get('sports', 0), 'day': day.count('sports')}, 'since': since}
+
     def status(self):
         voices = self.voice.catalogue()
         on_duty = self._announcer()
+        played = self.played()
         with self.lock:
             return {'settings': copy.deepcopy(self.data), 'next': copy.deepcopy(self.next),
-                    'recent': copy.deepcopy(self.recent), 'error': self.error, 'voices': voices,
+                    'recent': copy.deepcopy(self.recent), 'played': played, 'error': self.error, 'voices': voices,
                     'fields': list(FIELDS), 'default_lines': {'en': list(DEFAULT_LINES), 'fr': list(FRENCH_LINES)},
                     'on_duty_now': on_duty['id'] if on_duty else None, 'hour': time.localtime().tm_hour,
                     'ready': {'key': self.voice.available(), 'music': self.music.is_file(), 'id': self.video.is_file(),
@@ -662,6 +678,14 @@ class Continuity:
         except Exception:
             return
         last, ident = state.get('last_station_id') or {}, state.get('ident') or {}
+        at = last.get('at')
+        if isinstance(at, (int, float)) and at > self.logged:
+            kind = 'sports' if str(last.get('file') or '').startswith(SPORTS_PREFIX) else 'station'
+            try:
+                append_play(self.aired_path, {'kind': kind, 'at': at, 'file': last.get('file')})
+                self.logged = at
+            except OSError as exc:
+                logging.getLogger(__name__).warning('Could not log the ID that aired: %s', exc)
         with self.lock:
             # The same file (the Sports ID, or the same words again) aired before this cue
             # was made: only an airing since then files it.

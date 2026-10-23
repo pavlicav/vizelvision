@@ -39,11 +39,23 @@ The controller launches it with `contentID=<event ASIN>&mediaType=live` using
 A fresh Home/launch clears previous content. Two consecutive fresh capture
 observations must show both requested teams and `LIVE Main Broadcast` while
 Roku reports Prime Video video playback. An accepted launch or generic
-player `play` state alone is insufficient. Up reveals the player overlay
-when needed. Controls are allowed to fade before the final capture.
+player `play` state alone is insufficient. The overlay shows for a few
+seconds when playback starts and after Down, so the two observations may
+come from separate reveals while Prime keeps playing; any other screen or
+player state starts over. Up is never pressed: since Prime 16.0.383 (October
+22) it opens a Stats panel that stays on screen. OCR reads the red LIVE
+badge as "LWE", so the badge's colour in its place counts as LIVE.
+Controls are allowed to fade before the final capture.
 
 The observed profile chooser may be accepted only when the configured name
-and the enlarged first profile's focus ring are visible. Configure
+and the enlarged first profile's focus ring are visible. Since the Kids
+profile was removed (by October 15) those two are all the chooser shows.
+If the deep link then stops on the event's page, Select is pressed only
+when that page names both teams and LIVE, its focused button reads exactly
+"Watch", and it says "Included with Prime" (at most twice). Watch then opens
+a menu; only its focused "Watch Live / Main Broadcast" is selected, never
+Resume, Rapid Recap or Watch from beginning. Prime's black
+launch splash is not read: OCR turned its noise into minutes of "text". Configure
 `"prime_video": {"profile_name": "Vivian"}` (the default), or use an empty
 name to leave selection to the operator. Unrecognized profiles, sign-in,
 and subscription prompts stop with an actionable error. Complete those in

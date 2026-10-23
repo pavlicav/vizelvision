@@ -31,7 +31,7 @@ function reads(F) {
     [/^\/v1\/sources\/([^/]+)\/programs$/, m => F.programs[decodeURIComponent(m[1])] || {channels: [], items: []}],
     [/^\/v1\/crawl$/, () => F.crawl], [/^\/v1\/favorites$/, () => F.favorites], [/^\/v1\/crawl\/alerts$/, () => F.alerts], [/^\/v1\/crawl\/bus-routes$/, () => ({routes: [{id: 'D60', name: '14TH ST - D60'}, {id: 'D6X', name: 'SIBLEY - D6X'}, {id: 'X2', name: 'BENNING RD-H ST - X2'}]})],
     [/^\/v1\/admute$/, () => F.admute], [/^\/v1\/admute\/recordings$/, () => F.admute_recordings],
-    [/^\/v1\/admute\/known$/, () => F.admute_known], [/^\/v1\/my-ads$/, () => F.my_ads],
+    [/^\/v1\/admute\/known$/, () => F.admute_known], [/^\/v1\/my-ads$/, () => F.my_ads], [/^\/v1\/my-ads\/mix$/, () => F.my_ads_mix],
     [/^\/v1\/captions$/, () => F.captions],
     [/^\/v1\/promos$/, () => F.promos],
     [/^\/v1\/continuity$/, () => F.continuity], [/^\/v1\/production$/, () => F.production], [/^\/v1\/production\/monitor$/, () => F.monitor],

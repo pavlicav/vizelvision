@@ -101,6 +101,20 @@ class LeaseTests(unittest.TestCase):
     def refused(self):
         return HTTPError("http://tv.test/tv/api/v1/tuner/lock", 423, "Locked", {}, io.BytesIO(b"{}"))
 
+    def test_a_refused_tune_says_why_in_tv_things_words(self):
+        body = {"api_version": "v1", "ok": False, "error": {
+            "code": "invalid_config", "message": "This NHL game is not on ESPN Unlimited; watch its channel instead"}}
+        self.responses = [HTTPError("http://tv.test/tv/api/v1/tune", 400, "Bad Request", {},
+                                    io.BytesIO(json.dumps(body).encode())),
+                          HTTPError("http://tv.test/tv/api/v1/tune", 500, "Error", {}, io.BytesIO(b"<html>"))]
+        with self.assertRaises(MasterStreamError) as caught:
+            self.client.request("tune", {"source": "nhl", "channel_id": "401802673"})
+        self.assertEqual(str(caught.exception), "TV-Thing refused tune: This NHL game is not on ESPN Unlimited; "
+                                                "watch its channel instead")
+        self.assertEqual(caught.exception.details, {"http_status": 400, "code": "invalid_config"})
+        with self.assertRaisesRegex(MasterStreamError, r"^TV-Thing rejected tune \(HTTP 500\)$"):
+            self.client.request("tune", {"source": "nhl", "channel_id": "401802673"})
+
     def test_locked_lane_on_requested_channel_is_shared_read_only(self):
         self.responses = [self.refused(), self.locked_status(), self.locked_status(), self.locked_status()]
         lease = self.client.acquire(TARGET)

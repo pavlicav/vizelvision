@@ -179,6 +179,12 @@ Claude Haiku 5.5 reads what is said and calls each new piece an ad or the progra
   (`admute.keys_file` in the config, or continuity's). It is never logged.
 - **Only the new detector asks:** the classic model has no weight for it. A failed or
   slow call costs only that evidence.
+- **Not when the detector is already sure:** a chunk waits until the detector has its words
+  (at most 3 s), and if every second of it is already past ±4 (per-second logit) without
+  Haiku, it is not sent; those seconds count as no evidence, and the answer before is not
+  carried over them. On the 10/18-10/20 traces that left out 61% of the calls (17% on the
+  first NBA game, 83-84% on familiar programmes), and Haiku had turned none of those
+  seconds. The page counts them ("not needed").
 - **Pictures (`llm_picture`):** a new spot has no words for ~10 s after its black frame
   (the transcript lags), but its pictures are there at once. So where the detector is
   unsure of the newest second (P(ad) 0.1-0.9 on that second alone), or a black frame went

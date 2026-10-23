@@ -12,12 +12,15 @@ import uuid
 from .errors import ConfigError, ControlBusyError, CueCancelledError
 from .sports import LEAGUES
 from .master import MasterStreamError
-from .master_worker import MasterClient
+from .master_worker import CUT_WAIT_MOST, MasterClient
+from .espn_unlimited import nhl_on_espn_unlimited
 from .roku_input import ROKU_SOURCE_IDS, roku_target
 from .scheduler import parse_time, utc_now
 from .tv_control import target_from
+from .tv_roku import RokuRefusedError
 from .ident import IDENT_HOLD_AT, IDENT_SECONDS, IDENT_SOURCE_ID, IDENT_TAIL_SECONDS, is_sports_ident
 from .library import LIBRARY_SOURCE_ID
+from .internet import SOURCE_ID as INTERNET_SOURCE_ID, internet_target
 from .networks import ANTENNA_SOURCE, youtube_only
 from . import sports_join
 
@@ -158,7 +161,7 @@ class SourceCoordinator:
         if self.cancel.is_set() or self.stopping.is_set():
             raise CueCancelledError('Master preparation cancelled')
 
-    def _worker(self, action, body=None, *, cancellable=True, queue_item=None):
+    def _worker(self, action, body=None, *, cancellable=True, queue_item=None, limit=65):
         if queue_item and self.queue:
             # The short IPC submission and Pause are ordered by the same mutex.
             # A cut already submitted when Pause returns is allowed to complete.
@@ -166,7 +169,7 @@ class SourceCoordinator:
                 operation = self.master.request(action, body or {})
         else:
             operation = self.master.request(action, body or {})
-        deadline = time.monotonic() + 65
+        deadline = time.monotonic() + limit
         cancelled = False
         while time.monotonic() < deadline:
             if cancellable and (self.cancel.is_set() or self.stopping.is_set()) and not cancelled:
@@ -194,6 +197,8 @@ class SourceCoordinator:
             if self.library is None or not self.library.config.enabled:
                 raise ConfigError('The media library is not configured')
             return self.library.target(body), None
+        if body.get('source_id') == INTERNET_SOURCE_ID:
+            return internet_target(body), None
         if body.get('source_id') in ROKU_SOURCE_IDS:
             if not self.roku_enabled:
                 raise ConfigError('Shared Roku capture is not configured')
@@ -216,6 +221,14 @@ class SourceCoordinator:
                         from .prime_video import prime_nfl_game
                         if not prime_nfl_game(game):
                             raise ConfigError('This NFL game is not listed on Prime Video')
+            elif body['source_id'] == 'nhl':
+                body.setdefault('date', date.today().isoformat())
+                if resolve_game:
+                    if self.sports is None:
+                        raise ConfigError('Sports schedules are not configured')
+                    game = self.sports.game('nhl', int(body['channel_id']), body['date'])
+                    if nhl_on_espn_unlimited(game) is None:
+                        raise ConfigError('This NHL game is not on ESPN Unlimited; choose the channel carrying it')
             else:
                 body.setdefault('date', date.today().isoformat())
                 if resolve_game:
@@ -671,7 +684,11 @@ class SourceCoordinator:
         while time.monotonic() < deadline and not self._station_id_on_air():
             time.sleep(.05)
         if not self._station_id_on_air():
-            logging.getLogger(__name__).warning('Station ID was asked for but did not go on air within a second')
+            waits = (self.master.request().get('ident') or {}).get('waits_for_ad')
+            if waits is not None:   # an ad spliced into a library show plays out first
+                logging.getLogger(__name__).info('Station ID waits %.0f s for the ad on air to end', waits)
+            else:
+                logging.getLogger(__name__).warning('Station ID was asked for but did not go on air within a second')
         return 'requested'
 
     @staticmethod
@@ -710,6 +727,14 @@ class SourceCoordinator:
         card is released first: the next source is ready, so the ID irises out once the ad
         filling the wait ends; or, with join, the join bumper plays there and the take lands
         at its end."""
+        # The ID may wait for an ad spliced into a library show to play out first (master's _land).
+        waited = time.monotonic() + CUT_WAIT_MOST + 5
+        while time.monotonic() < waited and (self.master.request().get('ident') or {}).get('waits_for_ad') is not None:
+            if cancellable:
+                self._check_cancel()
+            elif self.stopping.is_set():
+                return
+            time.sleep(.1)
         if self._station_id_on_air():
             self._hold_ident(False, join)
         # A sports break is two IDs long: wait for what is left of it, not one ID's length.
@@ -791,8 +816,8 @@ class SourceCoordinator:
         self.request(action, item.target, queue_item=item, completion=(done, outcome))
         done.wait()
         if outcome.get('error'):
-            error_type = {ControlBusyError.code: ControlBusyError,
-                          SourcePrepareError.code: SourcePrepareError}.get(outcome.get('error_code'), MasterStreamError)
+            error_type = {ControlBusyError.code: ControlBusyError, SourcePrepareError.code: SourcePrepareError,
+                          RokuRefusedError.code: RokuRefusedError}.get(outcome.get('error_code'), MasterStreamError)
             raise error_type(outcome['error'])
         return outcome['result']
 
@@ -882,8 +907,11 @@ class SourceCoordinator:
                         if queue_item and action == '_queue':
                             self._after_station_id(join=self._join(queue_item, body, game))
                         # A queued take (or the way back to YouTube TV) is ordered with Pause by
-                        # the queue's take guard.
-                        result = self._worker('take', {'prepared_id': prepared['id']}, queue_item=queue_item)
+                        # the queue's take guard. One from Up next lets an ad spliced into a library
+                        # show play out first (master's _defer_take): longer to wait for it.
+                        queued = queue_item is not None and action == '_queue'
+                        result = self._worker('take', {'prepared_id': prepared['id'], **({'after_ad': True} if queued else {})},
+                                              queue_item=queue_item, limit=65 + (CUT_WAIT_MOST if queued else 0))
                         if (result.get('on_air') or {}).get('id') != prepared['id']:
                             raise MasterStreamError('Take could not be confirmed')
                 if action in TAKES and self.queue:
@@ -894,8 +922,9 @@ class SourceCoordinator:
                 error = str(exc)
                 error_code = getattr(exc, 'code', None)
                 handoff = isinstance(exc, NotReadyInTime) and action == '_preroll'
+                # A game blacked out where the Roku is stays blacked out: not retried.
                 if (preparing and not self.cancel.is_set() and not self.stopping.is_set()
-                        and not isinstance(exc, (ControlBusyError, CueCancelledError))):
+                        and not isinstance(exc, (ControlBusyError, CueCancelledError, RokuRefusedError))):
                     error_code = SourcePrepareError.code  # Nothing was cut; safe to retry.
                 if action in ('prepare', 'prepare-take', '_queue', '_preroll'):
                     try:

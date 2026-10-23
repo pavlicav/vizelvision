@@ -22,7 +22,7 @@ run(async browser => {
     'POST /v1/admute/forget': () => ({}),
   }});
   const page = t.page;
-  await page.waitForSelector('#db-ads .ad');
+  await page.waitForSelector('#db-ads .clip');
   assert.deepEqual(t.errors, []);
   assert.deepEqual(t.unknown, []);
 
@@ -31,21 +31,21 @@ run(async browser => {
   assert.equal(await page.locator('#n-learning').textContent(), '1');
   assert.equal(await page.locator('#n-show').textContent(), '1');
   assert.equal(await page.locator('#n-scripted').textContent(), '3 / 4');
-  assert.equal(await page.locator('#db-ads .ad').count(), 4);
-  const titles = await page.locator('#db-ads .ad .title h2').allTextContents();
+  assert.equal(await page.locator('#db-ads .clip').count(), 4);
+  const titles = await page.locator('#db-ads .clip .title h2').allTextContents();
   assert.deepEqual(titles, ['“Fifteen minutes could save you”', 'Ad #60', 'Ad #53', 'Taco Bell Luxe Box']);
 
   // Each ad: its status, what it said (with times), and where the words stand.
-  const geico = page.locator('#db-ads .ad').nth(0);
+  const geico = page.locator('#db-ads .clip').nth(0);
   assert.match(await geico.locator('.chip').textContent(), /Known ad/i);
   assert.match(await geico.locator('.script').textContent(), /0:00Fifteen minutes could save you0:03fifteen percent/);
   assert.match(await geico.locator('.facts').textContent(), /heard 3×.*from TBS/);
-  assert.match(await page.locator('#db-ads .ad').nth(1).locator('.script').textContent(), /No words: music or sound only/);
-  const pod = page.locator('#db-ads .ad').nth(2);
+  assert.match(await page.locator('#db-ads .clip').nth(1).locator('.script').textContent(), /No words: music or sound only/);
+  const pod = page.locator('#db-ads .clip').nth(2);
   assert.match(await pod.locator('.chip').textContent(), /needs 1 more airing/i);
   assert.match(await pod.locator('.script').textContent(), /next time this ad airs/);
   assert.match(await pod.locator('.pics').textContent(), /No pictures yet/);
-  const taco = page.locator('#db-ads .ad').nth(3);
+  const taco = page.locator('#db-ads .clip').nth(3);
   assert.match(await taco.textContent(), /Partial: 40% of it heard so far/);
   assert.match(await taco.locator('.facts').textContent(), /from Jeopardy! - 7.1 WJLA - 2026-09-23 1930/);
   assert.ok(await taco.locator('.script.folded').count(), 'a long script folds');
@@ -53,42 +53,42 @@ run(async browser => {
   assert.equal(await taco.locator('.script.folded').count(), 0);
 
   // Pictures load as they scroll into view, with the API key.
-  await page.waitForFunction(() => [...document.querySelectorAll('#db-ads .ad .pics img')].some(i => i.src.startsWith('blob:')));
+  await page.waitForFunction(() => [...document.querySelectorAll('#db-ads .clip .pics img')].some(i => i.src.startsWith('blob:')));
   assert.ok(t.frames.includes('/v1/admute/ad/12-0.jpg'));
 
   // Search finds words in scripts (and marks them), names and programmes.
   await page.fill('#find', 'percent');
-  assert.equal(await page.locator('#db-ads .ad').count(), 1);
-  assert.equal(await page.locator('#db-ads .ad mark').first().textContent(), 'percent');
+  assert.equal(await page.locator('#db-ads .clip').count(), 1);
+  assert.equal(await page.locator('#db-ads .clip mark').first().textContent(), 'percent');
   await page.fill('#find', 'luxe');
-  assert.deepEqual(await page.locator('#db-ads .ad .title h2').allTextContents(), ['Taco Bell Luxe Box']);
+  assert.deepEqual(await page.locator('#db-ads .clip .title h2').allTextContents(), ['Taco Bell Luxe Box']);
   await page.fill('#find', 'nothing like this');
   assert.ok(await page.locator('#db-empty').isVisible());
   await page.fill('#find', '');
 
   // Filters and sort.
   await page.click('[data-filter=show]');
-  assert.deepEqual(await page.locator('#db-ads .ad .title h2').allTextContents(), ['“This is Jeopardy!”']);
-  assert.match(await page.locator('#db-ads .ad .chip').textContent(), /Show sound/i);
+  assert.deepEqual(await page.locator('#db-ads .clip .title h2').allTextContents(), ['“This is Jeopardy!”']);
+  assert.match(await page.locator('#db-ads .clip .chip').textContent(), /Show sound/i);
   await page.click('[data-filter=learning]');
-  assert.equal(await page.locator('#db-ads .ad').count(), 1);
+  assert.equal(await page.locator('#db-ads .clip').count(), 1);
   await page.click('[data-filter=ads]');
   await page.selectOption('#sort', 'dur');
-  assert.equal(await page.locator('#db-ads .ad .title h2').first().textContent(), 'Taco Bell Luxe Box');
+  assert.equal(await page.locator('#db-ads .clip .title h2').first().textContent(), 'Taco Bell Luxe Box');
   await page.selectOption('#sort', 'last');
 
   // Name an ad.
   await geico.getByRole('button', {name: 'Name'}).click();
-  await page.fill('#db-ads .ad .title input', 'GEICO');
-  await page.click('#db-ads .ad .title button[type=submit]');
+  await page.fill('#db-ads .clip .title input', 'GEICO');
+  await page.click('#db-ads .clip .title button[type=submit]');
   assert.deepEqual(t.posts.at(-1), {method: 'POST', path: '/v1/admute/name', body: {clip: 12, name: 'GEICO'}});
-  await page.waitForFunction(() => !document.querySelector('#db-ads .ad .title form'));
-  assert.equal(await page.locator('#db-ads .ad .title h2').first().textContent(), 'GEICO');
+  await page.waitForFunction(() => !document.querySelector('#db-ads .clip .title form'));
+  assert.equal(await page.locator('#db-ads .clip .title h2').first().textContent(), 'GEICO');
 
   // Forget one (asks first).
-  await page.locator('#db-ads .ad').nth(2).getByRole('button', {name: 'Forget'}).click();
+  await page.locator('#db-ads .clip').nth(2).getByRole('button', {name: 'Forget'}).click();
   await page.getByRole('dialog').getByRole('button', {name: 'Forget'}).click();
-  await page.waitForFunction(() => document.querySelectorAll('#db-ads .ad').length === 3);
+  await page.waitForFunction(() => document.querySelectorAll('#db-ads .clip').length === 3);
   assert.deepEqual(t.posts.at(-1).body, {clips: [53]});
 
   // "/" focuses the search; the nav names the page.
@@ -100,7 +100,7 @@ run(async browser => {
 
   // Phone width: no sideways scroll.
   t = await open(browser, '/ads#database', {width: 390, height: 844, api: {'GET /v1/admute/known': () => ({updated: 1, clips: CLIPS})}});
-  await t.page.waitForSelector('#db-ads .ad');
+  await t.page.waitForSelector('#db-ads .clip');
   assert.equal(await overflow(t.page), 0);
   assert.deepEqual(t.errors, []);
   await t.ctx.close();
@@ -126,7 +126,7 @@ run(async browser => {
   await t.page.waitForFunction(() => !document.getElementById('panel-admute').hidden);
   assert.deepEqual(await shown(t.page), ['panel-admute'], 'My ads sends you to turn ad mute On');
   await t.page.locator('a[href="#database"]').click();
-  await t.page.waitForSelector('#db-ads .ad');
+  await t.page.waitForSelector('#db-ads .clip');
   assert.deepEqual(await shown(t.page), ['panel-database']);
   assert.deepEqual(await watched(t.page), ['v1/admute/known']);
   const sent = t.posts.length;
@@ -144,7 +144,7 @@ run(async browser => {
   assert.deepEqual(t.unknown, []);
   await t.ctx.close();
   t = await open(browser, '/ads', {storage: {adsTab: 'database'}, api: {'GET /v1/admute/known': () => ({updated: 1, clips: CLIPS})}});
-  await t.page.waitForSelector('#db-ads .ad');
+  await t.page.waitForSelector('#db-ads .clip');
   assert.deepEqual(await shown(t.page), ['panel-database'], 'the last tab, when the address names none');
   await t.ctx.close();
 });

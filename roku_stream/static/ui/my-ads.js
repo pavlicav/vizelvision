@@ -7,7 +7,7 @@
   const {h, api, fmt, toast} = VV;
   const $ = id => document.getElementById(id);
   const panel = $('panel-my-ads');
-  let view = null, editing = null, drawn = '', drawnLimit = null, drawnPick = '', drawnNext = '';
+  let view = null, editing = null, drawn = '', drawnLimit = null, drawnPick = '', drawnNext = '', drawnMix = '', filter = '';
 
   // Limits: at most count plays in any stretch of minutes.
   const LIMITS = [[null, 'No limit'], [{count: 1, minutes: 15}, 'Once every 15 minutes'], [{count: 1, minutes: 30}, 'Once every 30 minutes'],
@@ -51,6 +51,17 @@
       document.body.append(dialog); dialog.showModal(); count.focus();
     });
   }
+
+  // Kinds of ads (the mix, ad_mix.py): each ad in one, or unsorted.
+  const kinds = () => view.mix?.categories || [];
+  const kindName = key => kinds().find(c => c.key === key)?.name;
+  function kindSelect(current, change, label, none = 'Unsorted') {
+    const select = h('select', {'aria-label': label}, h('option', {value: ''}, none),
+      kinds().map(c => h('option', {value: c.key, selected: c.key === current, title: c.about}, c.name)));
+    select.onchange = () => change(select.value || null);
+    return select;
+  }
+  const mixing = () => !!view.mix?.enabled && view.settings.order === 'shuffle';
 
   // Files (pictures, the card, the ads themselves, the promos' stills) need the API key: fetched as blobs, once each.
   const blobs = new Map();
@@ -110,6 +121,9 @@
     else if (st?.cued === ad.id) out.push(h('span', {class: 'chip pvw', title: 'Decoded and ready: it starts the next break (or follows the ad on air)'}, 'Plays next'));
     if (!ad.present) out.push(h('span', {class: 'chip pgm', title: 'The file is gone from my-ads/'}, 'File missing'));
     if (!ad.enabled) out.push(h('span', {class: 'chip'}, 'Off'));
+    else if (mixing() && ad.boost === 0) out.push(h('span', {class: 'chip', title: 'Its own setting on the Mix tab: the mix never picks it (queue it by hand)'}, 'Left out of the mix'));
+    else if (mixing() && ad.wear === 0) out.push(h('span', {class: 'chip touch', title: 'However often it airs, it keeps a new ad\'s chance (Mix tab)'}, 'Never wears out'));
+    if (mixing() && ad.boost > 1) out.push(h('span', {class: 'chip touch', title: 'Its chance is raised on the Mix tab'}, 'Boost ×' + +ad.boost.toFixed(2)));
     else if (!ad.allowed && ad.again) out.push(h('span', {class: 'chip warn', title: limitText(ad.limit)}, 'Sits out until ' + fmt.when(ad.again)));
     const why = st?.left_out?.[ad.id];
     if (why) out.push(h('span', {class: 'chip pgm', title: why}, 'Would not play · retried in 10 min'));
@@ -135,7 +149,10 @@
       ad.converted ? [h('span', {title: 'Converted on upload, so master decodes it in real time beside a live programme'}, 'converted to 720p'), dot()] : null,
       h('span', {title: ad.lufs != null ? `Measured ${ad.lufs} LUFS; aired at the station's -20 LUFS` : ''},
         !ad.audio ? 'no sound' : ad.lufs == null ? 'silent' : 'levelled ' + (ad.gain_db >= 0 ? '+' : '') + ad.gain_db + ' dB'), dot(),
-      h('span', null, p.last ? `played ${p.hour} in the last hour, ${p.day} today · last ${fmt.when(p.last)}` : 'not played yet'));
+      h('span', null, p.last ? `played ${p.hour} in the last hour, ${p.day} today · last ${fmt.when(p.last)}` : 'not played yet'),
+      ad.plays_all ? [dot(), h('span', {title: 'Every play that counted, since the play log began'}, `${ad.plays_all} in all`)] : null,
+      mixing() && ad.chance != null ? [dot(), h('span', {class: ad.chance < .1 ? 'chance low' : 'chance', title: 'Its chance to be picked within its kind, against a new ad\'s: it falls as you see it and after it airs (Mix tab)'},
+        'chance ' + (ad.chance >= .995 && ad.chance <= 1.005 ? '100%' : ad.chance > 0 && ad.chance < .01 ? '<1%' : Math.round(ad.chance * 100) + '%'))] : null);
   }
   function row(ad, i, n, st) {
     const pics = h('button', {class: 'pics', type: 'button', title: 'Preview it', 'aria-label': 'Preview ' + (ad.name || 'ad'), onclick: () => preview(ad)},
@@ -151,11 +168,13 @@
     trim.onchange = () => edit(ad, {trim_db: +trim.value}, 'Volume set.');
     const airing = st?.state === 'ad' && st.ad?.id === ad.id;
     return h('li', {class: 'ad' + (airing ? ' airing' : st?.cued === ad.id ? ' next' : '') + (ad.enabled ? '' : ' off'), data: {id: ad.id}},
-      h('div', {class: 'move'}, h('button', {class: 'icon sm quiet', type: 'button', title: 'Move up', 'aria-label': 'Move up', disabled: i === 0, onclick: () => move(ad, -1)}, VV.icon(VV.ICONS.up)),
+      h('div', {class: 'move'}, h('button', {class: 'icon sm quiet', type: 'button', title: 'Move up', 'aria-label': 'Move up', disabled: i === 0 || !!filter, onclick: () => move(ad, -1)}, VV.icon(VV.ICONS.up)),
         h('b', {class: 'num'}, String(i + 1)),
-        h('button', {class: 'icon sm quiet', type: 'button', title: 'Move down', 'aria-label': 'Move down', disabled: i === n - 1, onclick: () => move(ad, 1)}, VV.icon(VV.ICONS.down))),
+        h('button', {class: 'icon sm quiet', type: 'button', title: 'Move down', 'aria-label': 'Move down', disabled: i === n - 1 || !!filter, onclick: () => move(ad, 1)}, VV.icon(VV.ICONS.down))),
       h('div', {class: 'main'}, heading(ad, st), pics, facts(ad),
         h('div', {class: 'controls'}, h('label', {class: 'switch'}, enabled, h('span', 'Airs')),
+          h('label', {class: 'field'}, h('span', 'Kind'), kindSelect(ad.category, category =>
+            edit(ad, {category}, category ? 'Kind: ' + kindName(category) + '.' : 'Unsorted.'), 'Kind')),
           h('label', {class: 'field'}, h('span', 'Limit'), limitSelect(ad.limit, limit => edit(ad, {limit}, 'Limit: ' + (limit ? limitText(limit).toLowerCase() : 'none') + '.'), 'Limit')),
           ad.limit ? h('button', {class: 'xs' + (ad.enabled && !ad.allowed ? ' primary' : ''), type: 'button',
             title: 'Forget its plays so far: it may air now, and its limit counts again from its next play',
@@ -355,22 +374,70 @@
     $('recent-empty').hidden = rows.length > 0;
     $('card-today').textContent = view.card.seconds_today ? 'Break card in the last day: ' + fmt.dur(view.card.seconds_today) : '';
   }
+  function mixPanel() {
+    const m = view.mix;
+    if (!m) return;
+    const live = mixing();
+    $('mix-chip').textContent = live ? 'on' : 'off';
+    $('mix-chip').className = 'chip' + (live ? ' pvw' : '');
+    const total = m.categories.reduce((t, c) => t + (c.ads ? c.weight : 0), 0) + (m.unsorted.ads ? m.unsorted.weight : 0);
+    const kinds = [...m.categories.map(c => ({name: c.name, ads: c.ads, day: c.day, weight: c.weight, about: c.about})),
+      ...(m.unsorted.ads ? [{name: 'Unsorted', ads: m.unsorted.ads, day: m.unsorted.day, weight: m.unsorted.weight, about: 'Ads with no kind yet'}] : [])]
+      .map(k => ({...k, due: k.ads && total ? k.weight / total : 0, got: m.aired_day ? k.day / m.aired_day : 0}));
+    const ads = kinds.reduce((t, k) => t + k.ads, 0);
+    const key = JSON.stringify([kinds, live]);
+    if (key !== drawnMix) {
+      drawnMix = key;
+      const top = Math.max(.05, ...kinds.map(k => Math.max(k.got, k.due))) * 1.08;
+      VV.fill($('mix-list'), ...kinds.map(k => h('li', {class: k.weight ? '' : 'off', title: k.about || ''},
+        h('span', {class: 'name'}, k.name, ' ', h('small', null, k.ads + (k.ads === 1 ? ' ad' : ' ads'))),
+        h('small', null, k.weight === 0 ? 'off' : k.weight === 1 ? '' : '×' + +k.weight.toFixed(2)),
+        h('div', {class: 'share'}, h('div', {class: 'meter pvw'}, h('i', {style: `width:${(100 * k.got / top).toFixed(1)}%`}),
+          k.due ? h('b', {style: `left:${(100 * k.due / top).toFixed(1)}%`}) : null),
+          h('span', {title: 'The last day\'s plays · its share now · its share by its count of ads (as the shuffle)'},
+            `${Math.round(100 * k.got)}% · due ${Math.round(100 * k.due)}% · by count ${ads ? Math.round(100 * k.ads / ads) : 0}%`)))));
+    }
+    $('mix-unsorted').textContent = m.unsorted.ads ? `${m.unsorted.ads} ${m.unsorted.ads === 1 ? 'ad has' : 'ads have'} no kind yet: choose one in the list (Show: Unsorted).` : '';
+    // The upload's kind and the list's filter follow the kinds there are.
+    for (const [id, first, extra] of [['upload-kind', 'Choose later (unsorted)', null], ['kind-filter', 'Show: every kind', 'Unsorted']]) {
+      const select = $(id), value = select.value;
+      const want = JSON.stringify(m.categories.map(c => [c.key, c.name, c.ads]));
+      if (select.dataset.drawn === want) continue;
+      select.dataset.drawn = want;
+      VV.fill(select, h('option', {value: ''}, first), ...m.categories.map(c => h('option', {value: c.key},
+        id === 'kind-filter' ? `${c.name} (${c.ads})` : c.name)), extra ? h('option', {value: 'unsorted'}, extra) : null);
+      select.value = [...select.options].some(o => o.value === value) ? value : '';
+    }
+  }
+  async function saveMix(changes, done) {
+    try { view = await api('v1/my-ads/mix', changes); render(true); if (done) toast(done, {ok: true}); }
+    catch (e) { toast(e.message, {error: true}); render(true); }
+  }
+
   function render(force) {
     if (!view) return;
     const s = view.settings;
     for (const b of document.querySelectorAll('#enabled [data-enabled]')) b.setAttribute('aria-pressed', String(String(s.enabled) === b.dataset.enabled));
-    for (const b of document.querySelectorAll('#order [data-order]')) b.setAttribute('aria-pressed', String(s.order === b.dataset.order));
-    $('order-note').textContent = s.order === 'shuffle' ? 'Every ad once, in a random order, before any repeats.' : 'Top to bottom, then around again.';
-    status(); recent(); nextUp(); queuePicker();
+    const order = mixing() ? 'mix' : s.order;
+    for (const b of document.querySelectorAll('#order [data-order]')) b.setAttribute('aria-pressed', String(order === b.dataset.order));
+    $('order-note').textContent = order === 'mix' ? 'Kinds of ads in balance, the ads seen most rested.'
+      : order === 'shuffle' ? 'Every ad once, in a random order, before any repeats.' : 'Top to bottom, then around again.';
+    status(); recent(); nextUp(); queuePicker(); mixPanel();
     const total = view.ads.reduce((t, a) => t + a.duration, 0);
     $('count-chip').textContent = view.ads.length ? `${view.ads.length} · ${fmt.dur(total)}` : 'none';
-    $('my-empty').hidden = view.ads.length > 0;
+    if (!view.ads.length) { $('my-empty').hidden = false; $('my-empty').textContent = 'No ads yet. Upload a few above: until then, every muted break shows the break card.'; }
     // The list is drawn again only when it changes (not while a name is being typed).
     const st = view.status || {};
-    const key = JSON.stringify([view.ads, st.cued, st.state === 'ad' && st.ad?.id, st.left_out, editing]);
-    if ((force || key !== drawn) && (editing == null || force)) {
+    // (an ad's chance changes by the minute: redrawn as it moves by a point)
+    const ads = view.ads.map(({chance, seen, ...ad}) => ({...ad, chance: Math.round((chance ?? 0) * 100)}));
+    const key = JSON.stringify([ads, st.cued, st.state === 'ad' && st.ad?.id, st.left_out, editing, filter, mixing(), kinds().map(c => c.name)]);
+    if ((force || key !== drawn) && (editing == null || force) && !$('my-list').querySelector('select:focus')) {
       drawn = key;
-      VV.fill($('my-list'), ...view.ads.map((ad, i) => row(ad, i, view.ads.length, st)));
+      const shown = view.ads.map((ad, i) => [ad, i]).filter(([ad]) => !filter
+        || (filter === 'unsorted' ? !kindName(ad.category) : ad.category === filter));
+      VV.fill($('my-list'), ...shown.map(([ad, i]) => row(ad, i, view.ads.length, st)));
+      $('my-empty').hidden = shown.length > 0;
+      if (view.ads.length && !shown.length) $('my-empty').textContent = 'No ads of this kind.';
     }
     if (limitKey(s.default_limit) !== drawnLimit && document.activeElement !== $('default-limit')) {
       drawnLimit = limitKey(s.default_limit);
@@ -393,10 +460,10 @@
   // Uploads ------------------------------------------------------------------------------------------
   const queue = [];
   let uploading = false;
-  function send(path, file, progress) {
+  function send(path, file, progress, category) {
     return new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest();
-      xhr.open('POST', path + '?name=' + encodeURIComponent(file.name));
+      xhr.open('POST', path + '?name=' + encodeURIComponent(file.name) + (category ? '&category=' + encodeURIComponent(category) : ''));
       if (VV.key) xhr.setRequestHeader('X-API-Key', VV.key);
       xhr.setRequestHeader('Content-Type', 'application/octet-stream');
       xhr.upload.onprogress = e => progress?.(e.loaded, e.total || file.size);
@@ -421,7 +488,7 @@
       const fail = text => { li.classList.add('failed'); bar.style.width = '100%'; what.textContent = text; };
       if (l && !l.video.includes(ext)) { fail('Not a video this takes (' + l.video.join(' ') + ')'); continue; }
       if (l && file.size > l.bytes) { fail('Over ' + fmt.bytes(l.bytes)); continue; }
-      queue.push({file, li, bar, what, fail});
+      queue.push({file, li, bar, what, fail, category: $('upload-kind').value || null});
     }
     pump();
   }
@@ -429,16 +496,17 @@
     if (uploading) return;
     uploading = true;
     while (queue.length) {
-      const {file, li, bar, what, fail} = queue.shift();
+      const {file, li, bar, what, fail, category} = queue.shift();
       try {
         const data = await send('v1/my-ads/upload', file, (sent, total, all) => {
           bar.style.width = (100 * sent / total).toFixed(1) + '%';
           what.textContent = all ? 'Checking, levelling, pictures…' : Math.floor(100 * sent / total) + '% · ' + fmt.bytes(sent);
-        });
+        }, category);
         view = data; render(true);
         const ad = data.ads.find(a => a.id === data.added);
         li.classList.add('done'); bar.style.width = '100%';
-        what.textContent = 'Added · ' + fmt.dur(ad?.duration) + (ad?.limit ? ' · ' + limitText(ad.limit).toLowerCase() : '');
+        what.textContent = 'Added · ' + fmt.dur(ad?.duration) + (ad?.limit ? ' · ' + limitText(ad.limit).toLowerCase() : '')
+          + ' · ' + (kindName(ad?.category) || 'unsorted');
         setTimeout(() => li.remove(), 20000);
       } catch (e) { fail(e.message); }
     }
@@ -484,7 +552,15 @@
     const b = e.target.closest('[data-enabled]');
     if (b) save({enabled: b.dataset.enabled === 'true'}, b.dataset.enabled === 'true' ? 'Muted breaks get your ads.' : 'Off: muted breaks show the programme, muted.');
   };
-  $('order').onclick = e => { const b = e.target.closest('[data-order]'); if (b) save({order: b.dataset.order}); };
+  $('order').onclick = async e => {
+    const b = e.target.closest('[data-order]');
+    if (!b) return;
+    const mix = b.dataset.order === 'mix';
+    if (!!view.mix?.enabled !== mix) await saveMix({enabled: mix});
+    if (view.settings.order !== (mix ? 'shuffle' : b.dataset.order)) await save({order: mix ? 'shuffle' : b.dataset.order});
+    if (mix) toast('Mix: kinds of ads in balance, the ads seen most rested.', {ok: true});
+  };
+  $('kind-filter').onchange = () => { filter = $('kind-filter').value; render(true); };
   $('shuffle-list').onclick = async () => {
     try { view = await api('v1/my-ads/shuffle', {}); render(true); toast('The list is in a new order.', {ok: true}); } catch (err) { toast(err.message, {error: true}); }
   };
