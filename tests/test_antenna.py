@@ -129,8 +129,10 @@ class RecoveryLookupTests(unittest.TestCase):
         self.assertIsNone(self.networks.carrying('News4 Today'))
 
     def test_coordinator_alternates(self):
+        both = {'youtube_tv': True, 'antenna': True, 'network': None, 'listed': False}
         coordinator = SimpleNamespace(networks=self.networks, baseball=Mock(),
-                                      sports=Mock(**{'local_simulcast.return_value': 'WTTG'}))
+                                      sports=Mock(**{'local_simulcast.return_value': 'WTTG', 'markets.return_value': both}))
+        coordinator._markets = lambda game: source_coordinator.SourceCoordinator._markets(coordinator, game)
         alternates = lambda target, game=None: source_coordinator.SourceCoordinator.alternates(coordinator, target, game)
         colts = {'league': 'nfl', 'game_pk': 401872965, 'game_date': '2026-10-04',
                  'title': 'Indianapolis Colts at Washington Commanders'}
@@ -149,6 +151,29 @@ class RecoveryLookupTests(unittest.TestCase):
         self.assertEqual(alternates(ticket, titans), {'antenna': {'source_id': 'tv-thing-digital', 'channel_id': 'wusa_hd_9_1'},
                                                       'roku': ticket})
         self.assertEqual(alternates({'source_id': 'library', 'channel_id': 'x'}), {})
+
+    def test_regional_games_only_go_between_sources_in_their_market(self):
+        """2026-10-25: YouTube TV's CBS (Lansing's WLNS) had Colts at Vikings, WUSA Bengals at Ravens."""
+        markets = {}
+        coordinator = SimpleNamespace(networks=self.networks, baseball=Mock(),
+                                      sports=Mock(**{'local_simulcast.return_value': None}))
+        coordinator.sports.markets.side_effect = lambda league, pk, day: markets[pk]
+        coordinator._markets = lambda game: source_coordinator.SourceCoordinator._markets(coordinator, game)
+        alternates = lambda target, game=None: source_coordinator.SourceCoordinator.alternates(coordinator, target, game)
+        colts = {'league': 'nfl', 'game_pk': 1, 'game_date': '2026-10-25', 'title': 'Indianapolis Colts at Minnesota Vikings'}
+        bengals = {'league': 'nfl', 'game_pk': 2, 'game_date': '2026-10-25', 'title': 'Cincinnati Bengals at Baltimore Ravens'}
+        markets[1] = {'youtube_tv': True, 'antenna': False, 'network': 'CBS', 'listed': True}
+        markets[2] = {'youtube_tv': False, 'antenna': True, 'network': 'CBS', 'listed': True}
+        cbs = {'source_id': 'youtube-tv', 'channel_id': 'CBS'}
+        wusa = {'source_id': 'tv-thing-digital', 'channel_id': 'wusa_hd_9_1'}
+        self.assertEqual(alternates(cbs, colts), {'antenna': None, 'roku': {**cbs, 'antenna': False}},
+                         "WUSA has another game")
+        ticket = {'source_id': 'sunday-ticket', 'channel_id': '2', 'date': '2026-10-25'}
+        self.assertEqual(alternates(wusa, bengals), {'antenna': wusa, 'roku': ticket}, "Lansing's CBS has another game")
+        self.assertEqual(alternates(ticket, bengals), {'antenna': wusa, 'roku': ticket}, 'WUSA has the DC game')
+        markets[2] = None
+        coordinator.sports.markets.side_effect = RuntimeError('ESPN is down')
+        self.assertEqual(alternates(cbs, colts)['antenna'], wusa, 'no answer: as before')
 
 
 class AntennaCoordinatorTests(unittest.TestCase):
@@ -187,6 +212,19 @@ class AntennaCoordinatorTests(unittest.TestCase):
         self.assertEqual(result['on_air']['channel_id'], 'wrc_hd_4_1')
         self.assertEqual(result['antenna']['number'], '4.1')
         self.assertIn('could not be ready in time', result['antenna']['reason'])
+
+    def test_a_regional_game_washington_does_not_show_waits_for_youtube_tv(self):
+        """YouTube TV's networks are Lansing's: WRC would show another regional game."""
+        self.coordinator.sports = Mock(**{'markets.return_value': {'youtube_tv': True, 'antenna': False,
+                                                                   'network': 'CBS', 'listed': True}})
+        item = self.item()
+        item.game = {'league': 'nfl', 'game_pk': 1, 'game_date': '2026-10-25',
+                     'title': 'Indianapolis Colts at Minnesota Vikings'}
+        result = self.coordinator.execute_queue(item)
+        self.controller.play.assert_called_once()
+        self.assertEqual(result['on_air']['source_id'], 'youtube-tv')
+        self.assertNotIn('antenna', result)
+        self.coordinator.sports.markets.assert_called_with('nfl', 1, '2026-10-25')
 
     def test_youtube_tv_prepared_in_time_is_taken(self):
         self.coordinator.request('prepare', base.TARGET)

@@ -339,8 +339,12 @@ It is available with master enabled.
   program**. The source can be any YouTube TV channel or over-the-air TV-Thing
   station; MLB can also use automatic routing. The page suggests a configured
   channel from the game's national broadcast. Sunday-afternoon NFL games on
-  CBS/FOX are regional: a Washington or Baltimore game is suggested on WUSA or
-  FOX 5, and other games on **NFL Sunday Ticket** (below). End-of-game status comes from the MLB
+  CBS/FOX are regional, and YouTube TV's CBS and FOX are Lansing's stations (WLNS,
+  WSYM), not Washington's: the game their YouTube TV listings name (or, beyond the
+  listings, a Lions game) is suggested there, and every other game on **NFL Sunday
+  Ticket** (below), whose note names WUSA or FOX 5 over the antenna for a Washington or
+  Baltimore game. A scheduled game moves between the two as the listings reach it
+  (`sports.py`, `programming.py`). End-of-game status comes from the MLB
   Stats API, and from ESPN's public scoreboard for the other leagues (postponed or
   cancelled games also count as ended). The Sports view lists the NFL by week and the other
   leagues for the next ten days. When the game is final, the backup airs until the window ends. A game that runs past its window

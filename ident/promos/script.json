@@ -666,5 +666,33 @@
         "text": "Forever."
       }
     ]
+  },
+  "shaadi": {
+    "host": "DJ Low Tide, at the wedding; Harmonia, the wedding video; Vesta, an auntie",
+    "model": "aura-2-orpheus-en",
+    "lines": [
+      {
+        "id": "promo-shaadi-1",
+        "at": 0.2,
+        "text": "Make some noise for the groom!"
+      },
+      {
+        "id": "promo-shaadi-2",
+        "at": 3.35,
+        "model": "aura-2-harmonia-en",
+        "text": "The TV, and the remote."
+      },
+      {
+        "id": "promo-shaadi-3",
+        "at": 5.3,
+        "model": "aura-2-vesta-en",
+        "text": "So when's the spin-off?"
+      },
+      {
+        "id": "promo-shaadi-4",
+        "at": 6.9,
+        "text": "Vizzle Vision! Shaadee Mubaarak!"
+      }
+    ]
   }
 }

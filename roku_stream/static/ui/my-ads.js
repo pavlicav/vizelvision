@@ -16,6 +16,8 @@
   const limitKey = l => l ? l.count + '/' + l.minutes : 'none';
   const per = m => m % 1440 === 0 ? (m === 1440 ? 'a day' : m / 1440 + ' days') : m % 60 === 0 ? (m === 60 ? 'an hour' : m / 60 + ' hours') : m + ' minutes';
   const limitText = l => LIMITS.find(([v]) => limitKey(v) === limitKey(l))?.[1] || `${l.count === 1 ? 'Once' : l.count === 2 ? 'Twice' : l.count + ' times'} every ${per(l.minutes)}`;
+  // The ads switched on that sit out over their limits now.
+  const sittingOut = () => (view?.ads || []).filter(a => a.enabled && a.limit && !a.allowed);
   function limitSelect(current, change, label) {
     const options = LIMITS.map(([v, text]) => [limitKey(v), text]);
     if (!options.some(([k]) => k === limitKey(current))) options.push([limitKey(current), limitText(current)]);
@@ -257,23 +259,40 @@
           onclick: () => skip(row)}, VV.icon(VV.ICONS.x), 'Skip'));
     }));
   }
-  // The picker: every promo and ad, by name. Drawn again only when what it lists changes.
+  // The picker: every promo and ad, by name, narrowed by the search beside it (every word, in any
+  // order, accents ignored). Drawn again only when what it lists changes.
+  const fold = text => String(text ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
   function queuePicker() {
     const select = $('queue-pick'), promos = view.promos?.list || [];
+    const words = fold($('queue-find').value).split(/\s+/).filter(Boolean);
+    const matches = text => words.every(w => fold(text).includes(w));
     const byName = (a, b) => (a.name || '').localeCompare(b.name || '', undefined, {sensitivity: 'base'});
     const options = [
-      ['Station promos', [...promos].sort(byName).map(p => ['promo:' + p.id, `${p.name} · ${fmt.dur(p.duration)}${p.why ? ' · ' + p.why : ''}`, !!p.why])],
+      // A sports promo out of its league's games may still be queued by hand: only what stops it airing at all greys it.
+      ['Station promos', [...promos].sort(byName).map(p => {
+        const hand = p.why_by_hand === undefined ? p.why : p.why_by_hand;
+        return ['promo:' + p.id, `${p.name} · ${fmt.dur(p.duration)}${hand ? ' · ' + hand : p.why ? ' · off its league: airs when queued' : ''}`, !!hand];
+      })],
       ['My ads', [...view.ads].sort(byName).map(a => ['ad:' + a.id, `${a.name || 'Untitled'} · ${fmt.dur(a.duration)}`
-        + (!a.present ? ' · file missing' : !a.enabled ? ' · off' : !a.allowed ? ' · over its limit' : ''), !a.present])]];
-    const key = JSON.stringify(options);
+        + (!a.present ? ' · file missing' : !a.enabled ? ' · off' : !a.allowed ? ' · over its limit' : ''), !a.present])]]
+      .map(([label, items]) => [label, items.filter(([, text]) => matches(text.split(' · ')[0]))]);
+    const key = JSON.stringify([options, words]);
     if (key === drawnPick) return;
     drawnPick = key;
-    const value = select.value;
-    VV.fill(select, h('option', {value: ''}, 'Choose an ad or a promo…'),
+    const value = select.value, found = options.some(([, items]) => items.length);
+    VV.fill(select, h('option', {value: ''}, !words.length ? 'Choose an ad or a promo…' : found ? 'Choose a match…' : 'Nothing matches'),
       ...options.filter(([, items]) => items.length).map(([label, items]) =>
         h('optgroup', {label}, items.map(([v, text, disabled]) => h('option', {value: v, disabled}, text)))));
-    select.value = [...select.options].some(o => o.value === value && !o.disabled) ? value : '';
+    const usable = [...select.options].filter(o => o.value && !o.disabled);
+    // Searching, the first match is chosen (unless the one already chosen still matches).
+    select.value = usable.some(o => o.value === value) ? value : words.length && usable.length ? usable[0].value : '';
   }
+  $('queue-find').oninput = () => queuePicker();
+  $('queue-find').onkeydown = e => {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();                  // Enter adds to the queue (Play next is the button)
+    $('queue-add').requestSubmit($('queue-add').querySelector('[data-next="false"]'));
+  };
   $('queue-add').onsubmit = e => {
     e.preventDefault();
     const [kind, id] = $('queue-pick').value.split(':');
@@ -444,6 +463,13 @@
       VV.fill($('default-limit').parentElement, h('span', 'Limit for new uploads'),
         Object.assign(limitSelect(s.default_limit, limit => save({default_limit: limit}, 'New uploads get: ' + (limit ? limitText(limit).toLowerCase() : 'no limit') + '.'), 'Limit for new uploads'), {id: 'default-limit'}));
     }
+    // Reset all limits: lit while an ad sits out over its limit.
+    const out = sittingOut(), capped = view.ads.some(a => a.limit);
+    $('reset-limits').disabled = !capped;
+    $('reset-limits').classList.toggle('primary', out.length > 0);
+    $('limits-note').textContent = (!capped ? 'No ad has a limit.' : out.length === 1 ? (out[0].name || 'One ad') + ' sits out over its limit now.'
+      : out.length ? out.length + ' ads sit out over their limits now.' : 'No ad is over its limit now.')
+      + (s.limits_from ? ' Last reset ' + fmt.when(s.limits_from) + '.' : '');
     const card = $('card-text');
     if (document.activeElement !== card && !card.dataset.dirty) card.value = s.card.text;
     show($('card-img'), view.card.file);
@@ -563,6 +589,12 @@
   $('kind-filter').onchange = () => { filter = $('kind-filter').value; render(true); };
   $('shuffle-list').onclick = async () => {
     try { view = await api('v1/my-ads/shuffle', {}); render(true); toast('The list is in a new order.', {ok: true}); } catch (err) { toast(err.message, {error: true}); }
+  };
+  // Every ad's plays so far stop counting towards its limit (settings' limits_from); the plays stay in the log.
+  $('reset-limits').onclick = () => {
+    const out = sittingOut();
+    save({limits_from: 'now'}, 'Limits reset: ' + (out.length === 1 ? (out[0].name || 'the ad sitting out') + ' may air now.'
+      : out.length ? 'the ' + out.length + ' ads sitting out may air now.' : 'each ad\'s limit counts again from its next play.'));
   };
   $('pip-on').onchange = () => save({pip: {enabled: $('pip-on').checked}});
   $('pip-corner').onchange = () => save({pip: {corner: $('pip-corner').value}});

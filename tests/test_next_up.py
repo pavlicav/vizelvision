@@ -253,19 +253,27 @@ class NextUpTests(unittest.TestCase):
     def test_refusals(self):
         self.help()
         for body in ({'op': 'add', 'kind': 'ad', 'id': 'f' * 12}, {'op': 'add', 'kind': 'promo', 'id': 'nope'},
-                     {'op': 'add', 'kind': 'promo', 'id': 'baseball'}, {'op': 'add', 'kind': 'card', 'id': 'x'},
+                     {'op': 'add', 'kind': 'card', 'id': 'x'},
                      {'op': 'add', 'kind': 'ad', 'id': ad(1)['id'], 'next': 'yes'}, {'op': 'skip', 'key': 'zz'},
                      {'op': 'shuffle'}):
             with self.subTest(body=body), self.assertRaises(ConfigError):
                 self.b.command(body)
-        try:
-            self.b.command({'op': 'add', 'kind': 'promo', 'id': 'baseball'})
-        except ConfigError as exc:
-            self.assertIn('only during MLB games', str(exc))
         for _ in range(ad_break.AdBreak.QUEUED_MOST):
             self.b.command({'op': 'add', 'kind': 'ad', 'id': ad(1)['id']})
         with self.assertRaises(ConfigError):
             self.b.command({'op': 'add', 'kind': 'ad', 'id': ad(1)['id']})
+
+
+    def test_a_sports_promo_queued_by_hand_airs_out_of_its_league(self):
+        self.help()
+        self.b.command({'op': 'add', 'kind': 'promo', 'id': 'baseball', 'next': True})
+        self.help()
+        first = self.next()[0]
+        self.assertEqual((first['kind'], first['id'], first['by']), ('promo', 'baseball', 'you'),
+                         'no MLB game on air, and it stays in Next up')
+        self.tap.mutes.append((S, 60 * S))
+        self.assertEqual(self.frame(1.0), 120, 'it airs')
+        self.assertEqual(self.b.state, 'promo')
 
 
 class NextUpApiTests(unittest.TestCase):

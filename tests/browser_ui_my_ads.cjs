@@ -20,7 +20,10 @@ run(async browser => {
   let t = await open(browser, '/ads#my-ads', {api: {
     'POST /v1/my-ads/upload': (body, F) => ({...F.my_ads, ads: [...F.my_ads.ads, added], added: added.id}),
     'POST /v1/admute/override': () => ({override: {accepted: true}}),
-    'POST /v1/my-ads/ads/*': (body, F) => F.my_ads, 'POST /v1/my-ads': (body, F) => F.my_ads, 'POST /v1/my-ads/order': (body, F) => F.my_ads,
+    'POST /v1/my-ads/ads/*': (body, F) => F.my_ads, 'POST /v1/my-ads/order': (body, F) => F.my_ads,
+    // Reset all limits: every ad switched on may air again.
+    'POST /v1/my-ads': (body, F) => !body.limits_from ? F.my_ads : {...F.my_ads, settings: {...F.my_ads.settings, limits_from: 1790908800},
+      ads: F.my_ads.ads.map(a => ({...a, allowed: a.enabled, again: null}))},
     'DELETE /v1/my-ads/ads/*': (body, F) => F.my_ads, 'POST /v1/my-ads/next': (body, F) => F.my_ads,
   }});
   const {page} = t;
@@ -45,7 +48,21 @@ run(async browser => {
   assert.equal(await page.locator('#skip-now').innerText(), 'Skip this ad');
   assert.deepEqual(await posted(t, () => page.locator('#skip-now').click()),
     {method: 'POST', path: '/v1/my-ads/next', body: {op: 'skip', key: '5e1f02aa'}});
-  assert.equal(await page.locator('#queue-pick option[value="promo:baseball"]').isDisabled(), true, 'only during MLB games');
+  // Out of an MLB game, Baseball may still be queued by hand; a promo that cannot air at all may not.
+  const baseball = page.locator('#queue-pick option[value="promo:baseball"]');
+  assert.equal(await baseball.isDisabled(), false, 'queued by hand, a sports promo airs during any programme');
+  assert.match(await baseball.textContent(), /off its league: airs when queued/);
+  assert.equal(await page.locator('#queue-pick option[value="promo:time-temp"]').isDisabled(), true, 'no temperature reading');
+  // The search narrows the picker and chooses the first match; Enter adds it to the queue.
+  await page.locator('#queue-find').fill('BASE');
+  assert.deepEqual(await page.locator('#queue-pick option[value]:not([value=""])').evaluateAll(os => os.map(o => o.value)), ['promo:baseball']);
+  assert.equal(await page.locator('#queue-pick').inputValue(), 'promo:baseball');
+  assert.deepEqual((await posted(t, () => page.locator('#queue-find').press('Enter'))).body,
+    {op: 'add', kind: 'promo', id: 'baseball', next: false});
+  await page.locator('#queue-find').fill('zzz no such');
+  assert.equal(await page.locator('#queue-pick option').first().textContent(), 'Nothing matches');
+  await page.locator('#queue-find').fill('');
+  await page.waitForTimeout(500);      // the page fetches My ads again 0.4 s after a command
   await page.locator('#queue-pick').selectOption('promo:legal');
   assert.deepEqual((await posted(t, () => page.getByRole('button', {name: 'Play next'}).click())).body,
     {op: 'add', kind: 'promo', id: 'legal', next: true});
@@ -68,6 +85,16 @@ run(async browser => {
   assert.equal(await rows.nth(1).locator('select[aria-label=Limit]').inputValue(), '1/60');
   assert.equal(await rows.nth(2).locator('select[aria-label=Volume]').inputValue(), '-3');
   assert.ok(t.frames.some(f => f.endsWith(`/v1/my-ads/file/${VINNY}-0.jpg`)), 'its pictures');
+
+  // Reset all limits: lit while an ad sits out, saying which; then every ad switched on may air.
+  const reset = page.locator('#reset-limits');
+  assert.equal(await page.locator('#limits-note').textContent(), 'Rocket Lawn Care sits out over its limit now.');
+  assert.ok((await reset.getAttribute('class')).includes('primary'));
+  assert.deepEqual(await posted(t, () => reset.click()), {method: 'POST', path: '/v1/my-ads', body: {limits_from: 'now'}});
+  assert.match(await page.locator('.toasts .toast').last().textContent(), /^Limits reset: Rocket Lawn Care may air now\.$/);
+  assert.match(await page.locator('#limits-note').textContent(), /^No ad is over its limit now\. Last reset (\w{3} )?\d{1,2}:\d\d\s?[AP]M\.$/);
+  assert.equal((await reset.getAttribute('class')).includes('primary'), false);
+  assert.doesNotMatch(await rows.nth(1).innerText(), /Sits out until/i);
 
   // Switch one on, give one a limit (a preset and a custom one), move one down.
   assert.deepEqual(await posted(t, () => rows.nth(2).locator('.switch').click()), {method: 'POST', path: `/v1/my-ads/ads/${HARDWARE}`, body: {enabled: true}});

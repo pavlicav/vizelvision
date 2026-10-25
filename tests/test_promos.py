@@ -136,6 +136,8 @@ class ValuesTests(unittest.TestCase):
                          'only during NFL or NCAAF games')
         self.assertIsNone(promos.readiness(football, {'programme': {'title': 'Lions at Panthers', 'league': 'nfl'}}))
         self.assertIsNone(promos.readiness({'present': True, 'needs': [], 'leagues': []}, {}), 'not a sports promo')
+        self.assertIsNone(promos.readiness(football, {'programme': {'title': 'Jeopardy!'}}, by_hand=True), 'queued by hand')
+        self.assertEqual(promos.readiness({**football, 'present': False}, {}, by_hand=True), 'its video is not built')
 
     def test_league_of_a_segment(self):
         self.assertEqual(promos.league_of({'kind': 'game', 'game': {'game_pk': 1, 'league': 'nfl'}}), 'nfl')

@@ -560,7 +560,7 @@ class AdBreak:
                 promo = self.library.get(item_id) if isinstance(item_id, str) else None
                 if promo is None:
                     raise ConfigError('No such promo')
-                why = readiness(promo, self.promo_values)
+                why = readiness(promo, self.promo_values, by_hand=True)
                 if why:
                     raise ConfigError(f'{promo["name"]} cannot air now: {why}')
             else:
@@ -1331,7 +1331,7 @@ class AdBreak:
                     continue
                 ahead.append({'kind': 'ad', 'id': e['id'], 'at': now, 'counted': True})
                 drawn += e['by'] == 'rotation'
-            elif known and (e['id'] not in library or readiness(library[e['id']], values)):
+            elif known and (e['id'] not in library or readiness(library[e['id']], values, by_hand=e['by'] == 'you')):
                 gone.add(e['key'])
         new = []
         while drawn < self.AHEAD:            # the rotation is the helper's alone

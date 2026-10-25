@@ -15,7 +15,7 @@ ident/promos/build.py), aired in the breaks ad mute takes off air, beside My ads
   sits out (no temperature reading, no programme name).
 - **Sports.** A promo with `leagues` in its manifest (baseball: mlb; football: nfl, ncaaf;
   basketball: nba, wnba; hockey: nhl) airs only while a game of one of them is on air.
-  Otherwise it sits out.
+  Otherwise it sits out, unless the operator queues it by hand (My ads, Next up).
 - **A voiced name.** 'only-on' also says the programme's name: the web app has it voiced
   (Deepgram, as the continuity announcements are) and mixed into a copy of the promo
   whenever the programme changes (PromoDesk). Until that copy is ready, the promo airs
@@ -215,8 +215,9 @@ def fresh(values, now=None):
     return result
 
 
-def readiness(promo, values):
-    """Why a promo cannot air with these (fresh) values, or None if it can."""
+def readiness(promo, values, by_hand=False):
+    """Why a promo cannot air with these (fresh) values, or None if it can. Queued by hand, a
+    sports promo may air during any programme (its live text still has to be known)."""
     if not promo.get('present'):
         return 'its video is not built'
     if 'temperature' in promo['needs'] and not values.get('temperature'):
@@ -224,7 +225,7 @@ def readiness(promo, values):
     if 'programme' in promo['needs'] and not values.get('programme'):
         return 'no programme name on air'
     leagues = promo.get('leagues')
-    if leagues and (values.get('programme') or {}).get('league') not in leagues:
+    if leagues and not by_hand and (values.get('programme') or {}).get('league') not in leagues:
         return 'only during ' + ' or '.join(league.upper() for league in leagues) + ' games'
     return None
 

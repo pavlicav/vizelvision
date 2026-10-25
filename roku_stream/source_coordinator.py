@@ -429,6 +429,17 @@ class SourceCoordinator:
         return self._handoff(plain, prepared)
 
     # The antenna: a network YouTube TV is not ready with in time ---------------------------
+    def _markets(self, game):
+        """Where a queue entry's NFL game is on its network (sports.markets: YouTube TV's
+        Lansing stations, the antenna's Washington ones), or None without a game or an answer."""
+        if not game or self.sports is None or game.get('league') != 'nfl':
+            return None
+        try:
+            return self.sports.markets(game['league'], game['game_pk'], game.get('game_date'))
+        except Exception as exc:  # A lookup failing changes nothing: both, as before.
+            logging.getLogger(__name__).warning('Could not look up where %s is on: %s', game.get('title'), exc)
+            return None
+
     def _antenna(self, target, game):
         """The antenna station carrying target's network ({source_id, channel_id, number,
         name}), or None: not a network, YouTube TV only, or TV-Thing has no such station."""
@@ -521,6 +532,8 @@ class SourceCoordinator:
         keep_air = action == '_preroll' or self._station_id_on_air()
         station = (self._antenna(body, game)
                    if queue_item is not None and action in ('_queue', '_preroll') else None)
+        if station is not None and (self._markets(getattr(queue_item, 'game', None)) or {}).get('antenna') is False:
+            station = None  # Washington's station has another regional game: YouTube TV, however long.
         deadline = self._ready_by(action, queue_item) if station else None
         if deadline is not None and deadline - time.time() < ROKU_FASTEST:
             why = 'YouTube TV could not be ready in time'
@@ -550,7 +563,8 @@ class SourceCoordinator:
         """The ways a live program can go back on when its feed keeps failing (feed recovery):
         {'antenna': the TV-Thing station carrying it, 'roku': the same program from YouTube TV
         alone}, either None. game is the queue entry's {'league', 'game_pk', 'game_date',
-        'title'}: the antenna carries a game its guide names, or a local simulcast."""
+        'title'}: the antenna carries a game its guide names, or a local simulcast. A Sunday
+        regional NFL game is only on its own market's station (_markets)."""
         target, log = dict(target or {}), logging.getLogger(__name__)
         if self.networks is None:
             return {}
@@ -558,8 +572,12 @@ class SourceCoordinator:
         try:
             if source == ANTENNA_SOURCE:
                 network = self.networks.network_of(target.get('channel_id'))
-                return {'antenna': target,
-                        'roku': {'source_id': 'youtube-tv', 'channel_id': network, 'antenna': False} if network else None}
+                roku = {'source_id': 'youtube-tv', 'channel_id': network, 'antenna': False} if network else None
+                markets = self._markets(game)
+                if roku and markets and not markets['youtube_tv']:
+                    # Lansing's station has another game: Sunday Ticket has this one.
+                    roku = {'source_id': 'sunday-ticket', 'channel_id': str(game['game_pk']), 'date': game.get('game_date')}
+                return {'antenna': target, 'roku': roku}
             if source not in ROKU_SOURCE_IDS:
                 return {}
             plain = {k: v for k, v in target.items() if k != 'antenna'}
@@ -570,6 +588,11 @@ class SourceCoordinator:
             if source == 'mlb':
                 mlb = self.baseball.game(int(target['channel_id']), target.get('date'))
             station = self.networks.antenna(plain, mlb)
+            markets = self._markets(game)
+            if station is not None and markets and not markets['antenna']:
+                station = None  # Washington's station has another regional game.
+            if station is None and markets and markets['antenna'] and markets['network']:
+                station = self.networks.station(markets['network'])  # A DC team's: WUSA or FOX 5 has it.
             if station is None and game:
                 station = self.networks.carrying(game.get('title'))
             if station is None and game and self.sports is not None:

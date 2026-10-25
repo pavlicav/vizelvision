@@ -127,7 +127,7 @@ class NewLeagueTests(unittest.TestCase):
         result = catalog.games('ncaaf', '2026-10-03')
         self.assertEqual([g['game_id'] for g in result['games']], [1, 2, 3, 4, 5, 87])
         self.assertEqual(calls, ['https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard'
-                                 '?dates=20261003&groups=80&limit=1000'])
+                                 '?dates=20261003&groups=80&limit=500'])
         self.assertEqual(result['games'][0]['suggested_target'], {'source_id': 'youtube-tv', 'channel_id': 'ABC'})
         self.assertTrue(all(g['sunday_ticket_target'] is None for g in result['games']))
         self.assertEqual(catalog.game_status(87, '2026-10-03', 'ncaaf')['finished'], False)
@@ -197,3 +197,37 @@ class NewLeagueTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class RegionalLocateTests(unittest.TestCase):
+    """A scheduled regional NFL game learns which source has it once YouTube TV's listings reach it."""
+
+    def test_locate_names_the_target_youtube_tv_listings_choose(self):
+        event = espn_event(401873012, 'Cincinnati Bengals', 'Baltimore Ravens', broadcasts=('CBS',))
+        event['date'] = '2026-10-25T17:00Z'
+        game = EspnScoreboard._normalize('nfl', event)
+        scoreboard = Mock(**{'event.return_value': game, 'games.return_value': [game]})
+        config = Mock()
+        config.resolve_channel.side_effect = lambda name: (0, type('Channel', (), {'name': name})())
+        kickoff = datetime(2026, 10, 25, 17, tzinfo=timezone.utc).timestamp()
+        rows = {'cbs': {'source_id': 'youtube-tv', 'channel_id': 'CBS', 'events': [
+            {'start': kickoff, 'duration': 10800, 'title': 'NFL Football',
+             'episode_title': 'Indianapolis Colts at Minnesota Vikings'}]}}
+        catalog = SportsCatalog(config, None, scoreboard=scoreboard, listings=lambda: rows)
+        self.assertEqual(catalog.locate('nfl', 401873012)['regional_target'],
+                         {'source_id': 'sunday-ticket', 'channel_id': '401873012', 'date': '2026-10-25'})
+        scoreboard.games.assert_called_with('nfl', '2026-10-25')
+        self.assertEqual(catalog.markets('nfl', 401873012, '2026-10-25'),
+                         {'youtube_tv': False, 'antenna': True, 'network': 'CBS', 'listed': True})
+        # Past the listings, nothing is decided for it.
+        self.assertNotIn('regional_target', SportsCatalog(config, None, scoreboard=scoreboard).locate('nfl', 401873012))
+
+    def test_listings_are_read_at_most_once_a_minute(self):
+        clock = [0.0]
+        listings = Mock(return_value={})
+        catalog = SportsCatalog(None, None, scoreboard=Mock(), listings=listings, clock=lambda: clock[0])
+        catalog._youtube_tv_listings()
+        catalog._youtube_tv_listings()
+        clock[0] = 61
+        catalog._youtube_tv_listings()
+        self.assertEqual(listings.call_count, 2)

@@ -403,15 +403,42 @@ class GamesOnTests(unittest.TestCase):
         event.update(changes)
         return event
 
-    def test_live_national_game_on_a_youtube_tv_channel(self):
-        games, _ = self.catalog([self.event()]).games_on({'source_id': 'youtube-tv', 'channel_id': 'FOX'}, now=self.NOW)
+    def lions(self, state='in', id='401', away=('Seattle Seahawks', 'SEA')):
+        """A Lions home game on FOX: Lansing's, so YouTube TV's FOX has it."""
+        event = self.event(state, id=id, name=f'{away[0]} at Detroit Lions')
+        home, visitor = event['competitions'][0]['competitors']
+        home['team'].update(displayName='Detroit Lions', name='Lions', abbreviation='DET')
+        visitor['team'].update(displayName=away[0], name=away[0].split()[-1], abbreviation=away[1])
+        return event
+
+    def test_live_game_on_a_youtube_tv_channel(self):
+        games, _ = self.catalog([self.lions()]).games_on({'source_id': 'youtube-tv', 'channel_id': 'FOX'}, now=self.NOW)
         self.assertEqual([(g['league'], g['game_pk'], g['live']) for g in games], [('nfl', 401, True)])
         self.assertEqual(games[0]['game_date'], '2026-09-27')
-        other, _ = self.catalog([self.event()]).games_on({'source_id': 'youtube-tv', 'channel_id': 'ESPN'}, now=self.NOW)
+        other, _ = self.catalog([self.lions()]).games_on({'source_id': 'youtube-tv', 'channel_id': 'ESPN'}, now=self.NOW)
         self.assertEqual(other, [])
 
+    def test_each_market_has_its_own_regional_game(self):
+        """YouTube TV's FOX is Lansing's station (its listings name its game); the antenna's FOX 5 is Washington's."""
+        vikings = self.event(id='402', name='Indianapolis Colts at Minnesota Vikings')
+        home, visitor = vikings['competitions'][0]['competitors']
+        home['team'].update(displayName='Minnesota Vikings', name='Vikings', abbreviation='MIN')
+        visitor['team'].update(displayName='Indianapolis Colts', name='Colts', abbreviation='IND')
+        catalog = self.catalog([self.event(), vikings])
+        kickoff = datetime(2026, 9, 27, 17, tzinfo=timezone.utc).timestamp()
+        catalog.listings = lambda: {'fox': {'source_id': 'youtube-tv', 'channel_id': 'FOX', 'events': [
+            {'start': kickoff - 3600, 'duration': 3600, 'title': 'FOX NFL Sunday'},
+            {'start': kickoff, 'duration': 11700, 'title': 'NFL Football',
+             'episode_title': 'Indianapolis Colts at Minnesota Vikings'}]}}
+        games, _ = catalog.games_on({'source_id': 'youtube-tv', 'channel_id': 'FOX'}, now=self.NOW)
+        self.assertEqual([g['game_pk'] for g in games], [402])
+        resolve = catalog.config.resolve_channel
+        catalog.config.resolve_channel = lambda name: (0, SimpleNamespace(name='FOX')) if name.upper() == 'WTTG' else resolve(name)
+        games, _ = catalog.games_on(TV, channel_name='WTTG-HD', now=self.NOW)
+        self.assertEqual([g['game_pk'] for g in games], [401])
+
     def test_upcoming_within_the_hour_counts_and_later_does_not(self):
-        pre = self.event('pre')
+        pre = self.lions('pre')
         catalog = self.catalog([pre])
         self.assertEqual(len(catalog.games_on({'source_id': 'youtube-tv', 'channel_id': 'FOX'},
                                               now=self.NOW - timedelta(hours=1, minutes=30))[0]), 1)

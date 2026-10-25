@@ -140,7 +140,17 @@
     "id": "baseball",
     "name": "Baseball on VizelVision",
     "still": "baseball.png",
-    "why": "only during MLB games"
+    "why": "only during MLB games",
+    "why_by_hand": null
+   },
+   {
+    "duration": 10.0,
+    "enabled": true,
+    "id": "time-temp",
+    "name": "Time & Temperature",
+    "still": "time-temp.png",
+    "why": "no recent temperature reading",
+    "why_by_hand": "no recent temperature reading"
    },
    {
     "duration": 5.0,

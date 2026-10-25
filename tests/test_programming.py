@@ -489,8 +489,12 @@ class SportsTests(unittest.TestCase):
         game = self.catalog([self.EVENT]).games('nfl', '2026-09-27')['games'][0]
         self.assertEqual((game['league'], game['game_id']), ('nfl', 401))
         self.assertEqual(game['home']['nickname'], 'Commanders')
-        # A DC team's regional game is on the local station.
-        self.assertEqual(game['suggested_target'], {'source_id': 'youtube-tv', 'channel_id': 'FOX'})
+        # YouTube TV's FOX is Lansing's: a DC team's regional game is on Sunday Ticket there,
+        # and over the air on Washington's FOX 5.
+        self.assertEqual(game['suggested_target'], {'source_id': 'sunday-ticket', 'channel_id': '401', 'date': '2026-09-27'})
+        self.assertIn("Washington's WTTG has it", game['note'])
+        self.assertEqual(game['markets'], {'youtube_tv': False, 'antenna': True, 'network': 'FOX', 'listed': False})
+        self.assertTrue(game['on_sunday_ticket'])
         away = copy.deepcopy(self.EVENT)
         away['id'] = '402'
         away['competitions'][0]['competitors'][0]['team'].update(
@@ -499,6 +503,49 @@ class SportsTests(unittest.TestCase):
         self.assertEqual(other['suggested_target'],
                          {'source_id': 'sunday-ticket', 'channel_id': '402', 'date': '2026-09-27'})
         self.assertIn('Sunday Ticket', other['note'])
+        self.assertNotIn('Washington', other['note'])
+        self.assertFalse(other['markets']['antenna'])
+        # A Lions game is Lansing's: YouTube TV's FOX, blacked out on Sunday Ticket.
+        lions = copy.deepcopy(away)
+        lions['competitions'][0]['competitors'][0]['team'].update(
+            displayName='Detroit Lions', name='Lions', abbreviation='DET')
+        local = self.catalog([lions]).games('nfl', '2026-09-27')['games'][0]
+        self.assertEqual(local['suggested_target'], {'source_id': 'youtube-tv', 'channel_id': 'FOX'})
+        self.assertFalse(local['on_sunday_ticket'])
+        self.assertIn('Lansing', local['note'])
+
+    def test_youtube_tv_listings_say_which_regional_game_lansing_has(self):
+        """2026-10-25: Lansing's CBS had Colts at Vikings, Washington's Bengals at Ravens."""
+        vikings = copy.deepcopy(self.EVENT)
+        vikings.update(id='403', name='Indianapolis Colts at Minnesota Vikings')
+        home, away = vikings['competitions'][0]['competitors']
+        home['team'].update(displayName='Minnesota Vikings', name='Vikings', abbreviation='MIN')
+        away['team'].update(displayName='Indianapolis Colts', name='Colts', abbreviation='IND')
+        lions = copy.deepcopy(vikings)
+        lions.update(id='404', name='Chicago Bears at Detroit Lions')
+        home, away = lions['competitions'][0]['competitors']
+        home['team'].update(displayName='Detroit Lions', name='Lions', abbreviation='DET')
+        away['team'].update(displayName='Chicago Bears', name='Bears', abbreviation='CHI')
+        kickoff = datetime(2026, 9, 27, 17, tzinfo=timezone.utc).timestamp()
+        catalog = self.catalog([self.EVENT, vikings, lions])
+        catalog.listings = lambda: {'fox': {'source_id': 'youtube-tv', 'channel_id': 'FOX', 'events': [
+            {'start': kickoff - 3600, 'duration': 3600, 'title': 'FOX NFL Sunday'},
+            {'start': kickoff, 'duration': 11700, 'title': 'NFL Football',
+             'episode_title': 'Indianapolis Colts at Minnesota Vikings'}]},
+            'cbs': {'source_id': 'youtube-tv', 'channel_id': 'CBS', 'events': []}}
+        games = {g['game_id']: g for g in catalog.games('nfl', '2026-09-27')['games']}
+        self.assertEqual(games[403]['suggested_target'], {'source_id': 'youtube-tv', 'channel_id': 'FOX'})
+        self.assertEqual(games[403]['markets'], {'youtube_tv': True, 'antenna': False, 'network': 'FOX', 'listed': True})
+        self.assertFalse(games[403]['on_sunday_ticket'])
+        self.assertEqual(games[401]['suggested_target']['source_id'], 'sunday-ticket')
+        # Where the listings reach, they decide over the teams.
+        self.assertEqual(games[404]['suggested_target']['source_id'], 'sunday-ticket')
+        self.assertTrue(games[404]['markets']['listed'])
+        # TV Thing unreachable: the teams decide.
+        catalog = self.catalog([lions])
+        catalog.listings = Mock(side_effect=RuntimeError('TV-Thing guide request failed'))
+        self.assertEqual(catalog.games('nfl', '2026-09-27')['games'][0]['suggested_target'],
+                         {'source_id': 'youtube-tv', 'channel_id': 'FOX'})
 
     def test_status_is_final_for_completed_and_postponed_games(self):
         final = copy.deepcopy(self.EVENT)
@@ -559,7 +606,9 @@ class SportsTests(unittest.TestCase):
         self.assertEqual(week['weeks'], [{'season_type': 2, 'week': 3, 'label': 'Week 3', 'detail': 'Sep 23-29',
                                           'start': None, 'end': None}])
         self.assertEqual([(g['game_id'], g['game_date']) for g in week['games']], [(401, '2026-09-27'), (403, '2026-09-28')])
-        self.assertEqual(week['games'][0]['suggested_target'], {'source_id': 'youtube-tv', 'channel_id': 'FOX'})
+        # The Commanders' regional game: not Lansing's, so Sunday Ticket on YouTube TV.
+        self.assertEqual(week['games'][0]['suggested_target'], {'source_id': 'sunday-ticket', 'channel_id': '401',
+                                                                 'date': '2026-09-27'})
         with self.assertRaises(ConfigError):
             catalog.week('nba')
         with self.assertRaises(ConfigError):
@@ -823,6 +872,27 @@ class FollowGamesTests(unittest.TestCase):
         self.assertEqual((shows['g1']['title'], shows['g2']['title']),
                          ('Philadelphia Phillies at Los Angeles Dodgers', 'Game 2 on FS1'))
         self.assertEqual(shows['g2']['game']['title'], 'Philadelphia Phillies at Los Angeles Dodgers')
+
+    def test_a_regional_nfl_game_goes_where_youtube_tv_listings_place_it(self):
+        """2026-10-25: Bengals at Ravens was scheduled on YouTube TV's CBS, Lansing's, which had Colts at Vikings."""
+        title = 'Cincinnati Bengals at Baltimore Ravens'
+        cbs = {'source_id': 'youtube-tv', 'channel_id': 'CBS'}
+        wusa = {'source_id': 'tv-thing-digital', 'channel_id': 'wusa_hd_9_1'}
+        ticket = {'source_id': 'sunday-ticket', 'channel_id': '1', 'date': '2026-09-23'}
+        for pk, target in ((1, cbs), (2, wusa)):
+            self.show(pk, timedelta(hours=1), target=target, game_title=title)['game']['league'] = 'nfl'
+            self.listing(pk, timedelta(hours=1), title=title, regional_target={**ticket, 'channel_id': str(pk)})
+        changes = self.programming.follow_games(NOON)
+        self.assertEqual([(c['show_id'], c['text']) for c in changes],
+                         [('g1', "Now on NFL Sunday Ticket: not on Lansing's station")])
+        self.assertEqual(self.shows()['g1']['target'], ticket)
+        self.assertEqual(self.shows()['g2']['target'], wusa, 'an antenna chosen for it stays')
+        self.assertEqual(self.programming.follow_games(NOON + timedelta(minutes=10)), [])
+        # Lansing's listings change their minds: back to YouTube TV's CBS.
+        self.listing(1, timedelta(hours=1), title=title, regional_target=cbs)
+        self.assertEqual([c['text'] for c in self.programming.follow_games(NOON + timedelta(minutes=20))],
+                         ["Now on YouTube TV's CBS: Lansing's station has it"])
+        self.assertEqual(self.shows()['g1']['target'], cbs)
 
     def test_a_game_its_feed_drops_is_removed_after_a_grace_period(self):
         from roku_stream.programming import GONE_AFTER

@@ -368,7 +368,8 @@ def handler_factory(
         # The station promos, for Next up's picker: each with whether it may air now.
         promo_settings, values = promo_desk.store.read(), promos_module.fresh(promo_desk.store.values(), now)
         promos = [{'id': p['id'], 'name': p['name'], 'duration': p['duration'], 'still': p['still'],
-                   'enabled': promos_module.switched_on(promo_settings, p['id']), 'why': promos_module.readiness(p, values)}
+                   'enabled': promos_module.switched_on(promo_settings, p['id']), 'why': promos_module.readiness(p, values),
+                   'why_by_hand': promos_module.readiness(p, values, by_hand=True)}
                   for p in promo_desk.library.read()]
         return {'settings': {k: v for k, v in settings.items() if k != 'ads'}, 'ads': ads, 'status': worker, 'mix': mix_view,
                 'promos': {'enabled': promo_settings['enabled'], 'every': promo_settings['every'], 'list': promos},
@@ -1495,6 +1496,8 @@ def serve(config: AppConfig) -> None:
     sources = SourceCatalog(config, baseball, sports=sports, library=library)
     # A network YouTube TV is not ready with in time comes from the antenna (networks.py).
     coordinator.networks = Networks(config, sources.tv)
+    # YouTube TV has Lansing's CBS and FOX: its listings say which regional NFL game is on (sports.py).
+    sports.listings = lambda: sources.tv.get('guide')['data']['channels']
     if config.master.enabled:
         playout = SourceQueue(config.state_file.with_name('queue.json'), coordinator.execute_queue,
                               sports.game_status, validate_program=QueuePrograms(sources).validate,

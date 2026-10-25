@@ -331,6 +331,7 @@ dialog.break{width:min(860px,94vw)}
 #panel-my-ads .nextup .facts{font-size:12px;gap:4px 8px}
 #panel-my-ads .queue-add{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 #panel-my-ads .queue-add select{flex:1 1 220px;min-width:0;height:30px}
+#panel-my-ads .queue-add input[type=search]{flex:1 1 160px;min-width:0;height:30px}
 #panel-my-ads .skip-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 @media (max-width:520px){#panel-my-ads .nextup li{grid-template-columns:18px 64px minmax(0,1fr) auto;gap:8px}}
 #panel-my-ads td.aired{white-space:nowrap}
@@ -573,6 +574,7 @@ dialog.preview video{width:100%;max-height:70vh;background:#000;border-radius:va
             <ol class="nextup" id="nextup" aria-label="Next up in breaks, in order"></ol>
             <p class="hint" id="nextup-empty" hidden></p>
             <form class="queue-add" id="queue-add">
+              <input type="search" id="queue-find" placeholder="Find an ad or a promo" aria-label="Find an ad or a promo to queue" autocomplete="off" title="Type to narrow the list; Enter adds the first match to the queue">
               <select id="queue-pick" aria-label="An ad or a promo to queue"></select>
               <button class="sm primary" type="submit" data-next="true" title="Before everything else in Next up">Play next</button>
               <button class="sm" type="submit" data-next="false" title="After whatever else you queued">Add to queue</button>
@@ -617,9 +619,11 @@ dialog.preview video{width:100%;max-height:70vh;background:#000;border-radius:va
           <p class="tiny muted" id="mix-unsorted"></p>
           <div class="row"><a class="btn sm primary" href="#mix">Tune the mix</a><span class="tiny muted">Every share and knob, each ad's own, and a preview of the days ahead.</span></div></div></section>
 
-        <section class="panel"><div class="head"><h2>Limits</h2></div><div class="body stack tight">
+        <section class="panel" aria-label="Limits"><div class="head"><h2>Limits</h2></div><div class="body stack tight">
           <p class="small">Each ad has its own limit, set in the list: say, <b>once an hour</b>. An ad over its limit sits out until the hour since its play has passed; with every ad out, the break card shows.</p>
-          <label class="field"><span>Limit for new uploads</span><select id="default-limit"></select></label></div></section>
+          <label class="field"><span>Limit for new uploads</span><select id="default-limit"></select></label>
+          <div class="row"><button type="button" class="sm" id="reset-limits" title="Forget every ad's plays so far: each ad switched on may air now, and its limit counts again from its next play">Reset all limits</button>
+            <span class="tiny muted grow" id="limits-note"></span></div></div></section>
 
         <section class="panel"><div class="head"><h2>Break card</h2></div><div class="body stack tight">
           <div class="card-shot"><img id="card-img" alt="The break card"></div>

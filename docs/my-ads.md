@@ -90,8 +90,9 @@ Master keeps it (`ad_break.AdBreak`): the page only asks.
   (after whatever else you queued); each ad's **Queue** button does the same. What you queue
   plays before the rotation and **before a due promo**, even when it is switched off or
   over its limit (it still counts towards the limit once it airs). My ads must be on for an
-  ad, promos for a promo. A promo that cannot air now (say, Baseball outside an MLB game) is
-  refused. At most 20 wait. In a wait fill, a long one (over 31 s) waits for a real break.
+  ad, promos for a promo. A sports promo may be queued outside its league's games (Baseball
+  during football airs when queued; the picker says "off its league"); a promo that cannot air
+  at all now (no temperature reading for Time &amp; Temperature, its video not built) is refused. At most 20 wait. In a wait fill, a long one (over 31 s) waits for a real break.
 - **A restart keeps** what you queued by hand (`my-ads-queue.json`); the rotation's part is
   drawn again.
 - **A new order** (Shuffle ↔ In list order, or the list reordered in list order) draws the
@@ -118,6 +119,8 @@ Master keeps it (`ad_break.AdBreak`): the page only asks.
   epoch seconds; `null` undoes it) makes plays before then count towards no ad's limit, so every ad
   switched on may air at once; plays after it count as usual, so each ad's limit holds again once it
   airs. The plays stay in the log and in the page's counts. Master, Next up and the page all use it.
+  **Reset all limits**, in the Limits panel, sets it to now. It's highlighted while any ad sits out
+  over its limit, and the line beside it says which (or how many) and when the limits were last reset.
   **Reset limit**, on each ad with a limit (highlighted while it sits out), does the same for that ad
   alone: its own `limits_from` (`POST /v1/my-ads/ads/<id>` `{"limits_from": "now"}`).
 - **Sitting out:** an ad switched off, or over its limit, sits out. The page shows
