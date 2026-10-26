@@ -124,7 +124,7 @@ channel, game and recording, with Play now, + Queue and Schedule), **Schedule**,
 (every item the crawl can air, alerts first, with its first airing, repeats and next
 airing), **Presentation** (the off-air card, the clock, continuity, the station ID, the
 sonic identity) and **Engineering** (health, the viewer monitor, Roku capture and
-calibration, how it works, an API explorer). Ctrl/⌘-K opens a command palette; **m** shows
+calibration, how it works, an API explorer, an ideas board). Ctrl/⌘-K opens a command palette; **m** shows
 the machinery, live diagrams of how each part works.
 
 **Presentation → Live captions** adds optional local Whisper transcription to the

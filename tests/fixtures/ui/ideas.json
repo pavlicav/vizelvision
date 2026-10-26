@@ -1,0 +1,9 @@
+{
+  "areas": ["tv-thing", "vizelvision", "ads", "channels", "streams", "ui", "other"],
+  "statuses": ["idea", "next", "doing", "done", "dropped"],
+  "ideas": [
+    {"id": "a1b2c3d4e5f6", "title": "Break desk out of master", "note": "The picker, promos, the hand queue and the ledger.", "area": "ads", "status": "next", "created": 1759370000, "updated": 1759370000},
+    {"id": "b2c3d4e5f6a1", "title": "More tuners", "note": "More feed.json devices. Depends on the source registry.", "area": "tv-thing", "status": "idea", "created": 1759370100, "updated": 1759371100},
+    {"id": "c3d4e5f6a1b2", "title": "Crawl desk out of web", "note": "", "area": "vizelvision", "status": "idea", "created": 1759370200, "updated": 1759370200}
+  ]
+}

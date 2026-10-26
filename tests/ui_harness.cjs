@@ -33,6 +33,7 @@ function reads(F) {
     [/^\/v1\/admute$/, () => F.admute], [/^\/v1\/admute\/recordings$/, () => F.admute_recordings],
     [/^\/v1\/admute\/known$/, () => F.admute_known], [/^\/v1\/my-ads$/, () => F.my_ads], [/^\/v1\/my-ads\/mix$/, () => F.my_ads_mix],
     [/^\/v1\/captions$/, () => F.captions],
+    [/^\/v1\/ideas$/, () => F.ideas],
     [/^\/v1\/promos$/, () => F.promos],
     [/^\/v1\/continuity$/, () => F.continuity], [/^\/v1\/production$/, () => F.production], [/^\/v1\/production\/monitor$/, () => F.monitor],
     [/^\/v1\/sports\/week$/, () => F.nfl], [/^\/v1\/sports\/upcoming$/, () => F.mlb], [/^\/v1\/sports\/teams$/, () => F.teams_nhl],

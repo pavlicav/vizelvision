@@ -23,18 +23,28 @@
 .howto{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px}
 .howto a{display:grid;gap:6px;padding:14px;border:1px dashed var(--warn-line);border-radius:var(--r-lg);color:var(--ink);background:var(--panel)}
 .howto a:hover{text-decoration:none;border-style:solid}
+.idea-add{display:grid;grid-template-columns:minmax(0,1fr) 150px auto;gap:8px}
+.ideas{display:grid;gap:12px}
+.idea{display:grid;gap:6px;padding:10px 14px;border-top:1px solid var(--line)}
+.idea:first-child{border-top:0}
+.idea .top{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.idea input.title{flex:1 1 220px;min-width:0;background:none;border:1px solid transparent;font:500 14px/1.3 var(--body);color:var(--ink);padding:4px 6px;height:auto}
+.idea input.title:hover,.idea input.title:focus{border-color:var(--line-2)}
+.idea select{width:auto}
+.idea textarea{width:100%;min-height:2.6em;resize:vertical;font:13px/1.45 var(--body)}
 #monitor-image{width:100%;max-width:480px;height:auto;border-radius:var(--r);border:1px solid var(--line)}
-@media (max-width:900px){.explorer{grid-template-columns:1fr}.req{grid-template-columns:1fr}}
+@media (max-width:900px){.explorer{grid-template-columns:1fr}.req{grid-template-columns:1fr}.idea-add{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
 <header class="topbar" data-page="engineering"></header><script src="static/ui/vv.js"></script>
 <main class="page">
-  <div class="page-head"><div><h1>Engineering</h1><p>How everything is running, the viewer monitor, the source Roku, how the parts fit, and every endpoint by hand.</p></div></div>
+  <div class="page-head"><div><h1>Engineering</h1><p>How everything is running, the viewer monitor, the source Roku, how the parts fit, every endpoint by hand, and ideas for later.</p></div></div>
   <div class="tabs" role="tablist" aria-label="Engineering">
     <button type="button" role="tab" data-tab="health">Health</button><button type="button" role="tab" data-tab="monitor">Viewer monitor</button>
     <button type="button" role="tab" data-tab="roku">Roku</button><button type="button" role="tab" data-tab="how">How it works</button>
-    <button type="button" role="tab" data-tab="api">API explorer</button><button type="button" role="tab" data-tab="interface">Interface</button>
+    <button type="button" role="tab" data-tab="api">API explorer</button><button type="button" role="tab" data-tab="ideas">Ideas</button>
+    <button type="button" role="tab" data-tab="interface">Interface</button>
   </div>
 
   <div data-panel="health" class="stack">
@@ -92,6 +102,14 @@
         <label class="field" id="api-body-field" hidden><span>JSON body</span><textarea id="api-body" class="mono" rows="5" spellcheck="false">{}</textarea></label>
         <p class="note warn tiny" id="api-warn" hidden>POST and DELETE change the station. You will be asked to confirm.</p>
         <div id="api-out"><p class="hint">Pick an endpoint, or type a path. Responses are shown as JSON.</p></div></div></section>
+  </div>
+
+  <div data-panel="ideas" hidden class="stack">
+    <form id="idea-add" class="panel"><div class="head"><h2>Ideas board</h2><div class="end"><span class="tiny muted" id="idea-count"></span></div></div>
+      <div class="body stack tight"><p class="hint">Future improvements, kept for later. Dependencies go in the note.</p>
+        <div class="idea-add"><input id="idea-title" maxlength="120" placeholder="A future improvement" aria-label="New idea" autocomplete="off">
+          <select id="idea-area" aria-label="Area"></select><button class="primary" id="idea-save">Add idea</button></div></div></form>
+    <div class="ideas" id="ideas"><p class="hint">Loading ideas…</p></div>
   </div>
 
   <div data-panel="interface" hidden class="cols-2">

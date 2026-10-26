@@ -60,6 +60,7 @@ from .production_monitor import ProductionMonitor
 from . import playback
 from .continuity import Continuity, Voice
 from .station_watch import StationWatch
+from .ideas import IdeaStore
 from .favorites import Favorites, FavoritesPlanner
 from .sports_join import SportsJoin
 from .ident import ident_file
@@ -170,6 +171,7 @@ def handler_factory(
     my_ads = MyAds(config.master.socket_path)
     my_ads_mix = ad_mix.MixStore(config.master.socket_path)
     my_ads_seen = ad_mix.Exposure(my_ads.plays_path)       # every play of each ad, for the mix's numbers
+    ideas = IdeaStore(config.master.socket_path)           # Engineering › Ideas
     # Station promos (promos.py): the desk keeps their live values; without one (tests), a quiet one.
     promo_desk = promo_desk or PromoDesk(Promos(config.master.socket_path), master=master, start_worker=False)
 
@@ -1012,6 +1014,8 @@ def handler_factory(
                     if favorites is None:
                         raise ConfigError("Favorites need master control")
                     self._json(HTTPStatus.OK, favorites.view())
+                elif path == "/v1/ideas":
+                    self._json(HTTPStatus.OK, ideas.read())
                 elif path == "/v1/alerts":
                     # The station watch: what is stuck now, and whether alerts are pushed.
                     self._json(HTTPStatus.OK, station_watch.view() if station_watch
@@ -1172,6 +1176,14 @@ def handler_factory(
                     promo_desk.store.set_promo(path.rsplit('/', 1)[1], data)
                     promo_desk.poke()
                     self._json(HTTPStatus.OK, promos_view())
+                elif path == '/v1/ideas':
+                    added = ideas.add(data)['id']
+                    self._json(HTTPStatus.OK, {**ideas.read(), 'added': added})
+                elif path.startswith('/v1/ideas/'):
+                    if ideas.edit(path.rsplit('/', 1)[1], data) is None:
+                        self._json(HTTPStatus.NOT_FOUND, {"error": {"code": "not_found", "message": "Unknown idea"}})
+                    else:
+                        self._json(HTTPStatus.OK, ideas.read())
                 elif path == '/v1/my-ads':
                     my_ads_settings(data)
                     self._json(HTTPStatus.OK, my_ads_view())
@@ -1440,6 +1452,11 @@ def handler_factory(
                     if ad_id in my_ads_mix.read()['ads']:
                         my_ads_mix.change(lambda mix: mix['ads'].pop(ad_id, None))
                     self._json(HTTPStatus.OK, my_ads_view())
+                elif path.startswith('/v1/ideas/'):
+                    if ideas.remove(path.rsplit('/', 1)[1]) is None:
+                        self._json(HTTPStatus.NOT_FOUND, {"error": {"code": "not_found", "message": "Unknown idea"}})
+                    else:
+                        self._json(HTTPStatus.OK, ideas.read())
                 elif path == '/v1/my-ads/card-image':
                     my_ads.clear_card_image()
                     my_ads.card()

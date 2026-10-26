@@ -1,5 +1,5 @@
 // Engineering: health of every part, the viewer monitor, the Roku capture, the system map,
-// an API explorer, and this browser's interface settings.
+// an API explorer, the ideas board, and this browser's interface settings.
 (() => {
   'use strict';
   const {h, api, fmt, toast, label} = VV;
@@ -17,7 +17,7 @@
     VV.store.set('engTab', t.dataset.tab);
     if (location.hash !== '#' + t.dataset.tab) history.replaceState(null, '', '#' + t.dataset.tab);
     stops.splice(0).forEach(stop => stop());
-    ({health: startHealth, monitor: startMonitor, roku: startRoku, how: startMap, api: startApi, interface: startInterface}[t.dataset.tab] || (() => {}))();
+    ({health: startHealth, monitor: startMonitor, roku: startRoku, how: startMap, api: startApi, ideas: startIdeas, interface: startInterface}[t.dataset.tab] || (() => {}))();
   }
   tabs.forEach(t => { t.onclick = () => show(t.dataset.tab); });
 
@@ -188,6 +188,7 @@
     'Crawl': [['GET', 'v1/crawl', 'settings, worker status, rotation'], ['GET', 'v1/crawl/alerts', 'the register and the plan'], ['GET', 'v1/crawl/bus-routes', 'WMATA bus routes'], ['POST', 'v1/crawl/run', 'run a segment now', '{"segment": "scores"}']],
     'Presentation': [['GET', 'v1/production', 'off-air card settings'], ['GET', 'v1/continuity', 'announcers, roster, next break'], ['GET', 'v1/production/monitor', 'the viewer monitor']],
     'Roku (TV Thing)': [['GET', 'v1/roku/status', 'the source Roku, from TV Thing'], ['GET', 'v1/operation', 'its navigation'], ['POST', 'v1/operation/cancel', 'stop its navigation', '{}']],
+    'Ideas': [['GET', 'v1/ideas', 'the ideas board'], ['POST', 'v1/ideas', 'add an idea', '{"title": "", "area": "other"}']],
     'Legacy and service': [['GET', 'health', 'web service health'], ['GET', 'v1/jobs', 'legacy scheduler jobs']],
   };
   let built = false;
@@ -224,6 +225,48 @@
   }
   $('api-send').onclick = send;
   $('api-path').addEventListener('keydown', e => { if (e.key === 'Enter') send(); });
+
+  /* Ideas: grouped by status, edited in place (a status change moves the idea, so it redraws) ----------------------------------- */
+  const IDEA_GROUPS = [['doing', 'Doing'], ['next', 'Next'], ['idea', 'Ideas'], ['done', 'Done'], ['dropped', 'Dropped']];
+  async function startIdeas() {
+    try { drawIdeas(await api('v1/ideas')); } catch (e) { VV.fill($('ideas'), h('p', {class: 'note bad'}, e.message)); }
+  }
+  async function changeIdea(id, changes) {
+    try {
+      const view = await api('v1/ideas/' + id, changes);
+      if ('status' in changes) drawIdeas(view); else countIdeas(view);
+    } catch (e) { toast(e.message, {error: true}); startIdeas(); }
+  }
+  const countIdeas = view => { $('idea-count').textContent = view.ideas.length === 1 ? '1 idea' : view.ideas.length + ' ideas'; };
+  function drawIdeas(view) {
+    if (!$('idea-area').options.length) VV.fill($('idea-area'), view.areas.map(a => h('option', {value: a, selected: a === 'other'}, a)));
+    countIdeas(view);
+    const groups = IDEA_GROUPS.map(([status, name]) => [status, name, view.ideas.filter(i => i.status === status)]).filter(([, , list]) => list.length);
+    VV.fill($('ideas'), groups.length ? groups.map(([status, name, list]) => h('section', {class: 'panel', data: {status}},
+      h('div', {class: 'head'}, h('h2', name), h('div', {class: 'end'}, h('span', {class: 'tiny muted'}, list.length))),
+      h('div', {class: 'body flush'}, list.map(idea => ideaRow(idea, view))))) : h('p', {class: 'hint'}, 'No ideas yet. Add the first one above.'));
+  }
+  function ideaRow(idea, view) {
+    const choose = (field, values, label) => h('select', {'aria-label': label, onchange: e => changeIdea(idea.id, {[field]: e.target.value})},
+      values.map(v => h('option', {value: v, selected: v === idea[field]}, v)));
+    const title = h('input', {class: 'title', value: idea.title, maxlength: 120, 'aria-label': 'Title',
+      onchange: e => { if (e.target.value.trim()) changeIdea(idea.id, {title: e.target.value}); else e.target.value = idea.title; }});
+    const remove = async () => {
+      if (!await VV.confirm(idea.title, {title: 'Delete this idea?', ok: 'Delete', danger: true})) return;
+      try { drawIdeas(await api('v1/ideas/' + idea.id, undefined, {method: 'DELETE'})); } catch (e) { toast(e.message, {error: true}); }
+    };
+    return h('article', {class: 'idea', data: {id: idea.id}},
+      h('div', {class: 'top'}, title, choose('area', view.areas, 'Area'), choose('status', view.statuses, 'Status'),
+        h('button', {type: 'button', class: 'sm quiet', onclick: remove}, 'Delete')),
+      h('textarea', {rows: 2, placeholder: 'Notes, and what it depends on', 'aria-label': 'Note', onchange: e => changeIdea(idea.id, {note: e.target.value})}, idea.note),
+      h('span', {class: 'tiny muted'}, 'Added ' + fmt.day(idea.created) + (idea.updated > idea.created + 1 ? ' · changed ' + fmt.rel(idea.updated) : '')));
+  }
+  $('idea-add').onsubmit = async e => {
+    e.preventDefault();
+    const title = $('idea-title').value.trim();
+    if (!title) { $('idea-title').focus(); return; }
+    try { drawIdeas(await api('v1/ideas', {title, area: $('idea-area').value})); $('idea-title').value = ''; } catch (err) { toast(err.message, {error: true}); }
+  };
 
   /* Interface -------------------------------------------------------------------------------------------------------------------- */
   function startInterface() {
