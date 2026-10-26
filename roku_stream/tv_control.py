@@ -2,15 +2,32 @@
 from __future__ import annotations
 
 import json
+import logging
 import math
 import time
 import uuid
+from http.client import HTTPException
 from urllib.error import HTTPError, URLError
 from urllib.parse import unquote, urljoin, urlsplit
 from urllib.request import Request, urlopen
 
 from .errors import ConfigError
 from .master import MasterStreamError
+
+# How long a lease keeps playing its feed while TV Thing does not answer at all (its control
+# service restarting, say): the feed itself comes from TV Thing's separate media service and
+# keeps flowing. Under the 90 s locks, which are renewed every 30 s, so none can lapse meanwhile;
+# a feed that really stops is still caught by master's own stall ride-out (8 s, then recovery).
+OUTAGE_GRACE_SECONDS = 45
+# Meanwhile TV Thing is asked again every few seconds, briefly: these checks run on master's
+# own loop, and a hung TV Thing must not hold it for the usual timeout each time.
+OUTAGE_RETRY_SECONDS = 5
+OUTAGE_PROBE_SECONDS = 1
+
+
+class TvThingUnavailable(MasterStreamError):
+    """TV Thing did not answer: no connection, a timeout, or a 502/503/504 from its front door.
+    Not a refusal, so it says nothing about the feed, the lock or the selection."""
 
 
 def target_from(data):
@@ -38,7 +55,7 @@ class TvControl:
         self.config, self.opener = config, opener
         self.owner = "VizelVision master " + uuid.uuid4().hex[:12]
 
-    def request(self, path, body=None):
+    def request(self, path, body=None, *, timeout=None):
         if not self.config.enabled:
             raise MasterStreamError("TV-Thing is disabled in the worker configuration")
         request = Request(self.config.base_url + "api/v1/" + path,
@@ -48,8 +65,8 @@ class TvControl:
             # A retune can wait for the old encoder and hardware to stop, and
             # a Roku tune may first check that the Roku still plays (about 5 s);
             # ordinary status/lease calls retain the short control timeout.
-            timeout = 15 if path in ("tune", "roku/check", "roku/cancel") \
-                else min(4, self.config.request_timeout_seconds)
+            timeout = timeout or (15 if path in ("tune", "roku/check", "roku/cancel")
+                                  else min(4, self.config.request_timeout_seconds))
             with self.opener(request, timeout=timeout) as response:
                 raw = response.read(4 * 1024 * 1024 + 1)
             if len(raw) > 4 * 1024 * 1024:
@@ -73,8 +90,11 @@ class TvControl:
             message = ("TV-Thing tuner is reserved by another owner" if exc.code == 423
                        else f"TV-Thing refused {path}: {refusal['message']}" if isinstance(refusal.get("message"), str)
                        else f"TV-Thing rejected {path} (HTTP {exc.code})")
-            raise MasterStreamError(message, details=details) from exc
-        except (URLError, OSError, ValueError) as exc:
+            error = TvThingUnavailable if exc.code in (502, 503, 504) else MasterStreamError
+            raise error(message, details=details) from exc
+        except (URLError, OSError, HTTPException) as exc:
+            raise TvThingUnavailable(f"TV-Thing {path} failed ({type(exc).__name__}); no automatic tune retry") from exc
+        except ValueError as exc:
             raise MasterStreamError(f"TV-Thing {path} failed ({type(exc).__name__}); no automatic tune retry") from exc
 
     def acquire(self, target):
@@ -96,6 +116,9 @@ class Lease:
         self.token = None
         self.deadline = self.renew_at = 0.
         self.generation = None
+        self.url = None             # the last playback URL TV Thing confirmed
+        self.outage_since = None    # when TV Thing stopped answering this lease's checks
+        self.outage_error, self.retry_at = None, 0.
 
     def _lock(self, renew):
         body = {"lane": self.lane, "owner": self.owner, "duration_seconds": 90, "until": "duration"}
@@ -123,7 +146,9 @@ class Lease:
         # Never extend authority using a local wall-clock jump after acquisition.
         granted = min(90, expiry - wall_started)
         self.deadline = started + granted - 2
-        self.renew_at = started + granted / 2
+        # A third of the way in: an outage that starts just before a renewal still leaves
+        # 60 s of lock, more than OUTAGE_GRACE_SECONDS.
+        self.renew_at = started + granted / 3
         if self.deadline - time.monotonic() < 8:
             raise MasterStreamError("TV-Thing granted too little lease time")
 
@@ -167,8 +192,43 @@ class Lease:
             raise MasterStreamError("TV-Thing tuner ownership was lost")
 
     def check(self):
-        self.renew()
-        status = self.client.request("status")
+        """The feed's URL while TV Thing confirms it (None while it is not ready yet).
+
+        When TV Thing does not answer at all, the last confirmed URL stands for up to
+        OUTAGE_GRACE_SECONDS. Every answer it does give is checked as before: a lost lock,
+        a new generation or selection, or a failed input fails the lease at once."""
+        if self.outage_since is not None and time.monotonic() < self.retry_at:
+            return self._ride_out(self.outage_error, asked=False)
+        try:
+            if self.outage_since is not None:
+                self.client.request("status", timeout=OUTAGE_PROBE_SECONDS)   # back yet?
+            self.renew()
+            status = self.client.request("status")
+        except TvThingUnavailable as exc:
+            return self._ride_out(exc, asked=True)
+        if self.outage_since is not None:
+            logging.getLogger(__name__).warning("TV-Thing answers again after %.0f s; the %s lane's feed carried on",
+                                                time.monotonic() - self.outage_since, self.lane)
+            self.outage_since = None
+        self.url = self._confirmed(status)
+        return self.url
+
+    def _ride_out(self, exc, *, asked):
+        now = time.monotonic()
+        if self.url is None:
+            raise exc
+        if self.outage_since is None:
+            self.outage_since = now
+            logging.getLogger(__name__).warning("TV-Thing is not answering (%s); keeping the %s lane's feed for up to %d s",
+                                                exc, self.lane, OUTAGE_GRACE_SECONDS)
+        if asked:
+            self.outage_error, self.retry_at = exc, now + OUTAGE_RETRY_SECONDS
+        if now - self.outage_since >= OUTAGE_GRACE_SECONDS:
+            raise TvThingUnavailable(f"TV-Thing has not answered for {OUTAGE_GRACE_SECONDS} s ({exc})",
+                                     details=exc.details) from exc
+        return self.url
+
+    def _confirmed(self, status):
         self._check_owner(status)
         stream = self._verify(status.get("lanes", {}).get(self.lane) or {})
         if stream.get("state") == "failed":

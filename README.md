@@ -812,6 +812,13 @@ python3 -m roku_stream --config config.json calibrate-profile
 
 ## Operational notes
 
+- **When TV Thing stops answering:** a refused connection, a timeout, or a 502/503/504, as when its control
+  service restarts. Master's leases (`roku_stream/tv_control.py`) keep the feed they last confirmed on air
+  for up to 45 s. They probe TV Thing briefly (1 s) every 5 s and log once when the outage starts and
+  once when it ends. The 90 s locks are renewed every 30 s, so none lapses during that time. Any
+  answer TV Thing does give is checked as before: a lost lock, a new generation or selection, or a
+  failed input still fails the input at once. A feed that really stops is caught by master's own
+  8 s stall ride-out. After 45 s with no answer, the input fails and recovery takes over.
 - **Calibration:** open `/calibration` from the shared navigation (direct URL:
   `http://viviserv:6970/calibration`). It reads `/v1/roku/calibration` every 500 ms
   after each completed request, with no overlapping browser polls. Timing queries
