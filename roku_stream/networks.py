@@ -23,6 +23,8 @@ from .errors import ChannelNotFoundError, RokuStreamError
 
 # YouTube TV channel name -> the call sign of the Washington station carrying it on air.
 NETWORKS = {'NBC': 'WRC', 'FOX': 'WTTG', 'ABC': 'WJLA', 'CBS': 'WUSA', 'The CW': 'WDCW'}
+# Networks only the antenna has, not YouTube TV -> their virtual channel on it (TV Thing's networks.json).
+ANTENNA_ONLY = {'ION': '66.1'}
 ANTENNA_SOURCE = 'tv-thing-digital'
 
 
@@ -88,6 +90,22 @@ class Networks:
     def station_for(self, sign):
         """TV-Thing's antenna channel for a station's call sign (WTTG), or None."""
         return self._stations().get(call_sign(sign)) if sign else None
+
+    def antenna_only(self, network):
+        """TV-Thing's antenna channel for a network YouTube TV does not carry (ION):
+        {source_id, channel_id, number, name}, or None. Its digital catalog names ION "ION", not WPXW."""
+        number = ANTENNA_ONLY.get(str(network or '').strip().upper())
+        if number is None or self.tv is None or not self.tv.config.enabled:
+            return None
+        try:
+            items = self.tv.get('digital')['data']['items']
+        except (RokuStreamError, KeyError, TypeError):
+            return None
+        for item in items if isinstance(items, list) else []:
+            if isinstance(item, dict) and item.get('id') and isinstance(item['id'], str) and str(item.get('number')) == number:
+                return {'source_id': ANTENNA_SOURCE, 'channel_id': item['id'], 'number': number,
+                        'name': str(item.get('name') or network)}
+        return None
 
     def network_of(self, channel_id):
         """The YouTube TV channel carrying the same station as an antenna channel (WTTG's 5.1

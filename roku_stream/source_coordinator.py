@@ -13,7 +13,7 @@ from .errors import ConfigError, ControlBusyError, CueCancelledError
 from .sports import LEAGUES
 from .master import MasterStreamError
 from .master_worker import CUT_WAIT_MOST, MasterClient
-from .espn_unlimited import nhl_on_espn_unlimited
+from .espn_unlimited import SOURCE_IDS as ESPN_UNLIMITED_SOURCES, on_espn_unlimited
 from .roku_input import ROKU_SOURCE_IDS, roku_target
 from .scheduler import parse_time, utc_now
 from .tv_control import target_from
@@ -221,14 +221,15 @@ class SourceCoordinator:
                         from .prime_video import prime_nfl_game
                         if not prime_nfl_game(game):
                             raise ConfigError('This NFL game is not listed on Prime Video')
-            elif body['source_id'] == 'nhl':
+            elif body['source_id'] in ESPN_UNLIMITED_SOURCES:
                 body.setdefault('date', date.today().isoformat())
                 if resolve_game:
                     if self.sports is None:
                         raise ConfigError('Sports schedules are not configured')
-                    game = self.sports.game('nhl', int(body['channel_id']), body['date'])
-                    if nhl_on_espn_unlimited(game) is None:
-                        raise ConfigError('This NHL game is not on ESPN Unlimited; choose the channel carrying it')
+                    league = body['source_id']
+                    game = self.sports.game(league, int(body['channel_id']), body['date'])
+                    if on_espn_unlimited(game) is None:
+                        raise ConfigError(f'This {LEAGUES[league]} game is not on ESPN Unlimited; choose the channel carrying it')
             else:
                 body.setdefault('date', date.today().isoformat())
                 if resolve_game:

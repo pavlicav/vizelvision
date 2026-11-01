@@ -82,6 +82,20 @@ class NetworksTests(unittest.TestCase):
                        {'source_id': 'tv-thing-digital', 'channel_id': 'wrc_hd_4_1'}):
             self.assertIsNone(self.networks.antenna(target), target)
 
+    def test_a_network_only_the_antenna_has_is_found_by_its_virtual_channel(self):
+        ion = {'id': 'ion_66_1', 'number': '66.1', 'name': 'ION'}
+        tv = FakeTv(items=[*ITEMS, {'id': 'ionplus_66_5', 'number': '66.5', 'name': 'IONPlus'}, ion])
+        networks = Networks(SimpleNamespace(resolve_channel=resolve), tv)
+        station = {'source_id': 'tv-thing-digital', 'channel_id': 'ion_66_1', 'number': '66.1', 'name': 'ION'}
+        self.assertEqual(networks.antenna_only('ION'), station)
+        self.assertEqual(networks.antenna_only('Ion'), station)
+        for network in ('NBC', 'ESPN+', '', None):
+            self.assertIsNone(networks.antenna_only(network), network)
+        self.assertIsNone(self.networks.antenna_only('ION'), 'not in the digital catalog')
+        tv.error = SourceUnavailableError('TV-Thing digital request failed (URLError)')
+        self.assertIsNone(networks.antenna_only('ION'))
+        self.assertIsNone(Networks(SimpleNamespace(resolve_channel=resolve), FakeTv(items=[ion], enabled=False)).antenna_only('ION'))
+
     def test_mlb_game_follows_its_youtube_tv_channel(self):
         target = {'source_id': 'mlb', 'channel_id': '1', 'date': '2026-10-03'}
         fox = {'preferred_source': {'provider': 'youtube_tv', 'channel': 'FOX'}}

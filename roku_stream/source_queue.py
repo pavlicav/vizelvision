@@ -77,9 +77,9 @@ PREPARE_FAILED = 'source_prepare_failed'
 GAME_EXPIRY = timedelta(hours=12)
 # A Sunday Ticket row reads "Upcoming" until its feed goes live, which can be
 # minutes after the listed start, so it keeps trying longer than a channel. YouTube TV's
-# ESPN page lists an NHL game only once its stream is live; each walk of it is minutes
+# ESPN page lists a game only once its stream is live; each walk of it is minutes
 # of Roku, so fewer tries. A game blacked out where the Roku is is never retried.
-SLOW_START_ATTEMPTS = {'sunday-ticket': 10, 'nhl': 5}
+SLOW_START_ATTEMPTS = {'sunday-ticket': 10, 'nhl': 5, 'nwsl': 5}
 # A manual take held "until the game ends" gives master back after this at the latest.
 HOLD_LIMIT = timedelta(hours=12)
 HOLD_REASON = 'On air until its end time'

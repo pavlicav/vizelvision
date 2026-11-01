@@ -88,7 +88,7 @@
       const choices = providers.flatMap(provider => {
         const data = state.programs.get(provider.id);
         return (data?.channels || []).map(c => ({label: (c.number ? c.number + ' · ' : '') + c.name, provider: provider.name,
-          target: {source_id: provider.id, channel_id: String(c.id), ...(['mlb', 'sunday-ticket', 'thursday-night-football', 'nhl'].includes(provider.id) && data.date ? {date: data.date} : {})}}));
+          target: {source_id: provider.id, channel_id: String(c.id), ...(['mlb', 'sunday-ticket', 'thursday-night-football', 'nhl', 'nwsl'].includes(provider.id) && data.date ? {date: data.date} : {})}}));
       });
       const signature = JSON.stringify(choices);
       if (signature !== card.signature) {

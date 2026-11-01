@@ -1,4 +1,17 @@
-# NHL on ESPN Unlimited
+# NHL and NWSL on ESPN Unlimited
+
+**NWSL.** The source ID `nwsl` works as this page describes for `nhl`, with its target's
+channel ID the ESPN NWSL game ID. A game is on it when ESPN's scoreboard lists a national
+**ESPN+** or **ESPN Unlmtd** broadcast. Those are few: 9 of 2026's 240 listed ESPN+, 7 of
+them on the season's last day, and the rest are on ION, NWSL+, Victory+, Prime Video, CBSSN
+and others. CBSSN games air from YouTube TV's channel. An ION game of any league is suggested
+on the antenna's 66.1 (`networks.ANTENNA_ONLY`), since YouTube TV does not carry ION. NWSL+
+and Victory+ are not in TV Thing's lineup, and this source does not reach them. It expects one
+stream per game and no blackouts.
+**No NWSL card has been seen on YouTube TV's ESPN page yet.** TV Thing assumes a row named
+"NWSL" (or "Also Live") and captions like the NHL's, with or without a club's "FC".
+
+The rest of this page is about the NHL.
 
 The source ID is `nhl`. It airs the NHL games that ESPN Unlimited streams inside YouTube
 TV. That covers out-of-market games (NHL Power Play) and ESPN+ exclusives. YouTube TV's

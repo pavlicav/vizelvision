@@ -1513,6 +1513,7 @@ def serve(config: AppConfig) -> None:
     sources = SourceCatalog(config, baseball, sports=sports, library=library)
     # A network YouTube TV is not ready with in time comes from the antenna (networks.py).
     coordinator.networks = Networks(config, sources.tv)
+    sports.antenna_only = coordinator.networks.antenna_only
     # YouTube TV has Lansing's CBS and FOX: its listings say which regional NFL game is on (sports.py).
     sports.listings = lambda: sources.tv.get('guide')['data']['channels']
     if config.master.enabled:

@@ -274,10 +274,12 @@ class EspnScoreboard:
 class SportsCatalog:
     def __init__(self, config, baseball, *, scoreboard=None, listings=None, clock=time.monotonic):
         """listings() returns TV Thing's guide rows ({'source_id', 'channel_id', 'events'} each),
-        which hold YouTube TV's Lansing listings, or raises when TV Thing has none."""
+        which hold YouTube TV's Lansing listings, or raises when TV Thing has none.
+        antenna_only(network) is Networks.antenna_only: the station of a network only the antenna has."""
         self.config, self.baseball = config, baseball
         self.scoreboard = scoreboard or EspnScoreboard()
         self.listings, self.clock = listings, clock
+        self.antenna_only = None
         self._listed = (None, {})
 
     def _youtube_tv_listings(self):
@@ -375,16 +377,21 @@ class SportsCatalog:
         from .prime_video import prime_nfl_game
         prime = {'source_id': 'thursday-night-football', 'channel_id': str(game['game_id']),
                  'date': start.date().isoformat() if start else None} if prime_nfl_game(game) else None
-        # An NHL game ESPN Unlimited streams inside YouTube TV, found on its ESPN page (2026-10-22).
-        from .espn_unlimited import SOURCE_ID as NHL_SOURCE, note as espn_note, nhl_on_espn_unlimited
-        stream = nhl_on_espn_unlimited(game)
-        espn = {'source_id': NHL_SOURCE, 'channel_id': str(game['game_id']),
+        # A game ESPN Unlimited streams inside YouTube TV, found on its ESPN page (2026-10-22).
+        from .espn_unlimited import note as espn_note, on_espn_unlimited
+        stream = on_espn_unlimited(game)
+        espn = {'source_id': game['league'], 'channel_id': str(game['game_id']),
                 'date': start.date().isoformat() if start else None} if stream else None
+        # A network only the antenna has (ION), which tunes in seconds and leaves the Roku free.
+        station = next(filter(None, map(self.antenna_only, national)), None) if self.antenna_only and not channels else None
+        antenna = {'source_id': station['source_id'], 'channel_id': station['channel_id']} if station else None
         if prime:
             suggestion = prime
             note = 'Thursday Night Football on Prime Video. Sign in on the Roku if prompted.'
+        elif antenna:
+            suggestion, note = antenna, f"On {station['name']}, over the air on {station['number']}."
         elif espn and not channels:
-            suggestion, note = espn, espn_note(stream)
+            suggestion, note = espn, espn_note(stream, game['league'])
         elif regional and not lansing:
             suggestion = ticket
             note = ("Not on YouTube TV's Lansing CBS or FOX: NFL Sunday Ticket (found by reading the "
@@ -403,7 +410,7 @@ class SportsCatalog:
         return {**game, 'suggested_target': suggestion, 'channels': channels, 'note': note, 'markets': markets,
                 'prime_video_target': prime, 'on_sunday_ticket': on_ticket,
                 'sunday_ticket_target': ticket if on_ticket else None,
-                'espn_unlimited': stream, 'espn_unlimited_target': espn}
+                'espn_unlimited': stream, 'espn_unlimited_target': espn, 'antenna_target': antenna}
 
     def games(self, league, requested_date=None):
         league, day = self.league(league), _day(requested_date)
@@ -525,8 +532,8 @@ class SportsCatalog:
             found.append({'league': league, 'game_pk': game_id, 'game_date': day, 'title': title,
                           'status': status, 'live': live})
 
-        if source in ('mlb', 'sunday-ticket', 'thursday-night-football', 'nhl'):
-            league = {'mlb': 'mlb', 'nhl': 'nhl'}.get(source, 'nfl')
+        if source in ('mlb', 'sunday-ticket', 'thursday-night-football', 'nhl', 'nwsl'):
+            league = {'mlb': 'mlb', 'nhl': 'nhl', 'nwsl': 'nwsl'}.get(source, 'nfl')
             try:
                 game_id = int(target.get('channel_id'))
                 day = _day(target.get('date'))
@@ -538,7 +545,8 @@ class SportsCatalog:
                     str(status.get('state') or '').casefold() in ('live', 'in'))
             return found, warnings
         channel = self._channel(str(target.get('channel_id') or '')) if source == 'youtube-tv' else self._station(channel_name)
-        if channel is None:
+        only = self.antenna_only(channel_name) if self.antenna_only and channel is None and source != 'youtube-tv' else None
+        if channel is None and only is None:
             return [], []
         market = 'youtube_tv' if source == 'youtube-tv' else 'antenna'
         eastern = now.astimezone(_EASTERN)
@@ -562,8 +570,9 @@ class SportsCatalog:
                 for g in map(self._suggest, games):
                     # A regional Sunday game is only on its own market's station: Lansing's on
                     # YouTube TV, Washington's over the air.
-                    if (channel in g['channels'] and g['markets'][market]
-                            and (market == 'antenna' or (g['suggested_target'] or {}).get('source_id') == 'youtube-tv')
+                    if ((only and (g['antenna_target'] or {}).get('channel_id') == only['channel_id']
+                         or channel in g['channels'] and g['markets'][market]
+                         and (market == 'antenna' or (g['suggested_target'] or {}).get('source_id') == 'youtube-tv'))
                             and self._airing(g['state'] == 'in', g['finished'], g.get('start_time'), now)):
                         add(league, g['game_id'], day, g['title'], g['status'], g['state'] == 'in')
         return found, list(dict.fromkeys(warnings))

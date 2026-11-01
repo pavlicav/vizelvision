@@ -23,6 +23,7 @@ SOURCE_INFO = {
     "sunday-ticket": ("NFL Sunday Ticket", "roku:primary", "games"),
     "thursday-night-football": ("Thursday Night Football", "roku:primary", "games"),
     "nhl": ("NHL on ESPN Unlimited", "roku:primary", "games"),
+    "nwsl": ("NWSL on ESPN Unlimited", "roku:primary", "games"),
     "library": ("Media Library", "library:files", "library"),
 }
 
@@ -139,7 +140,7 @@ class SourceCatalog:
             return self._youtube_tv()
         if source_id == "mlb":
             return self._baseball(requested_date)
-        if source_id in ("sunday-ticket", "thursday-night-football", "nhl"):
+        if source_id in ("sunday-ticket", "thursday-night-football", "nhl", "nwsl"):
             return self._espn_games(source_id, requested_date)
         if source_id == "library":
             if not self.library or not self.library.config.enabled:
@@ -266,10 +267,10 @@ class SourceCatalog:
 
     def _espn_games(self, source_id: str, requested_date: str | None) -> dict:
         """The day's games a Roku game source carries, by ESPN game id: NFL games, found in
-        YouTube TV's guide or Prime Video by their title; NHL games, on YouTube TV's ESPN page."""
+        YouTube TV's guide or Prime Video by their title; NHL and NWSL games, on YouTube TV's ESPN page."""
         if self.sports is None:
             raise SourceUnavailableError("Sports schedules are not configured")
-        league = "nhl" if source_id == "nhl" else "nfl"
+        league = source_id if source_id in ("nhl", "nwsl") else "nfl"
         catalog = self.sports.games(league, requested_date)
         channels = []
         for game in catalog["games"]:
@@ -277,7 +278,7 @@ class SourceCatalog:
                 continue
             if source_id == 'sunday-ticket' and game.get('on_sunday_ticket') is False:
                 continue  # a national exclusive: Sunday Ticket does not carry it
-            if source_id == 'nhl' and not game.get('espn_unlimited_target'):
+            if league == source_id and not game.get('espn_unlimited_target'):
                 continue  # on ESPN, ABC, TNT or NHL Network: on that channel instead
             try:
                 start = datetime.fromisoformat(str(game["start_time"]).replace("Z", "+00:00")).timestamp()
@@ -287,7 +288,7 @@ class SourceCatalog:
             program = {"id": f"{league}:{game['game_id']}", "title": game["title"], "start": start, "end": None,
                        "end_kind": "game_status", "state": state, "status": game["status"],
                        "networks": game["channels"], "note": game["note"]}
-            if source_id == "nhl":
+            if league == source_id:
                 program["espn_unlimited"] = game["espn_unlimited"]
             channels.append({"id": str(game["game_id"]), "name": game["title"], "number": None,
                              "now": program if state == "live" else None,
