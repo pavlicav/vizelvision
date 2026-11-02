@@ -8,8 +8,14 @@ and others. CBSSN games air from YouTube TV's channel. An ION game of any league
 on the antenna's 66.1 (`networks.ANTENNA_ONLY`), since YouTube TV does not carry ION. NWSL+
 and Victory+ are not in TV Thing's lineup, and this source does not reach them. It expects one
 stream per game and no blackouts.
-**No NWSL card has been seen on YouTube TV's ESPN page yet.** TV Thing assumes a row named
-"NWSL" (or "Also Live") and captions like the NHL's, with or without a club's "FC".
+
+On YouTube TV's ESPN page (read on 2026-11-01, the season's last day) its row is **National
+Women's Soccer League**, one card a game, captioned home team first and some clubs without
+their "FC": *ESPN+ Washington Spirit vs. Chicago Stars*. A game near its end can move to
+**Also Live**, which TV Thing also walks. A card goes when its listed slot ends (5:00-7:15 PM
+that day), minutes after the final whistle. A real stream was played from the page by hand;
+TV Thing's automatic tune read the page and refused finished games correctly, but has not yet
+pressed Select on an NWSL card.
 
 The rest of this page is about the NHL.
 
