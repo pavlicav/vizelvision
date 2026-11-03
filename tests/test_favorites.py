@@ -9,7 +9,7 @@ from unittest.mock import Mock
 
 from roku_stream import crawl_feeds
 from roku_stream.errors import ConfigError
-from roku_stream.favorites import Favorites, FavoritesPlanner, matches
+from roku_stream.favorites import Favorites, FavoritesPlanner, favorite_side, matches
 from roku_stream.programming import SCHEDULE, Programming, show_rank
 from roku_stream.scheduler import parse_time
 from roku_stream.source_queue import SourceQueue
@@ -32,6 +32,21 @@ def espn(game_id, away, home, start, *, target=ESPN, state='pre', postseason=Fal
             'finished': state == 'post', 'postseason': postseason,
             'away': {'id': away.split()[-1]}, 'home': {'id': home.split()[-1]},
             'broadcasts': [{'name': n, 'market': 'national'} for n in networks], 'suggested_target': target}
+
+
+class FavoriteSideTests(unittest.TestCase):
+    GAME = {'away': {'id': '5'}, 'home': {'id': 26}}
+
+    def test_the_side_of_the_better_ranked_favorite(self):
+        self.assertEqual(favorite_side('nhl', self.GAME, ['nhl:5']), 'away')
+        self.assertEqual(favorite_side('nhl', self.GAME, ['nhl:26']), 'home')
+        self.assertEqual(favorite_side('nhl', self.GAME, ['nhl:26', 'nhl:5']), 'home')
+        self.assertEqual(favorite_side('nhl', self.GAME, ['nhl:5', 'nhl:26']), 'away')
+
+    def test_neither_a_favorite(self):
+        self.assertIsNone(favorite_side('nhl', self.GAME, []))
+        self.assertIsNone(favorite_side('nhl', self.GAME, ['nhl:9', 'nhl:playoffs', 'nfl:5']))
+        self.assertIsNone(favorite_side('nhl', {}, ['nhl:9']))
 
 
 class FakeSports:

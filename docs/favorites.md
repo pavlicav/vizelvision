@@ -46,6 +46,12 @@ one that outranks it.
 ESPN lists Peacock exclusives as Peacock. YouTube TV carries them on NBC Sports Network,
 so Peacock maps there (`sports.NETWORK_ALIASES`, `baseball._YTTV_NETWORKS`).
 
+## Which stream
+
+An ESPN Unlimited NHL game has two streams, one per team's regional broadcast. A favorite's
+game airs that team's: the better-ranked favorite's if both teams are on the list. See
+[NHL and NWSL on ESPN Unlimited](nhl.md).
+
 ## API
 
 - `GET /v1/favorites`: `{favorites, air, games, checked_at, errors, days, check_minutes}`.

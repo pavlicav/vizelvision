@@ -82,7 +82,9 @@ The coordinator first resolves the game. The ESPN scoreboard must list it on tha
 with an ESPN+ broadcast. If it does not, the error is *This NHL game is not on ESPN
 Unlimited; choose the channel carrying it*, and the Roku is not moved. Then the
 coordinator posts `POST api/v1/tune {"source": "nhl", "channel_id", "date", "token"}` to
-TV Thing, under the Roku lane's lock, and follows the navigation.
+TV Thing, under the Roku lane's lock, and follows the navigation. If one of the game's teams
+is on **Favorites**, it adds `"feed": "home"` or `"away"`, the side of the better-ranked
+favorite: the Red Wings at the Panthers airs Detroit's broadcast, not Florida's.
 
 TV Thing then does the following:
 
@@ -90,8 +92,8 @@ TV Thing then does the following:
 2. It moves down the rows, one per sport, to the NHL row.
 3. It reads the cards across the row to find the game. A game has two adjacent streams,
    away then home; an exclusive has one.
-4. It prefers the home stream, unless a crossed-out eye on the card shows that stream is
-   blacked out.
+4. It takes the stream asked for (the home stream if none was), unless a crossed-out eye on
+   the card shows that stream is blacked out: then it takes the other.
 5. It verifies that the game plays.
 
 A cue takes 3–4 minutes. A queued game prepares up to 5 minutes before its release, as
@@ -124,6 +126,9 @@ TV Thing's reasons reach the entry in Up next (Play now goes through Up next too
 
 ## Limits
 
+- **The stream is chosen when the Roku navigates.** A tune that finds the game already
+  playing, or a favorite added once it is on air, moves nothing; a recovery that navigates
+  asks again.
 - **No antenna backup.** ESPN Unlimited is on no antenna station, so a cue that is late
   waits for the Roku. Feed recovery puts it back on from the same source, unless the
   antenna's guide happens to name the game.

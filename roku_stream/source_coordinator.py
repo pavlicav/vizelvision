@@ -14,6 +14,7 @@ from .sports import LEAGUES
 from .master import MasterStreamError
 from .master_worker import CUT_WAIT_MOST, MasterClient
 from .espn_unlimited import SOURCE_IDS as ESPN_UNLIMITED_SOURCES, on_espn_unlimited
+from .favorites import favorite_side
 from .roku_input import ROKU_SOURCE_IDS, roku_target
 from .scheduler import parse_time, utc_now
 from .tv_control import target_from
@@ -98,6 +99,7 @@ class SourceCoordinator:
         self.queue = None
         self.programs = None  # QueuePrograms; a take can end with its listed program.
         self.sports = None  # SportsCatalog; resolves NFL games for Roku providers.
+        self.favorites = lambda: []  # The ranked favorites, read live (favorites.Favorites.order).
         self.library = None  # MediaLibrary; validates library file targets.
         self.networks = None  # Networks; the antenna's station for a network YouTube TV is late with.
         self.joiner = None  # SportsJoin; the "We now join..." bumper before a game joined in progress.
@@ -377,12 +379,26 @@ class SourceCoordinator:
         with self.state_lock:
             self.navigating = True
         try:
-            prepared = self.roku.prepare(target, force=self.force, resume=False, stop=self._stop_reason)
+            prepared = self.roku.prepare(target, force=self.force, resume=False, stop=self._stop_reason,
+                                         feed=self._espn_feed(target, game))
         finally:
             with self.state_lock:
                 self.navigating = False
         self._check_cancel()
         return self._handoff(target, prepared)
+
+    def _espn_feed(self, target, game):
+        """Which stream of an ESPN Unlimited game to ask for: the favorite team's. None leaves it
+        to TV Thing (the home stream), and TV Thing takes the other when that one is blacked out."""
+        league = target['source_id']
+        if league not in ESPN_UNLIMITED_SOURCES:
+            return None
+        try:
+            game = game or self.sports.game(league, int(target['channel_id']), target.get('date'))
+            return favorite_side(league, game, self.favorites())
+        except Exception:  # The game still airs, on whichever stream.
+            logging.getLogger(__name__).exception('Cannot tell the favorite in %s', target.get('channel_id'))
+            return None
 
     def _reuse_roku(self, target):
         """The Roku already shows target, verified recently: what the worker has of it, or the

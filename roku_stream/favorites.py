@@ -68,6 +68,13 @@ def matches(league, game, team_ids):
     return found
 
 
+def favorite_side(league, game, order):
+    """The side of a game ('home' or 'away') its better-ranked favorite team is on; None when
+    neither is a favorite. order: the favorites, best first."""
+    sides = {f"{league}:{(game.get(side) or {}).get('id')}": side for side in ('away', 'home')}
+    return next((sides[favorite] for favorite in order if favorite in sides), None)
+
+
 class Favorites:
     """The ranked list, whether favorites go on air, and the games the planner scheduled."""
 

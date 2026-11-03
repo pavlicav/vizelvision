@@ -126,7 +126,8 @@ class FakeTvRoku:
     def _handoff(self):
         return {'generation': self.generation(), 'resolved_source': {'provider': 'youtube_tv'}}
 
-    def prepare(self, target, *, force=False, navigate=True, resume=True, stop=lambda: None):
+    def prepare(self, target, *, force=False, navigate=True, resume=True, stop=lambda: None, feed=None):
+        self.feed = feed
         if self.locked_by:
             raise ControlBusyError(f'The Roku is locked by {self.locked_by} in TV-Thing')
         if not force and self._same(target) and self._reusable():
@@ -242,6 +243,43 @@ class CoordinatorTests(unittest.TestCase):
         self.coordinator.sports.game.return_value = ON_TNT
         self.coordinator.request('prepare', {**target, 'force': True})
         self.assertIn('not on ESPN Unlimited', self.finish()['operation']['error'])
+
+    def nhl_feed(self, favorites):
+        """The stream asked for of an NHL game, Red Wings (id 5) at Panthers (id 26)."""
+        from tests.test_espn_unlimited import GAME
+        self.coordinator.sports = Mock()
+        self.coordinator.sports.game.return_value = {**GAME, 'away': {'id': '5'}, 'home': {'id': '26'}}
+        self.coordinator.favorites = lambda: favorites
+        self.result['verification'] = {'player_state': 'play', 'selected_game_card': {'matched': True},
+                                       'playback_evidence': 'roku_player_play_after_verified_selection'}
+        self.coordinator.request('prepare', {'source_id': 'nhl', 'channel_id': str(GAME['game_id']),
+                                             'date': '2026-10-22', 'force': True})
+        self.assertEqual(self.finish()['operation']['state'], 'succeeded')
+        return self.roku.feed
+
+    def test_an_espn_game_is_on_its_favorites_stream(self):
+        self.assertEqual(self.nhl_feed(['nhl:5']), 'away')
+        self.assertEqual(self.nhl_feed(['nhl:26']), 'home')
+        self.assertEqual(self.nhl_feed(['nhl:26', 'nhl:5']), 'home', 'the better ranked of two favorites')
+        self.assertIsNone(self.nhl_feed(['nfl:5', 'nhl:playoffs']), "another league's team 5 is no favorite here")
+
+    def test_a_channel_asks_for_no_stream(self):
+        self.coordinator.favorites = Mock(side_effect=AssertionError('only ESPN Unlimited games have two'))
+        self.coordinator.request('prepare', {'source_id': 'youtube-tv', 'channel_id': 'NBC'})
+        self.assertEqual(self.finish()['operation']['state'], 'succeeded')
+        self.assertIsNone(self.roku.feed)
+
+    def test_unreadable_favorites_still_air_the_game(self):
+        from tests.test_espn_unlimited import GAME
+        self.coordinator.sports = Mock()
+        self.coordinator.sports.game.return_value = GAME
+        self.coordinator.favorites = Mock(side_effect=OSError('no'))
+        self.result['verification'] = {'player_state': 'play', 'selected_game_card': {'matched': True},
+                                       'playback_evidence': 'roku_player_play_after_verified_selection'}
+        with self.assertLogs('roku_stream.source_coordinator', 'ERROR'):
+            self.coordinator.request('prepare', {'source_id': 'nhl', 'channel_id': str(GAME['game_id']), 'date': '2026-10-22'})
+            self.assertEqual(self.finish()['operation']['state'], 'succeeded')
+        self.assertIsNone(self.roku.feed)
 
     def test_a_blacked_out_game_is_not_left_to_the_queue_to_retry(self):
         from tests.test_espn_unlimited import POWER_PLAY
@@ -744,6 +782,19 @@ class TvRokuTests(unittest.TestCase):
         self.token_path = Path(self.directory.name) / 'roku-lock.json'
         self.hold = RokuHold(self.control, self.token_path)
         self.roku = TvRoku(self.control, self.hold, sleep=lambda _: None)
+
+    def tune_body(self, **kwargs):
+        target = {'source_id': 'nhl', 'channel_id': '1', 'date': '2026-11-02'}
+        self.control.lane['selection'] = dict(target)
+        self.control.tune_response = lambda body: {'ok': True, 'reused': True}
+        self.roku.prepare(target, **kwargs)
+        return next(body for path, body in self.control.calls if path == 'tune')
+
+    def test_prepare_sends_the_stream_asked_for(self):
+        self.assertEqual(self.tune_body(feed='away')['feed'], 'away')
+
+    def test_prepare_leaves_the_stream_to_tv_thing_otherwise(self):
+        self.assertNotIn('feed', self.tune_body())
 
     def navigation(self, polls_until_done=2, state='succeeded'):
         operation = {'id': 'op1', 'state': 'running', 'active': True, 'message': 'Finding NBC'}

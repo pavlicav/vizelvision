@@ -1547,6 +1547,7 @@ def serve(config: AppConfig) -> None:
         favorite_list = Favorites(config.state_file.with_name('favorites.json'),
                                   seed=lambda: CrawlSettings(config.master).read()['teams'])
         programming.favorites = favorite_list.order
+        coordinator.favorites = favorite_list.order
         planner = FavoritesPlanner(favorite_list, programming, sports)
     else:
         programming = station_watch = planner = None

@@ -249,9 +249,10 @@ class TvRoku:
                 "The Roku's capture restarted or its verification is old; it is checked again first"}
 
     # -- preparing ----------------------------------------------------------
-    def prepare(self, target, *, force=False, navigate=True, resume=True, stop=lambda: None):
+    def prepare(self, target, *, force=False, navigate=True, resume=True, stop=lambda: None, feed=None):
         """Put target on the Roku under our lock. Returns the worker's handoff:
-        {"generation", "resolved_source"}.
+        {"generation", "resolved_source"}. ``feed``: which of an ESPN Unlimited game's
+        streams to look for ('home' or 'away'), else TV Thing's choice.
 
         ``stop()`` returns a reason to give up ("cancelled", "late") or None; a
         navigation is then stopped on TV Thing and CueCancelledError raised. A
@@ -262,6 +263,8 @@ class TvRoku:
                 "force": bool(force), "navigate": bool(navigate), "resume": bool(resume)}
         if target.get("date"):
             body["date"] = target["date"]
+        if feed:
+            body["feed"] = feed
         try:
             response = self.control.request("tune", body)
         except MasterStreamError as exc:
