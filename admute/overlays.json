@@ -186,6 +186,33 @@
     ],
     "learnt_from": "Detroit Lions at Carolina Panthers 10-04 (ad training) - 4.1 WRC-HD - 2026-10-04 2015.mp4"
    }
+  },
+  {
+   "id": "espn-commercial-break",
+   "name": "ESPN commercial break slate",
+   "kind": "ad",
+   "box": [
+    66,
+    186,
+    158,
+    220
+   ],
+   "space": "pic",
+   "on": "AAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAACABIAAAACAAAAAAA9//////8///vAAA////////////wAAP///////////8AAD+92D/3/3/+/vAAA//Jg/7v9///bwAAP/4YP+/7f//28AAD+0er/P+3/3/7AAA/tH6//7N+9v2wAAP7x+/7/vf+f9cAAD+8f/+363/v/zAAA/tH//969/z7uwAAP/V///+f/8e68AAD78f7/+n//H+vAAA/vX+9555u3/rwAAPe1/vtG/b9/88AAD///////+////AAAf//////fP+//wAADnf8/vu78f/vYAAAAB//v/////AAAAAAAfd7//+//gAAAAAAH/+vv/o/4AAAAAAA//r5z6/2AAAAAAAP/+/d+rfgAAAAAAD/f+//v94AAAAAAA/////7/+AAAAAAAH////9//gAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+   "off": "//+///////////////H/////////////377f////3//////4IAAAAAAIAABD//8AAAAAAAAAAAAf/+AAAAAAAAAAAAH//gAAAAAAAAAAAB//4AAAAAAAAAAAAf/+AAAOAAAAAAAAH//gAABAAAAAAAAB//4ABAAAAAAAAAAf/+AAQAAAAAAAAAH//gAEAAAAAAAAAB//4ABAAAAAAAAAAf/+AAAAAAAAAAAAH//gAAAAAAAABAAB//4AAAAAAAAAAAAf/+AAAAAAAAAAAAH//gAAAAAAAAAAAB//4AAAAAAAAAAAAf//AAAAAAAAAAAAH//4AAAAAAAAAAAD///GIAAAAAAAAEJ/////AAAAAAAAP//////wAAAAAAAD//////+AAAAAAAA///////gAAAAAAAP//////4AAAAAAAD//////+AAAAAAAA///////wAAAAAAAP//////+AAAAAgAH/////////////////////////////////////////////////w==",
+   "thresh": 0.494,
+   "sure": true,
+   "origin": "catalogue",
+   "status": "active",
+   "channels": [
+    "nhl",
+    "nwsl"
+   ],
+   "strikes": 0,
+   "note": "",
+   "stats": {
+    "learnt_from": "426 page pictures"
+   }
   }
  ],
  "note": "Overlays (admute/overlays.py). Edge templates learnt with `python -m admute.overlays learn` from the labelled tapes (NBC/FOX MLB) or unlabelled (NBC SNF: pending until seen against breaks live); yttv-sponsored drawn with `... frames` from the page's pictures of TBS on YouTube TV, 2026-10-05."

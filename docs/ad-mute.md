@@ -209,10 +209,12 @@ they are specific, need no 15 minutes to learn, and are remembered per channel.
 | a **score bug** | NBC's and TBS's MLB top left, FOX's bottom right, NBC's SNF bottom centre | `ov_score` −4 (the programme) | no mute starts under one |
 | a **network or station logo** | FOX's bug, NBC's SNF bug, top right | `ov_logo` −1.5 | — |
 | **YouTube TV's ad label** | the "Sponsored" pill top left, over the ads it inserts | `ov_ad` +6 (an ad) | a mute starts at once (no seam), and holds while it is up |
+| **a slate** (`sure`) | ESPN+'s full-screen "Commercial Break — We'll be right back" | `ov_ad` +30 (an ad, whatever else says) | as the ad label; no score bug cancels it, and it settles as ad |
 
 Absence says nothing: replays and crowd shots drop the score bug. So a break is called
 once the programme's graphics have gone. An ad label up with a trusted score bug is not
-counted (the score bug wins).
+counted (the score bug wins), except a slate: it fills the screen, so anything on it that
+looks like a score bug is part of it.
 
 - **Templates:** in a box, the pixels that are edges while the graphic is up and the
   pixels by them that are flat. It is up when the first are edges and the second are not,
@@ -248,7 +250,8 @@ counted (the score bug wins).
   - Any programme overlay seen up during clear ads (a known ad's sound, or "It's an
     ad") stops counting for the session; an ad label seen up during clear programme
     (known show sound, or "It's the show") likewise. After two such sessions it is
-    rejected for good.
+    rejected for good. For a slate only "It's the show" counts, not the sound: on
+    2026-11-02 its music had been known show sound since 10/28, -8 against every slate.
   - A programme's graphic counts at once only on its home channels: where it was learnt,
     or the catalogue's (a call sign matches as a word of the channel id: WTTG is
     `wttg_dt_5_1` over the antenna). Anywhere else it starts out checking and counts
@@ -725,7 +728,10 @@ node tests/browser_ui_ads.cjs <playwright>                                      
   a redesigned score bug is simply not found until it is learnt again.
 - **The ad label template is YouTube TV's of 10/5,** drawn from TBS. If YouTube TV
   redraws its player, it stops matching (and nothing is muted for it): draw it again
-  with `admute.overlays frames`.
+  with `admute.overlays frames`. **The slate's is ESPN's of 11/2,** from a Red Wings game on
+  Florida's stream: 16 of 16 slates there, Detroit's stream too, and nothing else on 6,700
+  pictures of the game or 2,000 of the NFL. Scores 0.84 live against its 0.49 threshold;
+  everything else 0.23 at most. Draw it again the same way, with `--sure`.
 
 - **Programme boundaries on one channel.** When two shows run back to back, the next
   show's opening can look like an ad until the memory catches up. The cap, a quick fix

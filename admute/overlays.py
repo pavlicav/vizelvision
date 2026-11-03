@@ -48,6 +48,14 @@ an ad" -- stops counting for the session; after STRIKES such sessions, for good.
 an ad label seen up during clear programme -- known show sound, or "it's the show" -- stops
 counting.
 
+A slate (``sure``) is an ad label that says it outright: ESPN+ fills the screen with
+"Commercial Break -- We'll be right back" over a stream's stoppages (16 of them, 29 of 107
+minutes, in a Red Wings game on 2026-11-02). Until then the detector called them programme,
+learnt their music as show sound and could never come round: known show sound argued -8 for
+every slate after the first. So a slate decides. Its evidence outweighs everything else (the
+seconds settle as ad, its music is not learnt as the programme's), a score bug does not cancel
+it, and only the operator's "it's the show" takes its trust away, not the sound.
+
 A programme's graphic is that channel's. Each overlay has a ``home``: the channels it has
 proved itself on (learnt there, or the catalogue's). Elsewhere it starts out checking, and
 counts only once it passes the same test as a new one on this channel; failing it there
@@ -119,6 +127,7 @@ LIVE_PER_CHANNEL = 8      # live overlays kept per channel (the least recently s
 REJECTED_PER_CHANNEL = 20  # rejected places remembered per channel (so they are not proposed again)
 KINDS = ("score", "network", "channel", "logo", "ad")
 FEATURES = ("ov_score", "ov_logo", "ov_ad")
+SLATE = 5.0               # a slate's ov_ad, in labels: +30 at ov_ad's +6, past the -13 of a slate's learnt music
 CATALOGUE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "overlays.json")
 
 _BORDER = np.zeros((H, W), bool)
@@ -185,6 +194,7 @@ class Overlay:
     channels: list = field(default_factory=list)   # where it has been watched
     strikes: int = 0              # sessions it was seen up where it should not be
     home: list = field(default_factory=list)       # where it counts at once (proved itself); none: everywhere
+    sure: bool = False            # a slate: an ad label that decides on its own (see above)
     note: str = ""
     stats: dict = field(default_factory=dict)
 
@@ -234,6 +244,7 @@ class Overlay:
         return {"id": self.id, "name": self.name, "kind": self.kind, "box": list(self.box), "space": self.space,
                 "on": _pack(self.on), "off": _pack(self.off), "thresh": round(float(self.thresh), 3),
                 **({"strong": round(float(self.strong), 3)} if self.strong is not None else {}),
+                **({"sure": True} if self.sure else {}),
                 "origin": self.origin, "status": self.status, "channels": list(self.channels),
                 **({"home": list(self.home)} if self.home else {}),
                 "strikes": self.strikes, "note": self.note, "stats": self.stats}
@@ -247,7 +258,7 @@ class Overlay:
                    strong=float(d["strong"]) if d.get("strong") is not None else None, space=d.get("space", "edge"), origin=d.get("origin", "catalogue"),
                    status=d.get("status", "active"), channels=list(d.get("channels") or []),
                    strikes=int(d.get("strikes", 0)), note=d.get("note", ""), stats=dict(d.get("stats") or {}),
-                   home=list(d.get("home") or _home_of(d)))
+                   home=list(d.get("home") or _home_of(d)), sure=bool(d.get("sure")))
 
 
 def _slug(channel: str) -> str:
@@ -625,16 +636,21 @@ class Tracker:
         programme score bug is not counted (the score bug wins: the sound stays). With no game
         on, a "score bug" is a station graphic (live overlays are called score bugs by size):
         it counts as a logo, and bars no mute. On 2026-10-08 a WJLA one, learnt from the noon
-        news, matched a Zepbound ad's fine print on The View and held 11 s of it audible."""
+        news, matched a Zepbound ad's fine print on The View and held 11 s of it audible.
+        A slate fills the screen: whatever looks like a score bug on it is not one."""
         out = {}
         for oid in sorted(self.trusted):
             ov = self.watch[oid]
             kind = "logo" if ov.kind == "score" and not self.game else ov.kind
             if oid not in self.distrusted and kind not in out and self.up_in(oid, s):
                 out[kind] = ov.name
-        if "score" in out:
+        if "score" in out and not self.slate_up(s):
             out.pop("ad", None)
         return out
+
+    def slate_up(self, s: int) -> bool:
+        """A trusted slate is up in second s."""
+        return any(self.watch[oid].sure and oid not in self.distrusted and self.up_in(oid, s) for oid in self.trusted)
 
     def score_here(self) -> bool:
         """A trusted score bug has been up in a tenth of this programme's settled seconds:
@@ -650,6 +666,8 @@ class Tracker:
         out = {name: math.nan for name in FEATURES}
         for kind in self._showing(s):
             out[feature_for(kind)] = 1.0
+        if self.slate_up(s):
+            out["ov_ad"] = SLATE
         return out
 
     def showing(self, s: int, kind: str | None = None) -> str | None:
@@ -663,7 +681,8 @@ class Tracker:
         ``clear_show``: it is that by evidence that never looks at the picture (a known
         ad's sound, known show sound). ``cut``: a hard cut in it."""
         clear_ad = clear_ad or any(a <= s + 0.5 < b for a, b in self.clear["ad"])
-        clear_show = clear_show or any(a <= s + 0.5 < b for a, b in self.clear["show"])
+        said_show = any(a <= s + 0.5 < b for a, b in self.clear["show"])
+        clear_show = clear_show or said_show
         first = self.maps[0][0] if self.maps else 0
         maps = {i: self.maps[i - first][1] for i in (2 * s, 2 * s + 1) if 0 <= i - first < len(self.maps)}
         for oid, ov in self.watch.items():
@@ -677,7 +696,7 @@ class Tracker:
                     k = c["show" if label == 0 else "ad"]
                     k[0] += 1
                     k[1] += up
-                if clear_ad if ov.side == "show" else clear_show:
+                if clear_ad if ov.side == "show" else said_show if ov.sure else clear_show:
                     c["clear"][0] += 1
                     c["clear"][1] += up
             if cut and label == 0:          # across the programme's cuts: before it, after it
@@ -893,6 +912,7 @@ def main(argv=None):
     p.add_argument("--kind", choices=KINDS, required=True)
     p.add_argument("--channel", action="append", default=[])
     p.add_argument("--strong", type=float, help="the clear level (hysteresis), above the programme's best score there")
+    p.add_argument("--sure", action="store_true", help="a slate: an ad label that decides on its own")
     p.add_argument("--check", action="append", default=[], help="folders of pictures to look for it in (repeat)")
     p.add_argument("--write", action="store_true")
     p = sub.add_parser("check", help="up rates of the catalogue's edge overlays in a labelled recording")
@@ -952,6 +972,7 @@ def main(argv=None):
         if ov is None:
             sys.exit("no clear graphic in that box")
         ov.id, ov.name, ov.channels, ov.strong = args.id, args.name, list(args.channel), args.strong
+        ov.sure = args.sure
         ov.stats = {"learnt_from": f"{len(pics)} page pictures"}
         print(f"{ov.id}: box {ov.box} on {int(ov.on.sum())} off {int(ov.off.sum())} thresh {ov.thresh:.2f}"
               + (f" strong {ov.strong:.2f}" if ov.strong else ""))

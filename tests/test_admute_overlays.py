@@ -419,6 +419,56 @@ class AdLabelTests(unittest.TestCase):
             tr.settle(s, 0)
         self.assertIn("pill", tr.distrusted)
 
+    def test_known_show_sound_takes_a_labels_trust_away(self):
+        tr = OV.Tracker(self.lib)
+        for s in range(30):
+            tr.see_pic(self.pic(0.9))
+        for s in range(1, 29):
+            tr.settle(s, 0, clear_show=True)
+        self.assertIn("pill", tr.distrusted)
+
+
+class SlateTests(AdLabelTests):
+    """A slate is an ad label that decides: ESPN+'s "Commercial Break" (2026-11-02)."""
+
+    def setUp(self):
+        super().setUp()
+        self.label.sure, self.label.strong = True, None
+
+    def test_hysteresis(self):
+        tr = OV.Tracker(self.lib)
+        for sc in (0.0, 0.9, 0.9, 0.9, 0.0):
+            tr.see_pic(self.pic(sc))
+        self.assertEqual([tr.slate_up(s) for s in range(5)], [False, True, True, True, False])
+        self.assertEqual(tr.features(2)["ov_ad"], OV.SLATE, "outweighs its own music learnt as show sound")
+        self.assertTrue(math.isnan(tr.features(0)["ov_ad"]))
+
+    def test_a_score_bug_up_cancels_it(self):
+        rng = np.random.default_rng(2)
+        self.lib.add(overlay_from([logo_on(picture(rng)) for _ in range(60)], kind="score", id="sb", name="Score bug"))
+        tr = OV.Tracker(self.lib)
+        for _ in range(4):
+            tr.see_pic(self.pic(0.9))
+            for _ in range(2):
+                m = logo_on(picture(rng))
+                tr.see(m, pack(m))
+        self.assertEqual(tr.showing(2, "ad"), "Ad label", "a score bug here is a piece of the slate")
+        self.assertEqual(tr.features(2)["ov_ad"], OV.SLATE)
+
+    def test_known_show_sound_takes_a_labels_trust_away(self):
+        tr = OV.Tracker(self.lib)
+        for s in range(30):
+            tr.see_pic(self.pic(0.9))
+        for s in range(1, 29):
+            tr.settle(s, 0, clear_show=True)
+        self.assertEqual(tr.distrusted, {}, "the sound learnt it before the slate was known; only the operator can say")
+        self.assertEqual(self.label.strikes, 0)
+
+    def test_a_catalogue_slate_keeps_its_word(self):
+        again = OV.Overlay.from_json(self.label.to_json())
+        self.assertTrue(again.sure)
+        self.assertFalse(OV.Overlay.from_json({**self.label.to_json(), "sure": False}).sure)
+
 
 def segment(t, p, seam=None, **kw):
     return D.Segment(t, t + 1, p, seam, **kw)
@@ -731,6 +781,16 @@ class DetectorTests(unittest.TestCase):
         self.assertGreater(det.logit(90), det.logit(40) + 5)
         self.assertEqual(det.decide(90, 91, settle=False)[0].ad_overlay, "Ad label")
 
+    def test_a_slate_settles_as_ad_against_everything_else(self):
+        lib = self.library(label=True)
+        next(ov for ov in lib.items.values() if ov.kind == "ad").sure = True
+        det = D.Detector(self.model(), overlays=lib)
+        src = D.ArraySource(self.sig(bug_until=0, label_from=70))
+        for edge in range(1, 120):
+            det.update(src, float(edge))
+        self.assertTrue(all(v == OV.SLATE for v in det.feats["ov_ad"][70:115]))
+        self.assertGreater(det.decide(90, 91, settle=False)[0].p_ad, 0.98)
+
     def test_the_model_can_switch_overlays_off(self):
         det = D.Detector({**self.model(), "overlays": False}, overlays=self.library(label=True))
         src = D.ArraySource(self.sig(label_from=30))
@@ -773,6 +833,9 @@ class CatalogueTests(unittest.TestCase):
         pill = lib.items["yttv-sponsored"]
         self.assertEqual((pill.kind, pill.space), ("ad", "pic"))
         self.assertGreater(pill.strong, pill.thresh)
+        slate = lib.items["espn-commercial-break"]
+        self.assertEqual((slate.kind, slate.space, slate.sure), ("ad", "pic", True))
+        self.assertFalse(pill.sure, "only a slate decides on its own")
 
     def test_the_model_weighs_overlays_and_training_keeps_them(self):
         m = D.load_model()
