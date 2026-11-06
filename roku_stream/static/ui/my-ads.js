@@ -524,11 +524,18 @@
       VV.fill($('default-limit').parentElement, h('span', 'Limit for new uploads'),
         Object.assign(limitSelect(s.default_limit, limit => save({default_limit: limit}, 'New uploads get: ' + (limit ? limitText(limit).toLowerCase() : 'no limit') + '.'), 'Limit for new uploads'), {id: 'default-limit'}));
     }
+    // The limits' switch: off, no ad's limit holds (the mix rests ads on its own).
+    const limitsOn = s.limits !== false;
+    $('limits-on').checked = limitsOn;
+    $('limits-chip').textContent = limitsOn ? 'on' : 'off';
+    $('limits-chip').className = 'chip' + (limitsOn ? ' pvw' : '');
+    $('default-limit').disabled = !limitsOn;
     // Reset all limits: lit while an ad sits out over its limit.
     const out = sittingOut(), capped = view.ads.some(a => a.limit);
-    $('reset-limits').disabled = !capped;
+    $('reset-limits').disabled = !capped || !limitsOn;
     $('reset-limits').classList.toggle('primary', out.length > 0);
-    $('limits-note').textContent = (!capped ? 'No ad has a limit.' : out.length === 1 ? (out[0].name || 'One ad') + ' sits out over its limit now.'
+    $('limits-note').textContent = !limitsOn ? 'Limits are off: every ad switched on may air, however often it has. Each ad keeps its limit for when they are back on.'
+      : (!capped ? 'No ad has a limit.' : out.length === 1 ? (out[0].name || 'One ad') + ' sits out over its limit now.'
       : out.length ? out.length + ' ads sit out over their limits now.' : 'No ad is over its limit now.')
       + (s.limits_from ? ' Last reset ' + fmt.when(s.limits_from) + '.' : '');
     const card = $('card-text');
@@ -657,6 +664,8 @@
   $('shuffle-list').onclick = async () => {
     try { view = await api('v1/my-ads/shuffle', {}); render(true); toast('The list is in a new order.', {ok: true}); } catch (err) { toast(err.message, {error: true}); }
   };
+  $('limits-on').onchange = () => save({limits: $('limits-on').checked},
+    $('limits-on').checked ? 'Limits are on: each ad\'s own limit holds again.' : 'Limits are off: no ad sits out over its limit.');
   // Every ad's plays so far stop counting towards its limit (settings' limits_from); the plays stay in the log.
   $('reset-limits').onclick = () => {
     const out = sittingOut();

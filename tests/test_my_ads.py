@@ -126,6 +126,24 @@ class RotationTests(unittest.TestCase):
         with self.assertRaises(ConfigError):
             validate({'limits_from': 'yesterday'})
 
+    def test_limits_off_lets_every_ad_switched_on_air(self):
+        hour = {'count': 1, 'minutes': 60}
+        now = 100000.
+        s = validate({'ads': [ad(1, limit=hour), ad(2, enabled=False)]})
+        self.assertTrue(s['limits'], 'limits hold by default')
+        plays = [{'kind': 'ad', 'id': ad(1)['id'], 'at': now - 60, 'counted': True}]
+        self.assertIsNone(Rotation().pick(s, plays, now), 'over its limit, and the other is off')
+        off = validate({**s, 'limits': False})
+        self.assertEqual(my_ads.limits_since(off), float('inf'))
+        a = off['ads'][0]
+        self.assertTrue(allowed(a, plays, now, my_ads.limits_since(off)))
+        self.assertIsNone(allowed_again(a, plays, now, my_ads.limits_since(off)))
+        self.assertEqual(Rotation().pick(off, plays, now)['name'], 'Ad 1')
+        self.assertFalse(allowed(off['ads'][1], [], now, my_ads.limits_since(off)), 'switched off still sits out')
+        self.assertEqual(off['ads'][0]['limit'], hour, 'the limit stays saved')
+        with self.assertRaises(ConfigError):
+            validate({'limits': 'no'})
+
     def test_counts_from_ten_seconds_or_half_a_short_ad(self):
         self.assertFalse(my_ads.counts(9.9, 60))
         self.assertTrue(my_ads.counts(10, 60), 'a minute-long ad cut at 10 s counts')

@@ -43,7 +43,7 @@ import tempfile
 import threading
 
 from .errors import ConfigError
-from .my_ads import allowed, played
+from .my_ads import allowed, limits_since, played
 
 UNSORTED = 'unsorted'
 # key: (default, lowest, highest), as the page's sliders run.
@@ -314,7 +314,7 @@ class Mix:
         kind = kinds_of(mix, everyone)
         wear, boost = own(mix, kind)
         ok = [a for a in everyone if a['id'] not in skip and boost[a['id']] > 0
-              and allowed(a, plays, now, settings.get('limits_from'))]
+              and allowed(a, plays, now, limits_since(settings))]
         recent = [kind[p['id']] for p in sorted(plays, key=lambda p: p.get('at', 0))
                   if p.get('kind', 'ad') == 'ad' and p.get('id') in kind]
         times = self.exposure.read()
@@ -363,7 +363,7 @@ class _Air:
 
     def __init__(self, settings, rows, now, half_life_days):
         self.half_life = half_life_days * 86400
-        self.since = settings.get('limits_from') or 0
+        self.since = limits_since(settings) or 0
         self.seen, self.last, self.recent = {}, {}, {}
         horizon = max((a['limit']['minutes'] for a in settings['ads'] if a.get('limit')), default=0) * 60
         for r in rows:

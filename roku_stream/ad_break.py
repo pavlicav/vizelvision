@@ -76,7 +76,7 @@ import cairo  # noqa: E402
 from .ad_mix import Mix, MixStore
 from .admute_link import apply_gain
 from .errors import ConfigError
-from .my_ads import Rotation, allowed, append_play, card_file, counts, played, read_plays
+from .my_ads import Rotation, allowed, append_play, limits_since, card_file, counts, played, read_plays
 from .programme_delay import retimable
 from . import promo_overlay
 from .promos import due as promo_due, last_promo, readiness, switched_on
@@ -1421,7 +1421,7 @@ class AdBreak:
         for e in queue:
             if e['kind'] == 'ad':
                 ad = ads.get(e['id'])
-                if ad is None or (e['by'] == 'rotation' and not allowed(ad, plays + ahead, now, settings.get('limits_from'))):
+                if ad is None or (e['by'] == 'rotation' and not allowed(ad, plays + ahead, now, limits_since(settings))):
                     gone.add(e['key'])
                     continue
                 ahead.append({'kind': 'ad', 'id': e['id'], 'at': now, 'counted': True})

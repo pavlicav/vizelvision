@@ -31,6 +31,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import math
 import time
 
 from .errors import ConfigError
@@ -58,6 +59,9 @@ DEFAULTS = {
     'pip': {'enabled': True, 'corner': 'bottom-right', 'size': 'medium'},
     # The break card: the station ID's end card with these words, or an image of your own.
     'card': {'text': 'STAY TUNED', 'image': None},
+    # Hold ads to their limits. False: every ad's limit is ignored (the mix rests ads on its own);
+    # the limits stay saved, and hold again when this is switched back on.
+    'limits': True,
     # The limit a new upload gets: None, or at most count plays in any minutes.
     'default_limit': None,
     # A reset of the limits: plays before this time (epoch seconds) do not count towards any
@@ -162,6 +166,8 @@ def validate(value, *, lenient=False):
         raise ConfigError('enabled must be true or false')
     if result['order'] not in ORDERS:
         raise ConfigError('order must be one of ' + ', '.join(ORDERS))
+    if not isinstance(result['limits'], bool):
+        raise ConfigError('limits must be true or false')
     if result['breaks'] not in BREAKS:
         raise ConfigError('breaks must be one of ' + ', '.join(BREAKS))
     if not isinstance(result['channel_ident'], bool):
@@ -222,6 +228,12 @@ def counted(plays, ad_id, since):
                   and played(p) and p.get('at', 0) >= since)
 
 
+def limits_since(settings):
+    """The since for allowed() and allowed_again(): settings' limits_from, or infinity while
+    the limits are switched off (no play counts, so no ad is ever over its limit)."""
+    return math.inf if settings.get('limits') is False else settings.get('limits_from')
+
+
 def allowed(ad, plays, now, since=None):
     """May this ad air now: switched on, and under its limit? since: the limits' reset
     (settings' limits_from); plays before it do not count."""
@@ -270,7 +282,7 @@ class Rotation:
 
     def pick(self, settings, plays, now, skip=()):
         ads = settings['ads']
-        ok = {a['id']: a for a in ads if a['id'] not in skip and allowed(a, plays, now, settings.get('limits_from'))}
+        ok = {a['id']: a for a in ads if a['id'] not in skip and allowed(a, plays, now, limits_since(settings))}
         if not ok:
             return None
         if settings['order'] == 'list':
@@ -413,7 +425,7 @@ class MyAds:
 
     def update(self, changes):
         """Settings (not the ads): enabled, breaks, break_channel, channel_ident, order, pip, card
-        text, default_limit, limits_from ("now" resets the limits from this moment)."""
+        text, limits (on/off), default_limit, limits_from ("now" resets the limits from this moment)."""
         if not isinstance(changes, dict) or not set(changes) <= set(DEFAULTS) - {'ads'}:
             raise ConfigError('Settings take ' + ', '.join(k for k in DEFAULTS if k != 'ads'))
         if changes.get('limits_from') == 'now':

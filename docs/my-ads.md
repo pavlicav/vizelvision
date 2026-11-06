@@ -154,6 +154,11 @@ Master keeps it (`ad_break.AdBreak`): the page only asks.
   over its limit, and the line beside it says which (or how many) and when the limits were last reset.
   **Reset limit**, on each ad with a limit (highlighted while it sits out), does the same for that ad
   alone: its own `limits_from` (`POST /v1/my-ads/ads/<id>` `{"limits_from": "now"}`).
+- **Limits off** (November 5): the **Hold ads to their limits** switch at the top of the Limits
+  panel (setting `limits`, default `true`). Off, no ad's limit holds anywhere (master, Next up, the
+  mix and its preview, the page): every ad switched on may air, and the mix's own resting of worn
+  ads is all that spaces them out. Each ad keeps its limit, and they all hold again (counting the
+  plays made meanwhile) once it is switched back on.
 - **Sitting out:** an ad switched off, or over its limit, sits out. The page shows
   until when. With every ad out, the break card shows.
 
@@ -256,7 +261,7 @@ Beside the master socket (`state/master-candidate/`):
 | Route | |
 |---|---|
 | `GET /v1/my-ads` | settings, each ad with `present`, `allowed`, `again`, `played` (hour/day/week/last), `category`, `plays_all`, `seen`, `chance`, `boost` and `wear`; master's `status`, ad mute's mode, the last 80 plays, and `mix` (each kind with its ads and the last day's plays) |
-| `POST /v1/my-ads` | settings: `enabled`, `order`, `pip` {enabled, corner, size}, `card` {text}, `default_limit`, `limits_from` (a time, `"now"`, or `null`) |
+| `POST /v1/my-ads` | settings: `enabled`, `order`, `pip` {enabled, corner, size}, `card` {text}, `limits` (true/false), `default_limit`, `limits_from` (a time, `"now"`, or `null`) |
 | `POST /v1/my-ads/upload?name=[&category=]` | an ad (the body is the file), in that kind |
 | `POST /v1/my-ads/ads/<id>` · `DELETE` | one ad: `name`, `enabled`, `limit`, `trim_db`, `limits_from` (`"now"`: Reset limit), `category` (a kind's key, or `null`) · delete it, its file and pictures |
 | `GET /v1/my-ads/mix` | the Mix tab: the mix as kept, the tuning's ranges, the breaks' pace, each kind's last day, and every ad with its kind and the times of its plays |
