@@ -38,6 +38,18 @@ class SettingsTests(unittest.TestCase):
         value = validate({'ads': [{**AD, 'file': '../x.mp4'}, ad(2)], 'surprise': 1}, lenient=True)
         self.assertEqual([a['id'] for a in value['ads']], [ad(2)['id']], 'the worker plays the ads it can read')
 
+    def test_breaks_can_show_a_channel(self):
+        value = validate({})
+        self.assertEqual((value['breaks'], value['break_channel']['number'], value['channel_ident']), ('ads', 1, True))
+        value = validate({'breaks': 'channel', 'break_channel': {'url': 'http://127.0.0.1:9/x.m3u8', 'number': None},
+                          'channel_ident': False})
+        self.assertEqual((value['breaks'], value['break_channel']['name'], value['break_channel']['number'], value['channel_ident']),
+                         ('channel', 'Trains', None, False))
+        for bad in ({'breaks': 'tv'}, {'break_channel': {'url': 'file:///etc/passwd'}}, {'break_channel': {'name': ''}},
+                    {'break_channel': {'number': 'x'}}, {'break_channel': {'colour': 1}}, {'channel_ident': 'yes'}):
+            with self.subTest(bad=bad), self.assertRaises(ConfigError):
+                validate(bad)
+
     def test_card_words_are_tidied(self):
         self.assertEqual(validate({'card': {'text': "  we'll   be right back "}})['card']['text'], "WE'LL BE RIGHT BACK")
 
@@ -458,6 +470,39 @@ class BreakTests(unittest.TestCase):
         mine = self.b.sound(int(1.0e9), int(1.0e9), self.tap.gain, audio)
         self.assertEqual((len(mine), reel.asked, self.b.state), (len(audio), [0], 'ad'))
         self.assertEqual(self.frame(1.02), 50)
+
+    def channel_mode(self, ads_on=True):
+        self.b.configure(validate({'pip': {'enabled': False}, 'ads': [ad(1)], 'enabled': ads_on, 'breaks': 'channel'}),
+                         {'mode': 'on'})
+
+    def test_a_channel_break_shows_the_channel_not_the_ads(self):
+        self.channel_mode()
+        self.cue(FakeReel(ad(1), int(30e9), 50))            # an ad is cued, but breaks show the channel
+        channel = FakeReel({'id': 'channel', 'name': '144 Cab Ride', 'duration': None}, int(1e12), 70)
+        self.tap.mutes.append((int(1e9), int(5e9)))
+        self.assertEqual(self.frame(1.0), 16, 'the card until the channel is cued')
+        self.b.cued_channel = channel
+        self.assertEqual(self.frame(1.5), 70, 'the card gives way to the channel')
+        self.assertEqual(self.b.state, 'channel')
+        self.assertEqual(self.b.status()['channel']['name'], '144 Cab Ride')
+        self.assertEqual(self.frame(4.0), 70)
+        self.assertIsNone(self.frame(5.0), 'the programme is back')
+        rows = [(r['kind'], r['seconds']) for r in self.b.log]
+        self.assertEqual(rows, [('card', .5), ('channel', 3.5)])
+        self.assertEqual(self.b.cued.ad['id'], ad(1)['id'], 'no ad aired')
+        self.assertIn(channel, self.b.done, 'the channel goes to the helper to close')
+
+    def test_channel_breaks_need_no_ads_and_a_failed_channel_gives_the_card(self):
+        self.channel_mode(ads_on=False)
+        self.assertTrue(self.b.active, 'channel breaks are active with My ads off')
+        channel = FakeReel({'id': 'channel', 'name': '144 Cab Ride', 'duration': None}, int(1e12), 70)
+        self.b.cued_channel = channel
+        self.tap.mutes.append((int(1e9), int(30e9)))
+        self.assertEqual(self.frame(1.0), 70)
+        channel.failed = 'stream gone'
+        self.assertEqual(self.frame(1.2), 16, 'the card while it is cued again')
+        self.assertEqual((self.b.log[-1]['kind'], self.b.log[-1]['error']), ('channel', 'stream gone'))
+        self.assertEqual(self.b.state, 'card')
 
     def test_the_corner_shows_the_programme_framed(self):
         self.b.configure(validate({'pip': {'size': 'large'}}), {'mode': 'on'})

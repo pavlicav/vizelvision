@@ -36,11 +36,22 @@ import time
 from .errors import ConfigError
 
 ORDERS = ('shuffle', 'list')
+BREAKS = ('ads', 'channel')
 CORNERS = ('bottom-right', 'bottom-left', 'top-right', 'top-left')
 SIZES = ('small', 'medium', 'large')
 DEFAULTS = {
     # Show my ads (or the break card) over muted breaks. Ad mute must be On.
     'enabled': True,
+    # What muted breaks show: 'ads' (my ads, station promos, the break card, as 'enabled' and
+    # the promos say) or 'channel': the live channel in break_channel, with its sound, in place
+    # of all of that (the programme still in the corner). 'channel' holds with My ads on or off.
+    'breaks': 'ads',
+    # The channel 'channel' breaks show: an HLS URL, with the name and number the page shows. The
+    # page offers the channels of TV Thing's "Our channels" that it streams (sources.our_channels):
+    # Trains (Cab Ride), pen2live, the Sports Guide.
+    'break_channel': {'url': 'http://127.0.0.1:8080/stream/internet/cabride/index.m3u8', 'name': 'Trains', 'number': 1},
+    # 'channel' breaks open with a VizelVision ident (the station promos' next), then the channel.
+    'channel_ident': True,
     # shuffle: a random order, every ad once before any plays again. list: top to bottom.
     'order': 'shuffle',
     # The muted programme, small, in a corner of the ad or card.
@@ -151,6 +162,21 @@ def validate(value, *, lenient=False):
         raise ConfigError('enabled must be true or false')
     if result['order'] not in ORDERS:
         raise ConfigError('order must be one of ' + ', '.join(ORDERS))
+    if result['breaks'] not in BREAKS:
+        raise ConfigError('breaks must be one of ' + ', '.join(BREAKS))
+    if not isinstance(result['channel_ident'], bool):
+        raise ConfigError('channel_ident must be true or false')
+    channel = result['break_channel']
+    if not isinstance(channel, dict) or not set(channel) <= set(DEFAULTS['break_channel']):
+        raise ConfigError('break_channel takes url, name and number')
+    channel = result['break_channel'] = {**DEFAULTS['break_channel'], **channel}
+    if not isinstance(channel['url'], str) or not re.match(r'https?://[^\s]+$', channel['url']):
+        raise ConfigError('break_channel url must be an http or https URL')
+    if not isinstance(channel['name'], str) or not 0 < len(channel['name'].strip()) <= 40:
+        raise ConfigError('break_channel name must be 1 to 40 characters')
+    number = channel['number']
+    if number is not None and (isinstance(number, bool) or not isinstance(number, int) or not 0 <= number <= 9999):
+        raise ConfigError('break_channel number must be 0 to 9999, or null')
     pip = result['pip']
     if not isinstance(pip, dict) or not set(pip) <= set(DEFAULTS['pip']):
         raise ConfigError('pip takes enabled, corner and size')
@@ -386,8 +412,8 @@ class MyAds:
             return self.save(value), result
 
     def update(self, changes):
-        """Settings (not the ads): enabled, order, pip, card text, default_limit, limits_from
-        ("now" resets the limits from this moment)."""
+        """Settings (not the ads): enabled, breaks, break_channel, channel_ident, order, pip, card
+        text, default_limit, limits_from ("now" resets the limits from this moment)."""
         if not isinstance(changes, dict) or not set(changes) <= set(DEFAULTS) - {'ads'}:
             raise ConfigError('Settings take ' + ', '.join(k for k in DEFAULTS if k != 'ads'))
         if changes.get('limits_from') == 'now':

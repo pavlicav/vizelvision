@@ -547,7 +547,9 @@ dialog.preview video{width:100%;max-height:70vh;background:#000;border-radius:va
     <div class="lead"><p>Your own ads, aired in place of the commercial breaks ad mute takes off air. While a break is muted, master plays your ads instead, with their sound, and keeps the programme small in a corner so you see the moment it comes back. When none of yours may play, a break card.</p>
       <div class="end"><div class="seg" role="group" aria-label="During muted breaks" id="enabled">
         <button type="button" data-enabled="false" aria-pressed="false">Off</button>
-        <button type="button" data-enabled="true" aria-pressed="false">My ads</button></div></div></div>
+        <button type="button" data-enabled="true" aria-pressed="false">My ads</button>
+        <button type="button" data-breaks="channel" aria-pressed="false" id="breaks-channel"
+          title="Muted breaks show one of our channels live, with its sound, instead of your ads (A channel instead, below)">Channel</button></div></div></div>
 
     <p class="note warn" id="mode-note" hidden></p>
 
@@ -613,6 +615,12 @@ dialog.preview video{width:100%;max-height:70vh;background:#000;border-radius:va
       </div>
 
       <div class="stack">
+        <section class="panel" id="channel-panel" aria-label="A channel instead"><div class="head"><h2>A channel instead</h2><div class="end"><span class="chip" id="channel-chip">—</span></div></div><div class="body stack tight">
+          <p class="small">With <b>Channel</b> chosen at the top, muted breaks show one of our channels live, with its sound, in place of your ads; the programme stays in its corner.</p>
+          <label class="field"><span>Channel</span><select id="break-channel"></select></label>
+          <label class="switch"><input type="checkbox" id="channel-ident"><span>A VizelVision ident first, then the channel</span></label>
+          <p class="tiny muted" id="channel-note"></p></div></section>
+
         <section class="panel" aria-label="The mix"><div class="head"><h2>The mix</h2><div class="end"><span class="chip" id="mix-chip">—</span></div></div><div class="body stack tight">
           <p class="small">Each kind of ad gets its share of the plays, and the ads you've seen most rest. Bars: the last day's plays, the mark where each kind's share is.</p>
           <ul class="mix" id="mix-list" aria-label="Kinds of ads"></ul>

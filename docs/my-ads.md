@@ -49,6 +49,37 @@ there).
 - **Sound.** An ad's sound replaces the programme's, crossfaded with ad mute's gain.
   Under the break card, the sound is ad mute's own break sound: silence or Cairo radio.
 
+## A channel instead (October 25)
+
+The switch at the top of the My ads tab has a third choice beside **Off** and **My ads**:
+**Channel** (it shows the channel's number). Muted breaks then show one of our own channels,
+live and with its sound, in place of your ads and the break card. The programme stays in its
+corner with the LIVE tab, so you see the show come back; "It's the show" ends the break as
+always. It works with My ads on or off (setting `breaks`: `ads` or `channel`).
+
+- **Which channel** (October 28): the **A channel instead** panel offers every channel in TV
+  Thing's **Our channels** (0–9) that it streams: **1 Trains** (Cab Ride, train cab rides),
+  **2 pen2live** (Yle's puppy cam) and **6 the Sports Guide**, and whatever TV Thing adds there
+  later; nothing here names one (`SourceCatalog.our_channels`, from its source catalog's
+  `lineup`). VizelVision itself (0) is never offered. The choice is saved as `break_channel`
+  `{url, name, number}`, the URL being TV Thing's stream of it (`stream_path`); a saved channel
+  TV Thing no longer lists still airs, and the panel says so.
+- **A VizelVision ident first** (`channel_ident`, on unless switched off in the panel): each
+  channel break opens with the station promos' next one (a 5 or 10 s ident, with its live
+  time, temperature or programme), then cuts to the channel. Each promo's own switch and
+  readiness hold (a league's promo only in its games); Presentation's promos switch and
+  "every" do not, as they are for ad breaks. A break that comes back within a minute of the
+  last one's end (ad mute wavering) goes straight back to the channel, and with no ident
+  cued the channel goes on at once. The ident logs and counts as any promo play.
+- **Cued as the break opens**, or in the ident's last 4 s (a live stream held back longer may
+  lose its place). The card shows until the channel's first picture, a second or two: master
+  asks the channel's server for its playlist every 20 s while this is on, so its stream is
+  already running (`ChannelReel` in `ad_break.py`).
+- **If it fails,** the card shows while it is tried again (every 5 s at most).
+- **Nothing counts towards any ad's limit.** The play log gets a `channel` row per break.
+- **Waits are unchanged:** the station ID's wait fill and library shows' act breaks still play
+  your ads (both time the show's return by an ad's length, which a live channel doesn't have).
+
 ## Filling a wait
 
 The same machinery fills the wait for the next program: while the station ID holds its end

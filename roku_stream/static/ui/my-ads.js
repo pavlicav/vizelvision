@@ -314,11 +314,20 @@
     box.style[x] = '4.8%';
     box.style[y] = y === 'bottom' ? '14.5%' : pip.corner === 'top-left' ? '24.5%' : '14.5%';
   }
+  // The channel breaks show: as TV Thing lists it now (its "Our channels"), else as saved.
+  const ourChannels = () => view.channels?.channels || [];
+  const breakChannel = () => {
+    const saved = view.settings.break_channel || {};
+    return ourChannels().find(c => c.url === saved.url) || saved;
+  };
+  const channelName = c => (c.number != null ? c.number + ' ' : '') + (c.name || 'the channel');
   function status() {
     const st = view.status || {}, s = view.settings, mode = view.admute_mode;
     const note = $('mode-note');
-    note.hidden = !(s.enabled && mode !== 'on');
-    if (!note.hidden) VV.fill(note, `Ad mute is ${mode === 'off' ? 'off' : 'in shadow'}: it mutes nothing, so your ads never air. `,
+    const channelBreaks = s.breaks === 'channel', ch = breakChannel();
+    const chName = channelName(ch);
+    note.hidden = !((s.enabled || channelBreaks) && mode !== 'on');
+    if (!note.hidden) VV.fill(note, `Ad mute is ${mode === 'off' ? 'off' : 'in shadow'}: it mutes nothing, so ${channelBreaks ? 'the channel never airs' : 'your ads never air'}. `,
       h('a', {href: '#admute'}, 'Turn ad mute On'), '.');
     const big = $('my-status'), lamp = $('my-lamp'), chip = $('state-chip'), playing = st.promo || st.ad;
     const byId = Object.fromEntries(view.ads.map(a => [a.id, a]));
@@ -334,9 +343,22 @@
     } else if (waiting) {
       text = st.fill?.joined ? 'We now join…' : 'Station ID end card'; cls = st.fill?.joined ? 'on' : 'card';
       detail = st.fill?.joined ? 'The VizelVision Sports bumper: the game in progress is next.' : 'The next program is getting ready; an ad goes on once one is readied.';
+    } else if (channelBreaks && st.state === 'promo' && st.promo) {
+      text = st.promo.name; cls = 'on';
+      detail = 'A VizelVision ident opens this break; then ' + chName + ', live.';
     } else if (st.state === 'promo' && st.promo) {
       text = st.promo.name; cls = 'on';
       detail = 'A station promo opens this break (Presentation → Promos); your ads follow.';
+    } else if (channelBreaks && st.state === 'channel') {
+      text = chName; cls = 'on';
+      detail = (ch.number != null ? 'Channel ' + ch.number : ch.name) + ' is on air, live, in place of the break; the programme in the corner.';
+    } else if (channelBreaks && st.state === 'card') {
+      text = 'Break card'; cls = 'card';
+      detail = 'Tuning to ' + chName + '… (a second or two; the card shows until its first picture).';
+    } else if (channelBreaks) {
+      text = st.active ? 'Waiting for a break' : 'Standing by';
+      detail = st.active ? 'The next break ad mute mutes shows ' + (s.channel_ident ? 'a VizelVision ident, then ' : '') + chName + ', live.'
+        : 'Ad mute is not muting anything, so nothing is replaced.';
     } else if (s.enabled && st.state === 'ad' && st.ad) {
       text = st.ad.name || 'Untitled ad'; cls = 'on';
       detail = 'Your ad is on air in place of the break, the programme in the corner.';
@@ -351,7 +373,7 @@
     big.textContent = text; big.className = 'status-big ' + cls;
     $('my-status-detail').textContent = detail;
     lamp.className = 'lamp' + (cls ? ' pgm' : st.active ? ' pvw' : '');
-    chip.textContent = st.state === 'promo' ? 'promo' : cls === 'on' ? 'my ad' : cls === 'card' ? 'card' : st.active ? 'armed' : 'idle';
+    chip.textContent = st.state === 'promo' ? (channelBreaks ? 'ident' : 'promo') : st.state === 'channel' ? 'channel' : cls === 'on' ? 'my ad' : cls === 'card' ? 'card' : st.active ? 'armed' : 'idle';
     chip.className = 'chip' + (cls === 'on' ? ' solid pgm' : cls === 'card' ? ' warn' : st.active ? ' pvw' : '');
     $('now-panel').classList.toggle('live', !!cls);
     const progress = cls === 'on' && playing && playing.duration;
@@ -378,6 +400,9 @@
     const names = Object.fromEntries(view.ads.map(a => [a.id, a.name || 'Untitled']));
     const rows = view.recent.slice(0, 40).map(p => p.kind === 'card'
       ? h('tr', null, h('td', {class: 'when'}, fmt.when(p.at)), h('td', null, h('span', {class: 'chip warn'}, 'Break card')), h('td', {class: 'num'}, fmt.dur(p.seconds)), h('td'))
+      : p.kind === 'channel'
+      ? h('tr', null, h('td', {class: 'when'}, fmt.when(p.at)), h('td', null, h('span', {class: 'chip pgm'}, 'Channel'), ' ', p.name || 'a channel'),
+        h('td', {class: 'num aired'}, fmt.dur(p.seconds)), h('td', {class: 'small muted'}, p.error ? h('span', {class: 'chip pgm', title: p.error}, 'failed') : 'live, in place of the break'))
       : p.kind === 'join'
       ? h('tr', null, h('td', {class: 'when'}, fmt.when(p.at)), h('td', null, h('span', {class: 'chip pvw'}, 'We now join'), ' ', 'VizelVision Sports bumper'),
         h('td', {class: 'num aired'}, fmt.dur(p.seconds) + ' of ' + fmt.dur(p.length)), h('td', {class: 'small muted'}, 'before a game in progress'))
@@ -428,6 +453,36 @@
       select.value = [...select.options].some(o => o.value === value) ? value : '';
     }
   }
+  // A channel instead: which of our channels channel breaks show, and whether an ident opens them.
+  let drawnChannels = '';
+  function channelPanel(on, ch) {
+    const s = view.settings, list = ourChannels(), select = $('break-channel');
+    const listed = list.some(c => c.url === ch.url);
+    const options = [...(listed || !ch.url ? [] : [{url: ch.url, label: channelName(ch) + ' (not in Our channels now)'}]),
+      ...list.map(c => ({url: c.url, label: channelName(c), title: c.note || ''}))];
+    const key = JSON.stringify([options, ch.url]);
+    if (key !== drawnChannels && document.activeElement !== select) {
+      drawnChannels = key;
+      VV.fill(select, ...options.map(o => h('option', {value: o.url, selected: o.url === ch.url, title: o.title || ''}, o.label)));
+    }
+    $('channel-ident').checked = !!s.channel_ident;
+    $('channel-chip').textContent = on ? 'on' : 'off';
+    $('channel-chip').className = 'chip' + (on ? ' pvw' : '');
+    const error = view.channels?.error;
+    $('channel-note').textContent = (!list.length ? 'TV Thing lists none of our channels now' + (error ? ' (' + error + ')' : '') + '. '
+      : !listed ? 'The saved channel is not one of our channels any more: choose another. ' : ch.note ? ch.note + '. ' : '')
+      + (s.channel_ident ? 'The ident is the next station promo (5 or 10 s, each promo\'s own switch holds); a break back within a minute of the last goes straight to the channel.'
+        : 'Breaks cut straight to the channel.');
+  }
+  $('break-channel').onchange = () => {
+    const c = ourChannels().find(x => x.url === $('break-channel').value);
+    if (!c) return;
+    save({break_channel: {url: c.url, name: c.name, number: c.number}},
+      (view.settings.breaks === 'channel' ? 'Muted breaks show ' : 'Channel breaks will show ') + channelName(c) + '.');
+  };
+  $('channel-ident').onchange = () => save({channel_ident: $('channel-ident').checked},
+    $('channel-ident').checked ? 'Channel breaks open with a VizelVision ident.' : 'Channel breaks cut straight to the channel.');
+
   async function saveMix(changes, done) {
     try { view = await api('v1/my-ads/mix', changes); render(true); if (done) toast(done, {ok: true}); }
     catch (e) { toast(e.message, {error: true}); render(true); }
@@ -436,7 +491,13 @@
   function render(force) {
     if (!view) return;
     const s = view.settings;
-    for (const b of document.querySelectorAll('#enabled [data-enabled]')) b.setAttribute('aria-pressed', String(String(s.enabled) === b.dataset.enabled));
+    const channelBreaks = s.breaks === 'channel';
+    for (const b of document.querySelectorAll('#enabled [data-enabled]'))
+      b.setAttribute('aria-pressed', String(!channelBreaks && String(s.enabled) === b.dataset.enabled));
+    const chButton = $('breaks-channel'), ch = breakChannel();
+    chButton.setAttribute('aria-pressed', String(channelBreaks));
+    chButton.textContent = ch.number != null ? 'Channel ' + ch.number : ch.name || 'Channel';
+    channelPanel(channelBreaks, ch);
     const order = mixing() ? 'mix' : s.order;
     for (const b of document.querySelectorAll('#order [data-order]')) b.setAttribute('aria-pressed', String(order === b.dataset.order));
     $('order-note').textContent = order === 'mix' ? 'Kinds of ads in balance, the ads seen most rested.'
@@ -575,8 +636,14 @@
 
   // Settings controls -----------------------------------------------------------------------------------
   $('enabled').onclick = e => {
+    const ch = e.target.closest('[data-breaks]');
+    if (ch) {
+      const c = breakChannel();
+      save({breaks: 'channel'}, `Muted breaks show ${view.settings.channel_ident ? 'a VizelVision ident, then ' : ''}${c.number != null ? 'channel ' + c.number + ' (' + c.name + ')' : c.name || 'the channel'}, live, instead of your ads.`);
+      return;
+    }
     const b = e.target.closest('[data-enabled]');
-    if (b) save({enabled: b.dataset.enabled === 'true'}, b.dataset.enabled === 'true' ? 'Muted breaks get your ads.' : 'Off: muted breaks show the programme, muted.');
+    if (b) save({enabled: b.dataset.enabled === 'true', breaks: 'ads'}, b.dataset.enabled === 'true' ? 'Muted breaks get your ads.' : 'Off: muted breaks show the programme, muted.');
   };
   $('order').onclick = async e => {
     const b = e.target.closest('[data-order]');

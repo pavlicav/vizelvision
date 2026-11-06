@@ -132,6 +132,30 @@ class SourceCatalogTests(unittest.TestCase):
         self.assertEqual(result["guide"]["age_seconds"], 100)
         self.assertEqual(result["guide"]["coverage_hours"], 1)
 
+    def test_our_channels_are_the_streamed_ones_of_that_section(self):
+        self.payloads["sources"]["lineup"] = {
+            "path": "lineup.json",
+            "internet": [
+                {"tv_number": 2, "tv_name": "pen2live", "tv_section": "Our channels", "channel_id": "pentulive",
+                 "note": "Yle's puppy cam", "stream_path": "/stream/internet/pentulive/index.m3u8"},
+                {"tv_number": 1, "tv_name": "Trains", "tv_section": "Our channels", "channel_id": "cabride",
+                 "stream_path": "/stream/internet/cabride/index.m3u8"},
+                {"tv_number": 371, "tv_name": "Elsewhere", "tv_section": "New internet streams", "channel_id": "x",
+                 "stream_path": "/stream/internet/x/index.m3u8"}],
+            "house": [{"tv_number": 0, "tv_name": "VizelVision", "tv_section": "Our channels",
+                       "stream_path": "/stream/house/index.m3u8"}],
+            "slides": [{"tv_number": 6, "tv_name": "VizelVision Sports Guide", "tv_section": "Our channels",
+                        "channel_id": "sports-guide", "stream_path": "/stream/sports-guide/index.m3u8"},
+                       {"tv_number": 7, "tv_name": "No stream", "tv_section": "Our channels", "channel_id": "n"}]}
+        result = self.catalog.our_channels()
+        self.assertEqual([(c["number"], c["name"], c["url"]) for c in result["channels"]], [
+            (1, "Trains", "http://127.0.0.1:8080/stream/internet/cabride/index.m3u8"),
+            (2, "pen2live", "http://127.0.0.1:8080/stream/internet/pentulive/index.m3u8"),
+            (6, "VizelVision Sports Guide", "http://127.0.0.1:8080/stream/sports-guide/index.m3u8")])
+        self.assertEqual((result["channels"][1]["id"], result["channels"][1]["note"]), ("internet:pentulive", "Yle's puppy cam"))
+        del self.payloads["sources"]["lineup"]
+        self.assertEqual(self.catalog.our_channels()["channels"], [])
+
     def test_missing_guide_preserves_channels(self):
         self.offline.add("guide")
         result = self.catalog.programs("tv-thing-digital")

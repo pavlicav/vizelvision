@@ -164,6 +164,32 @@ class SourceCatalog:
             result.append(stream)
         return result
 
+    def our_channels(self) -> dict:
+        """The channels of TV Thing's "Our channels" (0-9) that it streams: its web streams
+        (Trains, pen2live) and slide channels (the Sports Guide), in dial order, each with its
+        stream's URL. What a muted break may show instead of the ads (my_ads break_channel).
+        The house channel is VizelVision itself, never one of them."""
+        discovery = self.tv.get("sources")
+        lineup = discovery["data"].get("lineup")
+        channels = []
+        for kind, items in lineup.items() if isinstance(lineup, dict) else ():
+            if kind == "house" or not isinstance(items, list):
+                continue
+            for item in items:
+                if not isinstance(item, dict) or str(item.get("tv_section") or "").casefold() != "our channels":
+                    continue
+                path, number = item.get("stream_path"), item.get("tv_number")
+                if not isinstance(path, str) or not path.startswith("/") or any(c.isspace() for c in path):
+                    continue
+                name = str(item.get("tv_name") or item.get("name") or item.get("channel_id") or "").strip()[:40]
+                channels.append({"id": f"{kind}:{item.get('channel_id')}", "name": name or path,
+                                 "number": number if isinstance(number, int) and not isinstance(number, bool)
+                                 and 0 <= number <= 9999 else None,
+                                 "note": item.get("note") if isinstance(item.get("note"), str) else None,
+                                 "url": self.config.tv_thing.base_url + path.lstrip("/")})
+        channels.sort(key=lambda c: (c["number"] is None, c["number"] or 0, c["name"]))
+        return {"channels": channels, "stale": discovery["stale"], "error": discovery["error"]}
+
     def _internet(self) -> dict:
         """TV Thing's internet streams, numbered as in its lineup (Pentulive is 29). Live
         streams have no listings."""

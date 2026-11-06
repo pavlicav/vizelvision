@@ -27,6 +27,18 @@ rotation's ads and before a due promo, whatever its switch or limit. The rotatio
 promo (self.next_promo) keeps its place until it airs or is skipped. The operator can skip
 what is on air too (command). Entries queued by hand survive a restart (my-ads-queue.json).
 
+**A channel instead** (setting breaks: 'channel'). A muted break shows a live channel
+(break_channel: one of TV Thing's "Our channels", Trains, pen2live or the Sports Guide) with its
+sound in place of my ads and the card, the programme still in the corner (ChannelReel). With
+channel_ident, the break opens with a VizelVision ident first: the promos' next (their own
+switches and readiness hold; their on switch and `every` do not), unless the break comes back
+within IDENT_REJOIN of the last one's end (ad mute wavering), or none is cued. The channel is
+cued as the break opens, or in the ident's last CHANNEL_LEAD seconds (a live stream held back
+longer may lose its place): the card shows until its first frame (a second or two: the helper
+keeps the channel's server warm with a request every CHANNEL_WARM seconds), and again while it
+is re-cued if it fails. Nothing is logged towards any ad's limit; the play log gets a 'channel'
+row per break (the ident a promo row). The wait fill is unchanged (my ads).
+
 **The wait fill.** While the station ID holds its end card for a source still being
 prepared (a Roku changing channel), master shows ads in its place too: the worker opens a
 window on master's running clock where the end card froze (fill_start), and the ads (and a
@@ -51,6 +63,7 @@ import secrets
 import tempfile
 import threading
 import time
+import urllib.request
 
 import gi
 
@@ -341,6 +354,34 @@ class Reel:
         self.pipeline.set_state(self.gst.State.NULL)
 
 
+class ChannelReel(Reel):
+    """A live channel over a break (settings break_channel: an HLS URL), decoded as an ad is.
+    It never ends; its clock starts at its first frame or sound, whenever that comes."""
+
+    def __init__(self, gst, channel, video_caps, audio_caps):
+        number = channel.get('number')
+        ad = {'id': 'channel', 'name': (f"{number} {channel['name']}" if number is not None else channel['name']),
+              'duration': None, 'url': channel['url']}
+        super().__init__(gst, ad, os.devnull, video_caps, audio_caps)
+        self.pipeline.set_property('uri', channel['url'])
+        self.base = None
+
+    def _timed(self, sample):
+        pts, buffer, duration = super()._timed(sample)
+        if self.base is None:
+            self.base = pts
+        return max(0, pts - self.base), buffer, duration
+
+
+def _warm(url):
+    """Asks the channel's server for its playlist, so its stream is running when a break needs it."""
+    try:
+        with urllib.request.urlopen(url, timeout=3) as response:
+            response.read(4096)
+    except Exception:            # a cold start costs a second or two, nothing more
+        pass
+
+
 class PromoReel(Reel):
     """A station promo (promos.py), decoded as an ad is, with its live text (the time, the
     temperature, the programme on air) blended into its frames as they decode, by
@@ -418,6 +459,10 @@ class AdBreak:
     QUEUED_MOST = 20                 # entries queued by hand, at most
     JOIN_GRACE = 3 * SECOND          # a take late for the bumper's end finds its last (black) frame
     LAND_SLACK = SECOND // 4         # no ad starts this close before a cut that lands there (fill_land)
+    CHANNEL_WARM = 20.               # seconds between requests that keep the break channel's stream running
+    CHANNEL_RETRY = 5.               # seconds before a channel that would not start is tried again
+    CHANNEL_LEAD = 4.                # seconds before the ident's end that the channel is cued
+    IDENT_REJOIN = 60 * SECOND       # a channel break back this soon after the last goes straight to the channel
 
     def __init__(self, output, folder, plays_path):
         self.output, self.gst = output, output.gst
@@ -448,6 +493,12 @@ class AdBreak:
         self.failed_once = False
         self.reel_start_pts = None           # where the reel on air started, on the programme's clock
         self.fill = None                     # the wait fill's window, while open (see fill_start)
+        self.channel_playing = None          # (wall) while the break channel airs
+        # Breaks that show a channel (settings breaks: 'channel'), an ident first with channel_ident
+        self.channel_mode, self.break_channel, self.channel_ident = False, None, False
+        self.break_rejoined = False          # this break came back within IDENT_REJOIN of the last
+        self.cued_channel = None             # the channel, decoded up to its first frame (in a break)
+        self.channel_warm_at = self.channel_retry_at = 0.
         # Shared
         self.cued = None                     # the next ad, decoded up to its first frames
         self.cued_promo = None               # the next promo, likewise
@@ -484,6 +535,9 @@ class AdBreak:
         """my_ads settings (or None: unreadable) and ad mute's; once a second."""
         self.settings, self.admute = settings, admute
         self.ads_on = bool(settings and settings['enabled'])
+        self.channel_mode = bool(settings and settings.get('breaks') == 'channel')
+        self.break_channel = (settings or {}).get('break_channel')
+        self.channel_ident = bool(settings and settings.get('channel_ident'))
         self._activate()
         pip = settings and settings['pip']
         key = pip and pip['enabled'] and (pip['corner'], pip['size'])
@@ -509,11 +563,17 @@ class AdBreak:
                 reel.values = self.promo_values
 
     def _activate(self):
-        self.active = bool((self.admute or {}).get('mode') == 'on' and (self.ads_on or self.promos_on))
+        self.active = bool((self.admute or {}).get('mode') == 'on'
+                           and (self.ads_on or self.promos_on or self.channel_mode))
+
+    def _promos_wanted(self):
+        """Promos are cued: they are on, or channel breaks open with an ident."""
+        return self.promos_on or (self.channel_mode and self.channel_ident)
 
     def status(self):
         reel, kind, cued, cued_promo = self.reel, self.reel_kind, self.cued, self.cued_promo
-        playing = self.now_playing if kind == 'ad' else self.promo_playing
+        playing = (self.now_playing if kind == 'ad' else
+                   (None, self.channel_playing) if kind == 'channel' and self.channel_playing else self.promo_playing)
         now = time.time()
         on_air = None
         if reel is not None:
@@ -528,6 +588,10 @@ class AdBreak:
             left_out = {k: why for k, (until, why) in self.left_out.items() if until > now}
         settings = self.promos
         return {'active': self.active, 'state': self.state, 'ads_on': self.ads_on,
+                'breaks': 'channel' if self.channel_mode else 'ads',
+                'channel_ident': self.channel_mode and self.channel_ident,
+                'channel': on_air if kind == 'channel' else None,
+                'channel_cued': self.cued_channel is not None,
                 'ad': on_air if kind == 'ad' else None, 'promo': on_air if kind == 'promo' else None,
                 'card_since': self.card_since and round(self.card_since[1], 1),
                 'cued': cued and cued.ad['id'], 'card': {'ready': self.card is not None, 'error': self.card_error},
@@ -614,7 +678,7 @@ class AdBreak:
         if in_break:
             at, reel = 0., self.reel
             if reel is not None and self.last_due is not None and self.reel_start is not None:
-                at = max(0., reel.ad['duration'] - (self.last_due - self.reel_start) / SECOND)
+                at = max(0., (reel.ad['duration'] or 0) - (self.last_due - self.reel_start) / SECOND)
         rows = []
 
         def add(entry, item, **extra):
@@ -833,6 +897,7 @@ class AdBreak:
         if muted and self.state == 'idle' and (self.break_end is None or due >= self.break_end):
             self.break_start = due
             self.break_promos, self.break_items = set(), 0
+            self.break_rejoined = self.break_end is not None and due - self.break_end < self.IDENT_REJOIN
             self._next(due)
         elif not muted and self.state != 'idle' and due >= self.break_start:
             if self.reel is not None:
@@ -852,10 +917,24 @@ class AdBreak:
             return True
         return settings['fill'] and (not self.ads_on or self.cued is None)
 
+    def _ident_wanted(self):
+        """Should a channel break open with the cued promo: idents first, nothing on air yet this
+        break, and not a break back straight after the last one."""
+        promo = self.cued_promo
+        return (self.channel_ident and not self.break_items and not self.break_rejoined
+                and promo is not None and not promo.failed)
+
     def _choice(self, now, fill=False):
         """What would go on now: 'cued' (Next up's first: queued by hand, or the rotation's ad),
         'promo' (the next promo, due) or None. First what the operator queued, then a due
-        promo, then the rotation. A wait fill starts only short ads."""
+        promo, then the rotation. A wait fill starts only short ads. Breaks that show a channel
+        take nothing else: the ident first ('promo', see _ident_wanted), then 'channel' once it
+        is cued, else None (the card)."""
+        if self.channel_mode and not fill:
+            if self._ident_wanted():
+                return 'promo'
+            channel = self.cued_channel
+            return 'channel' if channel is not None and not channel.failed else None
         cued = self.cued
         if cued is not None and fill and self.fill_longest is not None and cued.ad['duration'] > self.fill_longest:
             cued = None
@@ -873,6 +952,9 @@ class AdBreak:
             choice = self._choice(now, fill)
             if choice is None:
                 return None, None
+            if choice == 'channel':
+                reel, self.cued_channel = self.cued_channel, None
+                return reel, 'channel'
             if choice == 'promo':
                 reel, self.cued_promo = self.cued_promo, None
             else:
@@ -906,13 +988,15 @@ class AdBreak:
             self.reel, self.reel_kind, self.reel_start, self.state = reel, kind, due, kind
             if kind == 'promo':
                 self.promo_playing = (reel.ad['id'], now)
+            elif kind == 'channel':
+                self.channel_playing = now
             else:
                 self.now_playing = (reel.ad['id'], now)
         else:
             if reel is not None:
                 self.done.append(reel)
             self.reel = self.reel_kind = None
-            if self.ads_on:
+            if self.ads_on or self.channel_mode:
                 self.state = 'card'
                 if self.card_since is None:
                     self.card_since = (due, now)
@@ -923,6 +1007,15 @@ class AdBreak:
     def _finish(self, due, cut=False, skipped=False):
         reel, kind, self.reel, self.reel_kind = self.reel, self.reel_kind, None, None
         aired = max(0., (due - self.reel_start) / SECOND)
+        if kind == 'channel':            # no limits to count: just what aired, and why it stopped
+            row = {'kind': 'channel', 'id': reel.ad['id'], 'name': reel.ad.get('name'), 'url': reel.ad.get('url'),
+                   'at': round(self.channel_playing or time.time() - aired, 1), 'seconds': round(aired, 1)}
+            if reel.failed:
+                row['error'] = str(reel.failed)[:200]
+            self.channel_playing = None
+            self.log.append(row)
+            self.done.append(reel)
+            return
         length = reel.ad['duration']
         complete = not cut and not skipped and not reel.failed
         playing = self.promo_playing if kind == 'promo' else self.now_playing
@@ -1225,7 +1318,7 @@ class AdBreak:
         cutoff = time.time() - self.HISTORY
         if self.plays and self.plays[0].get('at', 0) < cutoff:
             self.plays = [p for p in self.plays if p.get('at', 0) >= cutoff]
-        for reel in (self.reel, self.cued, self.cued_promo):
+        for reel in (self.reel, self.cued, self.cued_promo, self.cued_channel):
             if reel is not None and not reel.failed:
                 reel.poll()
                 if reel.failed:
@@ -1234,6 +1327,7 @@ class AdBreak:
                                 reel.failed)
         self._load_card()
         self._cue_join()
+        self._cue_channel()
         self._cue()
         self._cue_promo()
         self._save_queue()
@@ -1271,7 +1365,8 @@ class AdBreak:
         # The ad on air counts towards its limit while it plays.
         plays = self.plays + ([{'kind': 'ad', 'id': playing[0], 'at': playing[1], 'counted': True}] if playing else [])
         self._keep_queue(settings, plays, now)
-        entry = self._first() if self.active or self.filling else None
+        # Breaks that show a channel need no ad cued (the wait fill still does).
+        entry = self._first() if (self.active and not self.channel_mode) or self.filling else None
         if cued is not None:
             why = self._stale(cued, entry)
             if why is None:
@@ -1416,6 +1511,62 @@ class AdBreak:
             self.cued = None
         reel.close()
 
+    # ------------------------------------------------------------ the break channel (the helper's)
+    def _cue_channel(self):
+        """Breaks that show a channel: keeps its server warm, and in a break (the card up, the
+        ident in its last CHANNEL_LEAD seconds, or the channel on air and failing) its reel
+        cued, so the card or the ident gives way to it."""
+        with self.lock:
+            cued = self.cued_channel
+        channel = self.break_channel
+        if not (self.channel_mode and self.active and channel):
+            if cued is not None:
+                self._drop_channel(cued)
+            return
+        now = time.monotonic()
+        if now - self.channel_warm_at >= self.CHANNEL_WARM:
+            self.channel_warm_at = now
+            threading.Thread(target=_warm, args=(channel['url'],), name='my-ads-channel-warm', daemon=True).start()
+        in_break = self.state in ('card', 'channel', 'promo') and self.fill is None
+        if cued is not None and (cued.failed or not in_break):
+            self._drop_channel(cued)
+            cued = None
+        if cued is not None or not in_break or now < self.channel_retry_at:
+            return
+        if isinstance(self.reel, ChannelReel) and not self.reel.failed:
+            return                       # on air and well
+        if self._ident_left() > self.CHANNEL_LEAD:
+            return                       # held back no longer than it must be
+        reel = ChannelReel(self.gst, channel, self.caps, self.output.audio_caps)
+        try:
+            ready = reel.cue()
+        except Exception as exc:
+            reel.failed, ready = str(exc), False
+        if not ready:
+            LOG.warning('The break channel %s would not start: %s', channel['url'], reel.failed)
+            self.channel_retry_at = time.monotonic() + self.CHANNEL_RETRY
+            reel.close()
+            return
+        with self.lock:
+            if self.cued_channel is None and self.state in ('card', 'channel', 'promo') and self.channel_mode:
+                self.cued_channel, reel = reel, None
+        if reel is not None:
+            reel.close()
+
+    def _ident_left(self):
+        """Seconds left of the ident on air (0: none)."""
+        reel, kind, start, last = self.reel, self.reel_kind, self.reel_start, self.last_due
+        if reel is None or kind != 'promo' or start is None or last is None:
+            return 0.
+        return max(0., (reel.ad['duration'] or 0) - (last - start) / SECOND)
+
+    def _drop_channel(self, reel):
+        with self.lock:
+            if self.cued_channel is not reel:
+                return
+            self.cued_channel = None
+        reel.close()
+
     # ------------------------------------------------------------ station promos (the helper's)
     def _promo_path(self, promo, values):
         """The promo's file: its copy voiced for the programme on air if there is one, else its own."""
@@ -1426,11 +1577,11 @@ class AdBreak:
 
     def _cue_promo(self):
         """Keeps the rotation's next promo (kept until it airs, is skipped or cannot air now),
-        cued while breaks may come."""
+        cued while breaks may come (with promos on, or channel breaks' idents)."""
         settings, values, library, now = self.promos, self.promo_values, self.library, time.time()
         with self.lock:
             cued = self.cued_promo
-        if not self.promos_on or not settings or self.library_folder is None:
+        if not self._promos_wanted() or not settings or self.library_folder is None:
             with self.lock:
                 self.next_promo = None
             if cued is not None:
@@ -1469,7 +1620,7 @@ class AdBreak:
             LOG.warning('Station promo %r is left out for %d minutes: %s', entry['id'], self.LEAVE_OUT // 60, exc)
             return
         with self.lock:
-            if self.cued_promo is None and (self.active or self.filling) and self.promos_on and self.next_promo is entry:
+            if self.cued_promo is None and (self.active or self.filling) and self._promos_wanted() and self.next_promo is entry:
                 self.cued_promo, reel = reel, None
         if reel is not None:
             reel.close()

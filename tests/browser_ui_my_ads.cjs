@@ -218,4 +218,51 @@ run(async browser => {
   assert.equal(await overflow(mp), 0, 'fits a phone');
   assert.deepEqual(t.errors, []);
   await t.ctx.close();
+
+  // A channel instead: our channels to choose from, an ident opening the break, then the channel.
+  const TV = 'http://127.0.0.1:8080/stream/';
+  const OURS = [{id: 'internet:cabride', name: 'Trains', number: 1, note: 'Train cab rides', url: TV + 'internet/cabride/index.m3u8'},
+    {id: 'internet:pentulive', name: 'pen2live', number: 2, note: 'Yle\'s puppy cam', url: TV + 'internet/pentulive/index.m3u8'},
+    {id: 'slides:sports-guide', name: 'VizelVision Sports Guide', number: 6, note: null, url: TV + 'sports-guide/index.m3u8'}];
+  t = await open(browser, '/ads#my-ads', {width: 390, edit: F => {
+    Object.assign(F.my_ads.settings, {breaks: 'channel', channel_ident: true,
+      break_channel: {url: OURS[0].url, name: 'Trains', number: 1}});
+    F.my_ads.channels = {channels: OURS, error: null};
+    Object.assign(F.my_ads.status, {state: 'promo', ad: null, breaks: 'channel', channel_ident: true,
+      promo: {id: 'forecast', name: 'The VizelVision Forecast', duration: 10, position: 3, since: 1790907300}});
+    F.my_ads.recent.unshift({kind: 'channel', id: 'channel', name: '1 Trains', at: 1790907000, seconds: 150.1});
+  }, api: {'POST /v1/my-ads': (body, F) => F.my_ads}});
+  const cp = t.page;
+  await cp.waitForSelector('#break-channel option', {state: 'attached'});
+  assert.equal(await cp.locator('#breaks-channel').textContent(), 'Channel 1');
+  assert.equal(await cp.locator('#breaks-channel').getAttribute('aria-pressed'), 'true');
+  assert.equal(await cp.locator('#my-status').textContent(), 'The VizelVision Forecast');
+  assert.match(await cp.locator('#my-status-detail').textContent(), /A VizelVision ident opens this break; then 1 Trains, live/);
+  assert.equal(await cp.locator('#state-chip').textContent(), 'ident');
+  assert.deepEqual(await cp.locator('#break-channel option').allTextContents(), ['1 Trains', '2 pen2live', '6 VizelVision Sports Guide']);
+  assert.equal(await cp.locator('#channel-ident').isChecked(), true);
+  assert.match(await cp.locator('#channel-note').textContent(), /Train cab rides\. The ident is the next station promo/);
+  assert.match(await cp.locator('#recent').innerText(), /Channel\s+1 Trains\s+2:30/i);
+  assert.deepEqual(await posted(t, () => cp.locator('#break-channel').selectOption({label: '2 pen2live'})),
+    {method: 'POST', path: '/v1/my-ads', body: {break_channel: {url: OURS[1].url, name: 'pen2live', number: 2}}});
+  assert.deepEqual(await posted(t, () => cp.locator('#channel-ident').uncheck()),
+    {method: 'POST', path: '/v1/my-ads', body: {channel_ident: false}});
+  assert.equal(await overflow(cp), 0, 'fits a phone');
+  assert.deepEqual(t.errors, []);
+  await t.ctx.close();
+
+  // A saved channel TV Thing no longer lists: still shown, and said so.
+  t = await open(browser, '/ads#my-ads', {edit: F => {
+    Object.assign(F.my_ads.settings, {breaks: 'channel', channel_ident: false,
+      break_channel: {url: 'http://127.0.0.1:8791/cab/index.m3u8', name: 'Cab Ride', number: 144}});
+    F.my_ads.channels = {channels: OURS, error: null};
+    Object.assign(F.my_ads.status, {state: 'idle', ad: null, active: true});
+  }});
+  await t.page.waitForSelector('#break-channel option', {state: 'attached'});
+  assert.equal(await t.page.locator('#breaks-channel').textContent(), 'Channel 144');
+  assert.equal(await t.page.locator('#break-channel option').first().textContent(), '144 Cab Ride (not in Our channels now)');
+  assert.match(await t.page.locator('#channel-note').textContent(), /not one of our channels any more[\s\S]*cut straight to the channel/);
+  assert.match(await t.page.locator('#my-status-detail').textContent(), /The next break ad mute mutes shows 144 Cab Ride, live/);
+  assert.deepEqual(t.errors, []);
+  await t.ctx.close();
 });

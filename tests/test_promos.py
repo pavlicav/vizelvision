@@ -455,6 +455,78 @@ class PromoBreakTests(unittest.TestCase):
         self.b.configure(my_ads_validate({'enabled': False}), {'mode': 'on'})
         self.assertFalse(self.b.active, 'both off: nothing replaces a break')
 
+    def channel_breaks(self, **settings):
+        self.b.configure(my_ads_validate({'pip': {'enabled': False}, 'ads': [ad(1)], 'breaks': 'channel', **settings}),
+                         {'mode': 'on'})
+
+    def channel(self):
+        return FakeReel({'id': 'channel', 'name': '1 Trains', 'duration': None}, int(1e12), 70)
+
+    def test_a_channel_break_opens_with_an_ident_then_the_channel(self):
+        self.configure(enabled=False)                       # promos off: the ident is the channel break's own
+        self.channel_breaks()
+        self.assertTrue(self.b._promos_wanted(), 'a promo is kept cued for the ident')
+        self.b.cued, self.b.cued_promo = FakeReel(ad(1), int(10e9), 50), FakeReel(self.promo, int(5e9), 90)
+        self.tap.mutes.append((int(1e9), int(30e9)))
+        self.assertEqual(self.frame(1.0), 90, 'the ident first')
+        self.assertEqual((self.b.state, self.b.status()['channel_ident']), ('promo', True))
+        self.b.cued_channel = self.channel()
+        self.assertEqual(self.frame(3.0), 90, 'the ident plays out')
+        self.assertEqual(self.frame(6.0), 70, 'then the channel')
+        self.assertEqual(self.frame(20.0), 70)
+        self.assertIsNone(self.frame(30.0))
+        self.assertEqual([(r['kind'], r['seconds']) for r in self.b.log], [('promo', 5.0), ('channel', 24.0)])
+        self.assertTrue(self.b.log[0]['counted'])
+        self.assertEqual(self.b.cued.ad['id'], ad(1)['id'], 'no ad aired')
+
+    def test_channel_breaks_without_the_ident_or_back_straight_away_go_to_the_channel(self):
+        self.channel_breaks(channel_ident=False)
+        self.assertFalse(self.b._promos_wanted() and not self.b.promos_on)
+        self.b.cued_promo, self.b.cued_channel = FakeReel(self.promo, int(5e9), 90), self.channel()
+        self.tap.mutes.append((int(1e9), int(10e9)))
+        self.assertEqual(self.frame(1.0), 70, 'idents off: the channel at once')
+        self.assertIsNone(self.frame(10.0))
+        self.channel_breaks()
+        self.tap.mutes += [(int(20e9), int(30e9)), (int(100e9), int(110e9))]
+        self.b.cued_channel = self.channel()
+        self.assertEqual(self.frame(20.0), 70, 'back within a minute of the last: straight to the channel')
+        self.assertIsNone(self.frame(30.0))
+        self.b.cued_channel = self.channel()
+        self.assertEqual(self.frame(100.0), 90, 'a new break: the ident')
+
+    def test_no_ident_cued_the_channel_goes_on(self):
+        self.channel_breaks()
+        self.b.cued_channel = self.channel()
+        self.tap.mutes.append((int(1e9), int(10e9)))
+        self.assertEqual(self.frame(1.0), 70)
+        self.b.cued_promo = FakeReel(self.promo, int(5e9), 90)
+        self.b.cued_channel = None
+        self.b.reel.failed = 'gone'
+        self.assertEqual(self.frame(2.0), 16, 'a channel re-cued mid-break: the card, no ident')
+
+    def test_the_channel_is_cued_in_the_idents_last_seconds(self):
+        self.channel_breaks()
+        made = []
+
+        class Channel(FakeReel):
+            def __init__(reel, gst, channel, video_caps, audio_caps):
+                super().__init__({'id': 'channel', 'name': channel['name'], 'duration': None}, int(1e12), 70)
+                made.append(reel)
+
+            def cue(reel):
+                return True
+
+        self.b.cued_promo = FakeReel(self.promo, int(10e9), 90)
+        self.tap.mutes.append((int(1e9), int(30e9)))
+        with patch.object(ad_break, 'ChannelReel', Channel), patch.object(ad_break, '_warm', lambda url: None):
+            self.assertEqual(self.frame(1.0), 90)
+            self.b._cue_channel()
+            self.assertEqual((made, self.b.cued_channel), ([], None), 'ten seconds of ident left: not yet')
+            self.frame(7.0)
+            self.b._cue_channel()
+            self.assertIs(self.b.cued_channel, made[0], 'four seconds left: cued')
+        self.assertEqual(self.frame(11.0), 70)
+
     def test_status(self):
         self.b.cued_promo = FakeReel(self.promo, int(1e9), 90)
         status = self.b.status()

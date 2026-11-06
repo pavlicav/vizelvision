@@ -373,7 +373,13 @@ def handler_factory(
                    'enabled': promos_module.switched_on(promo_settings, p['id']), 'why': promos_module.readiness(p, values),
                    'why_by_hand': promos_module.readiness(p, values, by_hand=True)}
                   for p in promo_desk.library.read()]
+        # What channel breaks may show: TV Thing's "Our channels" that it streams.
+        try:
+            channels = sources.our_channels() if sources else {'channels': [], 'error': 'TV-Thing is not configured'}
+        except SourceUnavailableError as exc:
+            channels = {'channels': [], 'error': str(exc)}
         return {'settings': {k: v for k, v in settings.items() if k != 'ads'}, 'ads': ads, 'status': worker, 'mix': mix_view,
+                'channels': channels,
                 'promos': {'enabled': promo_settings['enabled'], 'every': promo_settings['every'], 'list': promos},
                 'admute_mode': admute_settings.read()['mode'], 'on_air': on_air,
                 'recent': [{**p, 'counted': my_ads_module.played(p)} if p.get('kind', 'ad') == 'ad' else p for p in plays[-80:][::-1]],
