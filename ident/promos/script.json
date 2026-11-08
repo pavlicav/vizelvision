@@ -694,5 +694,68 @@
         "text": "Vizzle Vision! Shaadee Mubaarak!"
       }
     ]
+  },
+  "cat-leaf-pile": {
+    "host": "The Narrator",
+    "model": "aura-2-draco-en",
+    "lines": [
+      {
+        "id": "promo-cat-leaf-pile-1",
+        "at": 0.45,
+        "text": "The orange cat... has found the leaf pile."
+      },
+      {
+        "id": "promo-cat-leaf-pile-2",
+        "at": 4.2,
+        "text": "The orange cat... is now the leaf pile."
+      },
+      {
+        "id": "promo-cat-leaf-pile-3",
+        "at": 8.0,
+        "text": "Happy Thanksgiving."
+      }
+    ]
+  },
+  "guest-of-honor": {
+    "host": "Helena, the host",
+    "model": "aura-2-helena-en",
+    "lines": [
+      {
+        "id": "promo-guest-of-honor-1",
+        "at": 0.3,
+        "text": "Everybody's here..."
+      },
+      {
+        "id": "promo-guest-of-honor-2",
+        "at": 3.75,
+        "text": "...and here's our guest of honor!"
+      },
+      {
+        "id": "promo-guest-of-honor-3",
+        "at": 7.95,
+        "text": "Happy Thanksgiving."
+      }
+    ]
+  },
+  "hand-turkey": {
+    "host": "Iris, the kindergarten teacher",
+    "model": "aura-2-iris-en",
+    "lines": [
+      {
+        "id": "promo-hand-turkey-1",
+        "at": 0.3,
+        "text": "Okay, everybody... trace your hand!"
+      },
+      {
+        "id": "promo-hand-turkey-2",
+        "at": 5.0,
+        "text": "Oh! Well, hello there!"
+      },
+      {
+        "id": "promo-hand-turkey-3",
+        "at": 7.85,
+        "text": "Happy Thanksgiving!"
+      }
+    ]
   }
 }

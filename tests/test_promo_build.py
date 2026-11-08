@@ -36,7 +36,8 @@ NEW = ('watching', 'metro', 'dupont', 'meridian-hill', 'now-in-hd', 'cat-remote'
        'eighty-six', 'ninety-six', 'twenty-sixteen', 'the-cairo', 'cairo-1894', 'baseball', 'football',
        'hail-mary', 'cat-field-goal', 'halftime', 'happy-little', 'forecast', 'popcorn',
        'metro-5', 'baseball-5', 'cat-remote-5', 'basketball', 'hockey', 'all-are-welcome',
-       'wnba', 'mnba', 'non-denom', 'elca', 'presbyterian', 'shinto', 'robot', 'lds', 'shaadi')
+       'wnba', 'mnba', 'non-denom', 'elca', 'presbyterian', 'shinto', 'robot', 'lds', 'shaadi',
+       'cat-leaf-pile', 'guest-of-honor', 'hand-turkey')
 SPORTS = {'baseball': {'mlb'}, 'football': {'nfl', 'ncaaf'}, 'hail-mary': {'nfl', 'ncaaf'},
           'cat-field-goal': {'nfl', 'ncaaf'}, 'halftime': {'nfl', 'ncaaf'}, 'baseball-5': {'mlb'},
           'basketball': {'nba', 'wnba'}, 'hockey': {'nhl'}, 'wnba': {'wnba'}, 'mnba': {'nba'}, 'robot': {'nfl'}}
