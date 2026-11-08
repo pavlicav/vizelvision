@@ -1520,7 +1520,7 @@ def serve(config: AppConfig) -> None:
     # A network YouTube TV is not ready with in time comes from the antenna (networks.py).
     coordinator.networks = Networks(config, sources.tv)
     sports.antenna_only = coordinator.networks.antenna_only
-    # YouTube TV has Lansing's CBS and FOX: its listings say which regional NFL game is on (sports.py).
+    # YouTube TV has its own market's CBS and FOX: its listings say which regional NFL game is on (sports.py).
     sports.listings = lambda: sources.tv.get('guide')['data']['channels']
     if config.master.enabled:
         playout = SourceQueue(config.state_file.with_name('queue.json'), coordinator.execute_queue,

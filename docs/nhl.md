@@ -47,9 +47,9 @@ channel instead. The function returns:
 
 - **`exclusive`**: an ESPN+ exclusive, also listed on Disney+ or Hulu, with no regional
   broadcast to black it out;
-- **`blackout`**: the teams whose home market may black the game out, and where. The
-  markets are `WSH` (DC) and `DET` (Lansing). YouTube TV places the Roku in one or the
-  other, and it moves between them;
+- **`blackout`**: the teams whose home market may black the game out, and where. Only
+  YouTube TV's market counts: `WSH` (DC) since 2026-11-07, `DET` (Lansing) before
+  (`espn_unlimited.NHL_LOCAL_TEAMS`);
 - **`home`** and **`away`**: the regional broadcasts whose commentary those streams carry.
 
 Each NHL game in the sports catalog (`SportsCatalog._suggest`) gets two fields:

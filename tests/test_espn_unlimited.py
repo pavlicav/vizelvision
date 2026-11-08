@@ -13,6 +13,7 @@ from roku_stream.sources import SourceCatalog
 from roku_stream.sports import SportsCatalog
 from roku_stream.sports_join import game_of
 from roku_stream.tv_control import target_from
+from tests.test_programming import youtube_tv_in_lansing
 
 
 # Verified on the Roku 2026-10-22: an ESPN+ exclusive (also on Disney+ and Hulu).
@@ -74,6 +75,7 @@ class NwslTests(unittest.TestCase):
         self.assertEqual(game['espn_unlimited_target']['source_id'], 'nwsl')
 
     def test_the_source_lists_only_the_days_espn_unlimited_games(self):
+        self.enterContext(youtube_tv_in_lansing())
         sports = catalog()
         games = [nwsl(1, 'ESPN+'), nwsl(2, 'ION'), nwsl(3, 'NWSL+')]
         sports.games = Mock(return_value={'date': '2026-11-01', 'games': [sports._suggest(g) for g in games]})
@@ -148,8 +150,11 @@ class IonTests(unittest.TestCase):
 class StreamTests(unittest.TestCase):
     def test_espn_plus_nhl_games_stream_on_espn_unlimited(self):
         self.assertEqual(nhl_on_espn_unlimited(GAME), {'exclusive': True, 'blackout': {}, 'home': [], 'away': []})
-        self.assertEqual(nhl_on_espn_unlimited(POWER_PLAY), {'exclusive': False, 'blackout': {'DET': 'Lansing'},
+        # The Red Wings: out of market since YouTube TV placed the Roku in DC (2026-11-07).
+        self.assertEqual(nhl_on_espn_unlimited(POWER_PLAY), {'exclusive': False, 'blackout': {},
                                                              'home': ['SNP'], 'away': ['FDSNDET']})
+        with youtube_tv_in_lansing():
+            self.assertEqual(nhl_on_espn_unlimited(POWER_PLAY)['blackout'], {'DET': 'Lansing'})
         self.assertIsNone(nhl_on_espn_unlimited(ON_TNT), 'a national channel carries it')
         self.assertIsNone(nhl_on_espn_unlimited({**GAME, 'league': 'nba'}), 'only NHL games')
 
@@ -174,8 +179,10 @@ class RoutingTests(unittest.TestCase):
         self.assertIn('ESPN Unlimited', game['note'])
         with self.assertRaises(ConfigError):
             roku_target({**target, 'channel_id': 'Kraken'})
-        blackout = catalog()._suggest(POWER_PLAY)['note']
-        self.assertIn('Blacked out if YouTube TV places the Roku in Lansing (DET)', blackout)
+        self.assertNotIn('blacked out', catalog()._suggest(POWER_PLAY)['note'])
+        with youtube_tv_in_lansing():
+            blackout = catalog()._suggest(POWER_PLAY)['note']
+        self.assertIn('May be blacked out: YouTube TV places the Roku in Lansing (DET)', blackout)
 
     def test_a_game_on_a_channel_stays_there_with_espn_unlimited_offered(self):
         both = {**POWER_PLAY, 'broadcasts': [*POWER_PLAY['broadcasts'], {'name': 'TNT', 'market': 'national'}]}
@@ -185,6 +192,7 @@ class RoutingTests(unittest.TestCase):
         self.assertIsNone(catalog(channels=('TNT',))._suggest(ON_TNT)['espn_unlimited_target'])
 
     def test_the_source_lists_only_the_days_espn_unlimited_games(self):
+        self.enterContext(youtube_tv_in_lansing())
         sports = catalog()
         sports.games = Mock(return_value={'date': '2026-10-22', 'games': [sports._suggest(g) for g in (GAME, POWER_PLAY, ON_TNT)]})
         listing = SourceCatalog(Mock(), sports=sports).programs(SOURCE_ID, '2026-10-22')

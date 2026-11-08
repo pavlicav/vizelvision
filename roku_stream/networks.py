@@ -1,8 +1,8 @@
 """Broadcast networks VizelVision can take from YouTube TV or over the air.
 
 NBC, FOX, ABC, CBS and The CW reach VizelVision two ways: YouTube TV carries them
-through the Roku from Lansing's stations (WILX, WSYM, WLAJ, WLNS), and TV-Thing's antenna
-tunes Washington's directly. Their network programs are the same; their local news is
+through the Roku from its market's stations (Washington's again since 2026-11-07; Lansing's
+WILX, WSYM, WLAJ and WLNS from 10-25 until then), and TV-Thing's antenna tunes Washington's directly. Their network programs are the same; their local news is
 not, and nor are Sunday's regional NFL games, which only go from one to the other when
 both markets carry the game (sports.markets). A channel change on the Roku takes from 20 s to over 2 min; the antenna
 tunes in a few seconds. So a queue entry for one of these networks on YouTube TV

@@ -15,7 +15,7 @@ from roku_stream.source_queue import SourceQueue
 
 from roku_stream.sports import EspnScoreboard, SportsCatalog
 from tests import test_programming, test_source_coordinator
-from tests.test_programming import ESPN, NBC, NOON, ZONE, cell
+from tests.test_programming import ESPN, NBC, NOON, ZONE, cell, youtube_tv_in_lansing
 from tests.test_source_coordinator import TARGET
 
 TV = {'source_id': 'tv-thing-digital', 'channel_id': 'wrc'}
@@ -404,7 +404,7 @@ class GamesOnTests(unittest.TestCase):
         return event
 
     def lions(self, state='in', id='401', away=('Seattle Seahawks', 'SEA')):
-        """A Lions home game on FOX: Lansing's, so YouTube TV's FOX has it."""
+        """A Lions home game on FOX: Lansing's, so YouTube TV's FOX had it (the test enters Lansing)."""
         event = self.event(state, id=id, name=f'{away[0]} at Detroit Lions')
         home, visitor = event['competitions'][0]['competitors']
         home['team'].update(displayName='Detroit Lions', name='Lions', abbreviation='DET')
@@ -412,6 +412,7 @@ class GamesOnTests(unittest.TestCase):
         return event
 
     def test_live_game_on_a_youtube_tv_channel(self):
+        self.enterContext(youtube_tv_in_lansing())
         games, _ = self.catalog([self.lions()]).games_on({'source_id': 'youtube-tv', 'channel_id': 'FOX'}, now=self.NOW)
         self.assertEqual([(g['league'], g['game_pk'], g['live']) for g in games], [('nfl', 401, True)])
         self.assertEqual(games[0]['game_date'], '2026-09-27')
@@ -438,6 +439,7 @@ class GamesOnTests(unittest.TestCase):
         self.assertEqual([g['game_pk'] for g in games], [401])
 
     def test_upcoming_within_the_hour_counts_and_later_does_not(self):
+        self.enterContext(youtube_tv_in_lansing())
         pre = self.lions('pre')
         catalog = self.catalog([pre])
         self.assertEqual(len(catalog.games_on({'source_id': 'youtube-tv', 'channel_id': 'FOX'},

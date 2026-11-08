@@ -448,7 +448,7 @@ class SourceCoordinator:
     # The antenna: a network YouTube TV is not ready with in time ---------------------------
     def _markets(self, game):
         """Where a queue entry's NFL game is on its network (sports.markets: YouTube TV's
-        Lansing stations, the antenna's Washington ones), or None without a game or an answer."""
+        market's stations, the antenna's Washington ones), or None without a game or an answer."""
         if not game or self.sports is None or game.get('league') != 'nfl':
             return None
         try:
@@ -592,7 +592,7 @@ class SourceCoordinator:
                 roku = {'source_id': 'youtube-tv', 'channel_id': network, 'antenna': False} if network else None
                 markets = self._markets(game)
                 if roku and markets and not markets['youtube_tv']:
-                    # Lansing's station has another game: Sunday Ticket has this one.
+                    # YouTube TV's station has another game: Sunday Ticket has this one.
                     roku = {'source_id': 'sunday-ticket', 'channel_id': str(game['game_pk']), 'date': game.get('game_date')}
                 return {'antenna': target, 'roku': roku}
             if source not in ROKU_SOURCE_IDS:

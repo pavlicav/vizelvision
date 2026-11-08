@@ -20,9 +20,9 @@ ESPN_UNLIMITED_NWSL = frozenset({'ESPN+', 'ESPN UNLMTD'})
 # Disney+ and Hulu (LA at NYI, 2026-10-22).
 ESPN_UNLIMITED_NHL = 'ESPN+'
 ESPN_EXCLUSIVE_ALSO = frozenset({'DISNEY+', 'HULU'})
-# Teams ESPN Unlimited blacks out, and where: YouTube TV's market for the Roku moves between
-# DC and Lansing, so their games may or may not be watchable.
-NHL_LOCAL_TEAMS = {'WSH': 'DC', 'DET': 'Lansing'}
+# Teams ESPN Unlimited blacks out, and where: those of YouTube TV's market for the Roku
+# (the Red Wings in Lansing until 2026-11-07, the Capitals in DC since).
+NHL_LOCAL_TEAMS = {'WSH': 'DC'}
 # TV Thing's refusals of a game it will not play here, not worth another walk of the ESPN page
 # (minutes of Roku each): blacked out on the card before Select, or by the player after it.
 # Its operation names the first only as navigation_failed, in these words (its code,
@@ -77,7 +77,7 @@ def note(stream, league=SOURCE_ID):
     text = f'NHL on ESPN Unlimited in YouTube TV ({kind}); the Roku takes 3-4 minutes to find it.'
     if stream['blackout']:
         markets = ' or '.join(f'{market} ({team})' for team, market in stream['blackout'].items())
-        text += f' Blacked out if YouTube TV places the Roku in {markets}.'
+        text += f' May be blacked out: YouTube TV places the Roku in {markets}.'
     return text
 
 

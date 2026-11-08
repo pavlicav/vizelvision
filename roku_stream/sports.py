@@ -5,10 +5,11 @@ Each game has a league, an integer id, a title, a start time and its TV
 networks. `game_status()` is the queue's end-of-game gate for every league.
 Suggested channels are only hints: Sunday-afternoon NFL games on CBS and FOX
 are regional, and the two ways VizelVision gets those networks are in different
-markets. The Roku's YouTube TV carries Lansing's stations (WLNS, WSYM), whose
+markets. The Roku's YouTube TV carries its own market's stations (YOUTUBE_TV_MARKET:
+Washington's since 2026-11-07, Lansing's WLNS and WSYM from 10-25 until then), whose
 games its listings name; the antenna carries Washington's (WUSA, FOX 5), with
-the DC teams' games. A game Lansing does not show is suggested as Sunday
-Ticket, which in YouTube TV's market blacks out only Lansing's games.
+the DC teams' games. A game YouTube TV's stations do not show is suggested as
+Sunday Ticket, which blacks out only the games of YouTube TV's market.
 """
 from __future__ import annotations
 
@@ -41,10 +42,13 @@ POWER_FIVE_CONFERENCES = frozenset({'1', '4', '5', '8', '9'})
 NOTRE_DAME_ID = '87'
 # Teams whose Sunday CBS/FOX games Washington's stations carry: the antenna's market.
 LOCAL_NFL_TEAMS = {'WSH', 'BAL'}
-# The Roku's YouTube TV carries Lansing's stations, not Washington's: on 2026-10-25 its CBS had
-# Colts at Vikings while WUSA had Bengals at Ravens. Its Sunday CBS/FOX games are the ones its
-# listings (TV Thing's, from Gracenote) name; these teams' games where the listings stop.
-YOUTUBE_TV_NFL_TEAMS = {'DET'}
+# The Roku's YouTube TV carries its own market's stations, which need not be the antenna's: on
+# 2026-10-25, in Lansing, its CBS had Colts at Vikings while WUSA had Bengals at Ravens. Since
+# 2026-11-07 it is in Washington again (TV Thing's networks.json youtube_tv_market says the same).
+# Its Sunday CBS/FOX games are the ones its listings (TV Thing's, from Gracenote) name; these
+# teams' games where the listings stop.
+YOUTUBE_TV_MARKET = 'Washington'
+YOUTUBE_TV_NFL_TEAMS = {'WSH', 'BAL'}
 # The networks whose Sunday-afternoon NFL games are regional.
 REGIONAL_NETWORKS = ('CBS', 'FOX')
 # YouTube TV's listings are read again after this long: each read copies TV Thing's whole guide.
@@ -274,7 +278,7 @@ class EspnScoreboard:
 class SportsCatalog:
     def __init__(self, config, baseball, *, scoreboard=None, listings=None, clock=time.monotonic):
         """listings() returns TV Thing's guide rows ({'source_id', 'channel_id', 'events'} each),
-        which hold YouTube TV's Lansing listings, or raises when TV Thing has none.
+        which hold YouTube TV's own market's listings, or raises when TV Thing has none.
         antenna_only(network) is Networks.antenna_only: the station of a network only the antenna has."""
         self.config, self.baseball = config, baseball
         self.scoreboard = scoreboard or EspnScoreboard()
@@ -313,7 +317,7 @@ class SportsCatalog:
         return listed
 
     def _on_youtube_tv(self, game, channels, start):
-        """The network YouTube TV's Lansing station shows a regional game on (one of channels),
+        """The network YouTube TV's station shows a regional game on (one of channels),
         False when its listings have something else then, None when they do not reach it."""
         wanted = frozenset(teams(game.get('title')) or ())
         moment = start.timestamp() + 300  # Into the game: its pregame show has ended.
@@ -356,22 +360,22 @@ class SportsCatalog:
         regional = bool(game['league'] == 'nfl' and start and start.weekday() == 6 and start.hour < 19
                         and regional_networks)
         sides = {(game.get(side) or {}).get('abbreviation') for side in ('away', 'home')}
-        # A regional game's market: YouTube TV's Lansing station has it when its listings name
-        # it (or, past them, it is a Lions game); the antenna's Washington one for a DC team.
-        lansing, listed = None, False
+        # A regional game's market: YouTube TV's station has it when its listings name it (or,
+        # past them, it is a YOUTUBE_TV_NFL_TEAMS game); the antenna's Washington one for a DC team.
+        on_youtube_tv, listed = None, False
         if regional:
-            lansing = self._on_youtube_tv(game, regional_networks, start)
-            listed = lansing is not None
-            if lansing is None:
-                lansing = regional_networks[0] if sides & YOUTUBE_TV_NFL_TEAMS else False
+            on_youtube_tv = self._on_youtube_tv(game, regional_networks, start)
+            listed = on_youtube_tv is not None
+            if on_youtube_tv is None:
+                on_youtube_tv = regional_networks[0] if sides & YOUTUBE_TV_NFL_TEAMS else False
         washington = bool(sides & LOCAL_NFL_TEAMS)
         # Sunday Ticket carries the Sunday-afternoon CBS and FOX games, never a national
         # exclusive (NFL Network, ESPN, NBC at night): on 2026-10-04 Colts at Commanders, on
         # NFL Network, was picked from its listing and looked for there in vain. It blacks out
-        # what YouTube TV's own (Lansing's) stations show.
+        # what YouTube TV's own market's stations show.
         networks = {NETWORK_ALIASES.get(str(b['name']).upper(), b['name']) for b in game['broadcasts']}
         on_ticket = bool(game['league'] == 'nfl' and start and start.weekday() == 6 and start.hour < 19
-                         and (not networks or networks & {'CBS', 'FOX'}) and not lansing)
+                         and (not networks or networks & {'CBS', 'FOX'}) and not on_youtube_tv)
         ticket = {'source_id': 'sunday-ticket', 'channel_id': str(game['game_id']),
                   'date': start.date().isoformat() if start else None}
         from .prime_video import prime_nfl_game
@@ -392,20 +396,20 @@ class SportsCatalog:
             suggestion, note = antenna, f"On {station['name']}, over the air on {station['number']}."
         elif espn and not channels:
             suggestion, note = espn, espn_note(stream, game['league'])
-        elif regional and not lansing:
+        elif regional and not on_youtube_tv:
             suggestion = ticket
-            note = ("Not on YouTube TV's Lansing CBS or FOX: NFL Sunday Ticket (found by reading the "
+            note = (f"Not on YouTube TV's {YOUTUBE_TV_MARKET} CBS or FOX: NFL Sunday Ticket (found by reading the "
                     'YouTube TV guide).')
             if washington:
                 note += f" Over the air, Washington's {' or '.join(NETWORKS[c] for c in regional_networks)} has it."
         else:
-            channel = lansing if regional else channels[0] if channels else None
+            channel = on_youtube_tv if regional else channels[0] if channels else None
             suggestion = {'source_id': 'youtube-tv', 'channel_id': channel} if channel else None
-            note = ("Regional CBS/FOX window: YouTube TV's Lansing station carries it." if regional else
+            note = (f"Regional CBS/FOX window: YouTube TV's {YOUTUBE_TV_MARKET} station carries it." if regional else
                     None if channels else 'No national broadcast on a configured channel; choose a source.')
-        # Who carries it on its network: YouTube TV's Lansing stations and the antenna's
-        # Washington ones differ only for regional games. listed: Lansing's listings said so.
-        markets = {'youtube_tv': not regional or bool(lansing), 'antenna': not regional or washington,
+        # Who carries it on its network: YouTube TV's market's stations and the antenna's
+        # Washington ones differ only for regional games. listed: YouTube TV's listings said so.
+        markets = {'youtube_tv': not regional or bool(on_youtube_tv), 'antenna': not regional or washington,
                    'network': regional_networks[0] if regional else None, 'listed': listed}
         return {**game, 'suggested_target': suggestion, 'channels': channels, 'note': note, 'markets': markets,
                 'prime_video_target': prime, 'on_sunday_ticket': on_ticket,
@@ -568,8 +572,8 @@ class SportsCatalog:
                     warnings.append(str(exc))
                     continue
                 for g in map(self._suggest, games):
-                    # A regional Sunday game is only on its own market's station: Lansing's on
-                    # YouTube TV, Washington's over the air.
+                    # A regional Sunday game is only on its own market's station: YouTube TV's
+                    # market's on YouTube TV, Washington's over the air.
                     if ((only and (g['antenna_target'] or {}).get('channel_id') == only['channel_id']
                          or channel in g['channels'] and g['markets'][market]
                          and (market == 'antenna' or (g['suggested_target'] or {}).get('source_id') == 'youtube-tv'))
@@ -591,7 +595,7 @@ class SportsCatalog:
         return None
 
     def markets(self, league, game_id, requested_date=None):
-        """Whether YouTube TV ('youtube_tv', Lansing's stations) and the antenna ('antenna',
+        """Whether YouTube TV ('youtube_tv', its market's stations) and the antenna ('antenna',
         Washington's) carry a game on its network, with its regional network ('network'). Only
         Sunday's regional NFL games differ; every other game is both or neither's."""
         if league != 'nfl':
@@ -611,7 +615,7 @@ class SportsCatalog:
         """Where a scheduled game is now, for following schedule changes: its title, start,
         date and whether it was cancelled; None once its feed no longer lists it. A regional
         NFL game YouTube TV's listings place also has 'regional_target': YouTube TV's CBS or
-        FOX when Lansing shows it, else Sunday Ticket."""
+        FOX when its station shows it, else Sunday Ticket."""
         league = self.league(league)
         game = self.baseball.locate(game_id) if league == 'mlb' else self.scoreboard.event(league, game_id)
         if game is None:

@@ -315,9 +315,10 @@ Log: `The Roku stopped playing (its player is close) on air: …`, then the usua
 
 NBC, FOX, ABC, CBS and The CW reach VizelVision two ways: YouTube TV through the Roku, and
 TV-Thing's antenna, which carries the Washington stations (WRC 4.1, WTTG 5.1, WJLA 7.1,
-WUSA 9.1, WDCW 50.1; `roku_stream/networks.py`). YouTube TV's are Lansing's (WILX, WSYM,
-WLAJ, WLNS): the same network programs, but on Sunday afternoons a different regional NFL
-game. Such a game only goes from one to the other, at release or in feed recovery, when
+WUSA 9.1, WDCW 50.1; `roku_stream/networks.py`). YouTube TV's are its own market's:
+Washington's again since 2026-11-07, Lansing's (WILX, WSYM, WLAJ, WLNS) from October 25
+until then, with the same network programs but on Sunday afternoons a different regional
+NFL game. Such a game only goes from one to the other, at release or in feed recovery, when
 both markets carry it (`sports.markets`, October 25); a Washington game on Sunday Ticket
 recovers on WUSA or FOX 5, and one on the antenna on Sunday Ticket. A YouTube TV channel change on the Roku took
 22–137 s in the queue's history (median about 70 s; 110 s for the FOX game at 20:00 on

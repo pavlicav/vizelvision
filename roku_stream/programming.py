@@ -49,7 +49,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from .errors import ConfigError
 from .scheduler import parse_time, utc_now
-from .sports import LEAGUES
+from .sports import LEAGUES, YOUTUBE_TV_MARKET
 
 OFF_AIR = {'source_id': 'off-air', 'channel_id': 'off-air'}
 SCHEDULE = {'source_id': 'schedule', 'channel_id': 'schedule'}  # A game backup that returns to the grid.
@@ -426,7 +426,7 @@ class Programming:
                 show['start'], show['end'] = start.isoformat(), max(end, start + timedelta(minutes=30)).isoformat()
                 notes.insert(0, f'Moved from {self._clock(was, start)}')
             show['game_start'] = new.isoformat()
-        # A Sunday regional NFL game on YouTube TV: its CBS or FOX is Lansing's station, and
+        # A Sunday regional NFL game on YouTube TV: its CBS or FOX is its own market's station, and
         # Sunday Ticket has the rest (sports._suggest). Its listings decide, once they reach the
         # game; an antenna or other source chosen for it stays.
         regional, target = game.get('regional_target'), show['target']
@@ -434,8 +434,8 @@ class Programming:
             target.get('source_id') == 'sunday-ticket' and str(target.get('channel_id')) == str(info['game_pk']))
         if regional and family and target_key(regional) != target_key(target):
             show['target'] = dict(regional)
-            notes.append('Now on NFL Sunday Ticket: not on Lansing\'s station' if regional['source_id'] == 'sunday-ticket'
-                         else f"Now on YouTube TV's {regional['channel_id']}: Lansing's station has it")
+            notes.append(f"Now on NFL Sunday Ticket: not on {YOUTUBE_TV_MARKET}'s station" if regional['source_id'] == 'sunday-ticket'
+                         else f"Now on YouTube TV's {regional['channel_id']}: {YOUTUBE_TV_MARKET}'s station has it")
         return ('. '.join(notes) or None), True
 
     def _clock(self, at, near):

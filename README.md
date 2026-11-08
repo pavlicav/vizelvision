@@ -339,9 +339,10 @@ It is available with master enabled.
   program**. The source can be any YouTube TV channel or over-the-air TV-Thing
   station; MLB can also use automatic routing. The page suggests a configured
   channel from the game's national broadcast. Sunday-afternoon NFL games on
-  CBS/FOX are regional, and YouTube TV's CBS and FOX are Lansing's stations (WLNS,
-  WSYM), not Washington's: the game their YouTube TV listings name (or, beyond the
-  listings, a Lions game) is suggested there, and every other game on **NFL Sunday
+  CBS/FOX are regional, and YouTube TV's CBS and FOX are its own market's stations
+  (`sports.YOUTUBE_TV_MARKET`: Washington's since 2026-11-07, Lansing's WLNS and WSYM
+  from October 25 until then): the game their YouTube TV listings name (or, beyond the
+  listings, a game of `YOUTUBE_TV_NFL_TEAMS`) is suggested there, and every other game on **NFL Sunday
   Ticket** (below), whose note names WUSA or FOX 5 over the antenna for a Washington or
   Baltimore game. A scheduled game moves between the two as the listings reach it
   (`sports.py`, `programming.py`). End-of-game status comes from the MLB
