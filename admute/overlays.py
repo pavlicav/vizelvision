@@ -46,7 +46,16 @@ So a live overlay counts only once it has been seen up in the programme and down
 breaks, and any programme overlay seen up during clear ads -- a known ad's sound, or "it's
 an ad" -- stops counting for the session; after STRIKES such sessions, for good. Mirrored,
 an ad label seen up during clear programme -- known show sound, or "it's the show" -- stops
-counting.
+counting. So does one whose template rests up in the programme (weakly up, at its threshold,
+in BASE_SHARE of the last BASE_WINDOW settled programme seconds: a game's feed may come on
+twenty minutes in): YouTube TV's pill is up only in its ad pods
+(3.6% of the programme, all of it a pod's edges), so a template up through the programme is
+matching the channel's own graphic in that corner. On 2026-11-07 Sportsnet's top-left bug in
+an NHL game kept the "Sponsored" template up in ~85% of the seconds, reaching its strong level
+every half minute or so: eleven 2-10 s mutes of the game in five minutes. Nothing else caught
+it: it was strongly up too rarely for clear programme to count against it, and the mutes it
+made were taken for clear ads, so Sportsnet's bug, just learnt, lost its trust instead. This
+is no strike: a channel's graphic says nothing about the label elsewhere.
 
 A slate (``sure``) is an ad label that says it outright: ESPN+ fills the screen with
 "Commercial Break -- We'll be right back" over a stream's stoppages (16 of them, 29 of 107
@@ -123,6 +132,9 @@ CLEAR_MIN = 20            # samples (pictures) of clear ads/programme before an 
 CLEAR_SHARE = 0.2         # ... when up in this share of them (and at least CLEAR_UP)
 CLEAR_UP = 6
 STRIKES = 2               # sessions an overlay lost trust in before it is rejected for good
+BASE_WINDOW = 120         # an ad label's resting level: its last this many settled programme seconds ...
+BASE_MIN = 60             # ... judged once there are this many ...
+BASE_SHARE = 0.4          # ... and it no longer counts if its template is up (weakly) in this share of them
 LIVE_PER_CHANNEL = 8      # live overlays kept per channel (the least recently seen go)
 REJECTED_PER_CHANNEL = 20  # rejected places remembered per channel (so they are not proposed again)
 KINDS = ("score", "network", "channel", "logo", "ad")
@@ -579,7 +591,8 @@ class Tracker:
         self.watch[ov.id] = ov
         self.up[ov.id] = bytearray()
         self.first[ov.id] = self.n[ov.space]
-        self.count[ov.id] = {"show": [0, 0], "ad": [0, 0], "clear": [0, 0], "cuts": [0, 0]}
+        self.count[ov.id] = {"show": [0, 0], "ad": [0, 0], "clear": [0, 0], "cuts": [0, 0],
+                             "base": collections.deque(maxlen=BASE_WINDOW)}
         if trusted:
             self.trusted.add(ov.id)
 
@@ -696,6 +709,8 @@ class Tracker:
                     k = c["show" if label == 0 else "ad"]
                     k[0] += 1
                     k[1] += up
+                if label == 0 and ov.side == "ad":       # its resting level, weak ups and all
+                    c["base"].append(self._up(oid, i))
                 if clear_ad if ov.side == "show" else said_show if ov.sure else clear_show:
                     c["clear"][0] += 1
                     c["clear"][1] += up
@@ -718,6 +733,15 @@ class Tracker:
 
     def _judge(self, oid: str):
         ov, c = self.watch[oid], self.count[oid]
+        if self._counts(oid) and ov.side == "ad":
+            n, up = len(c["base"]), sum(c["base"])
+            if n >= BASE_MIN and up >= BASE_SHARE * n:
+                why = f"its template rests up in {up} of the programme's last {n} seconds: the channel's own graphic"
+                self.distrusted[oid] = why
+                self.events.append({"t": time.time(), "what": "distrusted", "id": oid, "name": ov.name,
+                                    "why": why, "rejected": False})
+                log.info("overlay %s (%s) no longer counts here: %s", oid, ov.name, why)
+                return
         if self._counts(oid):
             n, up = c["clear"]
             if n >= CLEAR_MIN and up >= max(CLEAR_UP, CLEAR_SHARE * n):

@@ -410,6 +410,29 @@ class AdLabelTests(unittest.TestCase):
         self.assertTrue(math.isnan(tr.features(2)["ov_ad"]))
         self.assertEqual(tr.features(2)["ov_score"], 1.0)
 
+    def test_a_template_resting_up_in_the_programme_stops_counting(self):
+        """Sportsnet's top-left bug, 2026-11-07: weakly up nearly always, strongly now and then."""
+        tr = OV.Tracker(self.lib)
+        n = OV.BASE_MIN + 10
+        for s in range(n):
+            tr.see_pic(self.pic(0.9 if s % 30 == 5 else 0.4))
+        self.assertTrue(tr.up_in("pill", 5), "a strong hit: an ad, as things stood")
+        for s in range(n - 2):
+            tr.settle(s, 0)
+        self.assertIn("pill", tr.distrusted)
+        self.assertIsNone(tr.showing(35, "ad"))
+        self.assertEqual(self.lib.items["pill"].strikes, 0, "the channel's graphic, not the label's fault")
+
+    def test_a_real_label_in_its_pods_keeps_counting(self):
+        tr = OV.Tracker(self.lib)
+        pods = [(100, 130), (300, 340)]
+        for s in range(400):
+            tr.see_pic(self.pic(0.9 if any(a <= s < b for a, b in pods) else 0.0))
+        for s in range(398):
+            tr.settle(s, 1 if any(a <= s < b for a, b in pods) else 0)
+        self.assertNotIn("pill", tr.distrusted)
+        self.assertTrue(tr.up_in("pill", 320))
+
     def test_up_during_clear_programme_it_stops_counting(self):
         tr = OV.Tracker(self.lib)
         for s in range(30):
