@@ -1,0 +1,27 @@
+{
+ "programmes": [
+  {
+   "airings": 1,
+   "channels": [
+    "7.1 WJLA"
+   ],
+   "new": true,
+   "next": {
+    "channel": "7.1 WJLA",
+    "end": "2026-10-03T00:00:00+00:00",
+    "episode": null,
+    "episode_title": "Tournament of Champions",
+    "live": false,
+    "new": true,
+    "season": null,
+    "start": "2026-10-02T23:30:00+00:00",
+    "target": {
+     "channel_id": "wjla_7_1",
+     "source_id": "tv-thing-digital"
+    },
+    "title": "Jeopardy!"
+   },
+   "title": "Jeopardy!"
+  }
+ ]
+}

@@ -1,7 +1,17 @@
-"""Programming blocks: a weekly grid, scheduled shows and game mode -> the master queue.
+"""Programming: the weekly lineup, scheduled shows and game mode -> the master queue.
 
-Modelled on Cairo Radio's log resolution. Precedence: scheduled show > grid block
-> OFF AIR. Unpainted grid time is OFF AIR, and master returns to its test card.
+Modelled on Cairo Radio's log resolution. Precedence: scheduled show > lineup slot
+> OFF AIR. Time no slot covers is OFF AIR, and master returns to its test card.
+
+The lineup (lineup.py, since 2026-11-09) is a list of slots: days of the week, a start to
+the minute, a length, and what airs. A slot airs a fixed channel, a programme by name that
+is looked up in the listings each time (so the channel follows the programme, and its
+listed times), or the next file of a library folder. Where slots overlap, the higher
+priority has the time, then the one starting later; the other resumes when it ends. Each
+airing is a 'block' segment, as the painted grid's were. Until then the lineup was a grid
+of half-hour cells naming blocks; such a body is still accepted (save_grid) and becomes
+slots. Sports slots ("Monday Night Football") are rules that sports_slots.SportsSlots
+turns into game shows.
 
 The engine does not cut master itself. A few minutes before each change it adds
 an entry to the source queue, so Pause, Retry/Skip and the startup review still
@@ -47,15 +57,21 @@ import time
 import uuid
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from .errors import ConfigError
+from . import lineup
+from .errors import ConfigError, RokuStreamError
+from .lineup import CELLS, DAYS, occurrences, signature
 from .scheduler import parse_time, utc_now
 from .sports import LEAGUES, YOUTUBE_TV_MARKET
 
 OFF_AIR = {'source_id': 'off-air', 'channel_id': 'off-air'}
 SCHEDULE = {'source_id': 'schedule', 'channel_id': 'schedule'}  # A game backup that returns to the grid.
-CELLS = 48  # Half-hour cells per day.
-DAYS = ('mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun')
 LOOKAHEAD = timedelta(minutes=10)
+# An airing is pinned (its source settled, and saved) from this long before it starts: the
+# listings may change under an entry already in Up next, and its key must not.
+PIN_AHEAD = LOOKAHEAD + timedelta(minutes=5)
+PINS_KEPT = timedelta(days=1)
+# A slot following a programme takes the listed start and end when they are this close.
+FOLLOW = timedelta(minutes=45)
 HISTORY = timedelta(days=7)
 GAME_CHECK = timedelta(minutes=10)  # How often scheduled games are checked against their feeds.
 GONE_AFTER = timedelta(minutes=20)  # Missing from its feed this long, a game was dropped (not a blip).
@@ -88,8 +104,21 @@ def system_zone():
 
 
 def empty():
+    """An empty body of the old grid (save_grid): no blocks, nothing painted."""
     return {'version': 1, 'enabled': False, 'blocks': [],
             'grid': {day: [None] * CELLS for day in DAYS}, 'shows': []}
+
+
+def fresh():
+    """Empty programming state. pins: airings whose source is settled ("slot|date").
+    cursors: the last file each library slot aired. planned: the games sports slots put on."""
+    return {'version': 2, 'enabled': False, 'slots': [], 'sports': [], 'shows': [], 'removed': [],
+            'pins': {}, 'cursors': {}, 'planned': {}}
+
+
+def _natural(value):
+    """Sorts 'Season 2' before 'Season 10'."""
+    return [int(part) if part.isdigit() else part.casefold() for part in re.split(r'(\d+)', str(value))]
 
 
 def _text(value, name, limit=48):
@@ -124,16 +153,25 @@ def target_key(target):
 
 class Programming:
     def __init__(self, state_file, queue, *, normalize=None, game=None, locate=None, zone=None,
-                 poll_seconds=15, start_worker=True):
+                 poll_seconds=15, start_worker=True, guide=None, library=None):
         """normalize(target) validates a source target; game(league, id, date) returns a game;
-        locate(league, id) finds a game on whatever date it is now, or None once its feed no longer lists it."""
+        locate(league, id) finds a game on whatever date it is now, or None once its feed no longer lists it.
+        guide: the listings by programme (guide_index.GuideIndex), for slots that follow one.
+        library(): the media library's items, for slots that air a folder."""
         self.path = Path(state_file)
         self.queue = queue
         self.normalize = normalize or (lambda target: target)
         self.game = game
         self.locate = locate
+        self.guide = guide
+        self.library = library
+        self._targets = {}   # target key -> (checked at, normalized target or None)
+        self._files = (None, [])
+        self._roots = {}
         # The ranked favorites list, read live (favorites.Favorites.order).
         self.favorites = lambda: []
+        # The sports planner's wake, when a sports slot changes (sports_slots.SportsSlots.poke).
+        self.sports_changed = lambda: None
         self.zone = zone or system_zone()
         self.poll_seconds = poll_seconds
         self.lock = threading.Lock()
@@ -143,7 +181,11 @@ class Programming:
         self.closed = False
         self.last_sync = None
         self.last_game_check = None
+        self.migrated = False
         self.data = self._load()
+        if self.migrated:
+            with self.lock:
+                self._save_locked()
         self.thread = None
         self.follower = None
         if start_worker:
@@ -154,12 +196,29 @@ class Programming:
         try:
             raw = json.loads(self.path.read_text())
         except FileNotFoundError:
-            return empty()
+            return fresh()
         except (OSError, ValueError) as exc:
             raise ConfigError(f'Cannot read programming state {self.path}: {exc}') from exc
-        if not isinstance(raw, dict) or raw.get('version') != 1:
+        if not isinstance(raw, dict) or raw.get('version') not in (1, 2):
             raise ConfigError('Unsupported programming state')
-        return raw
+        data = fresh()
+        if raw['version'] == 1:
+            # The painted grid becomes slots. The grid as it was is kept beside the state.
+            try:
+                kept = self.path.with_name(self.path.stem + '.v1.json')
+                if not kept.exists():
+                    kept.write_text(json.dumps(raw, indent=2) + '\n')
+                data.update(enabled=raw.get('enabled') is True, shows=raw.get('shows') or [],
+                            removed=raw.get('removed') or [],
+                            slots=lineup.from_grid(raw.get('blocks') or [], raw['grid']))
+            except (OSError, KeyError, TypeError) as exc:
+                raise ConfigError(f'Cannot convert the old schedule grid {self.path}: {exc}') from exc
+            self.migrated = True
+            log.info('Programming: the painted grid is now %d slots (the grid is kept in %s)',
+                     len(data['slots']), kept.name)
+            return data
+        data.update({key: raw[key] for key in data if key in raw and isinstance(raw[key], type(data[key]))})
+        return data
 
     def _save_locked(self):
         self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -181,7 +240,8 @@ class Programming:
         return self.normalize(dict(value))
 
     def validate_grid(self, value):
-        """Validate blocks and grid; unchanged block targets are not re-resolved."""
+        """Validate an old grid body (enabled, blocks, grid) and return it as the lineup:
+        {enabled, slots}, one slot per run of cells (lineup.from_grid)."""
         if not isinstance(value, dict):
             raise ConfigError('Programming requires enabled, blocks and grid')
         enabled = value.get('enabled')
@@ -190,8 +250,7 @@ class Programming:
         blocks = value.get('blocks')
         if not isinstance(blocks, list) or len(blocks) > 64:
             raise ConfigError('blocks must be a list of at most 64 programming blocks')
-        with self.lock:
-            known = {b['id']: b for b in self.data['blocks']}
+        known = {}
         result = []
         for block in blocks:
             if not isinstance(block, dict):
@@ -217,9 +276,11 @@ class Programming:
             if (not isinstance(cells, list) or len(cells) != CELLS
                     or any(cell is not None and cell not in ids for cell in cells)):
                 raise ConfigError(f'grid.{day} must list {CELLS} half-hour cells of block ids or null')
-        return {'enabled': enabled, 'blocks': result, 'grid': {d: list(grid[d]) for d in DAYS}}
+        return {'enabled': enabled, 'slots': lineup.from_grid(result, {d: list(grid[d]) for d in DAYS})}
 
     def save_grid(self, value):
+        """Replace the whole lineup with an old grid body. The Schedule page edits slots
+        (add_slot, update_slot); this stays for API clients that still send a grid."""
         value = self.validate_grid(value)
         with self.lock:
             self.data.update(value)
@@ -228,15 +289,176 @@ class Programming:
         self.sync()
         return self.describe()
 
+    def set_enabled(self, enabled):
+        """The automation switch: off withdraws the schedule's waiting entries from Up next."""
+        if not isinstance(enabled, bool):
+            raise ConfigError('enabled must be true or false')
+        with self.lock:
+            self.data['enabled'] = enabled
+            self._save_locked()
+            self.wake.notify_all()
+        self.sync()
+        return self.describe()
+
+    # The lineup's slots ------------------------------------------------------
+    def slots(self):
+        with self.lock:
+            return copy.deepcopy(self.data['slots'])
+
+    def add_slot(self, value):
+        with self.lock:
+            count = len(self.data['slots'])
+        if count >= lineup.MAX_SLOTS:
+            raise ConfigError(f'The lineup holds at most {lineup.MAX_SLOTS} slots')
+        slot = lineup.validate_slot(value, self._target, index=count)
+        with self.lock:
+            if any(other['id'] == slot['id'] for other in self.data['slots']):
+                raise ConfigError('Slot ids must be unique')
+            self.data['slots'].append(slot)
+            self._save_locked()
+            self.wake.notify_all()
+        self.sync()
+        return copy.deepcopy(slot)
+
+    def update_slot(self, slot_id, changes):
+        """Change some of a slot's fields; None if it is unknown."""
+        if not isinstance(changes, dict):
+            raise ConfigError('A slot change must be an object')
+        with self.lock:
+            old = copy.deepcopy(next((s for s in self.data['slots'] if s['id'] == slot_id), None))
+        if old is None:
+            return None
+        slot = lineup.validate_slot({**old, **changes}, self._target, old=old)
+        with self.lock:
+            for index, other in enumerate(self.data['slots']):
+                if other['id'] == slot_id:
+                    self.data['slots'][index] = slot
+                    break
+            else:
+                return None
+            self._save_locked()
+            self.wake.notify_all()
+        self.sync()
+        return copy.deepcopy(slot)
+
+    def remove_slot(self, slot_id):
+        """Take a slot off the lineup; returns it (to put back), or None if it is unknown."""
+        with self.lock:
+            slot = next((s for s in self.data['slots'] if s['id'] == slot_id), None)
+            if slot is None:
+                return None
+            self.data['slots'] = [s for s in self.data['slots'] if s['id'] != slot_id]
+            self.data['cursors'].pop(slot_id, None)
+            for key in [k for k in self.data['pins'] if k.split('|', 1)[0] == slot_id]:
+                del self.data['pins'][key]
+            self._save_locked()
+            self.wake.notify_all()
+        self.sync()
+        return copy.deepcopy(slot)
+
+    def skip_slot(self, slot_id, day, skip=True):
+        """Leave one airing of a slot out (its local date), or put it back."""
+        if not isinstance(day, str) or not re.fullmatch(r'\d{4}-\d{2}-\d{2}', day) or not isinstance(skip, bool):
+            raise ConfigError('Skipping an airing takes its date, YYYY-MM-DD')
+        with self.lock:
+            slot = next((s for s in self.data['slots'] if s['id'] == slot_id), None)
+            if slot is None:
+                return None
+            lineup.prune_skips(slot, datetime.now(self.zone).date() - timedelta(days=1))
+            days = set(slot.get('skip') or ())
+            days.add(day) if skip else days.discard(day)
+            if len(days) > lineup.MAX_SKIPS:
+                raise ConfigError('Too many skipped airings; remove the slot from those days instead')
+            slot['skip'] = sorted(days)
+            self._save_locked()
+            self.wake.notify_all()
+        self.sync()
+        return copy.deepcopy(slot)
+
+    # Sports slots (sports_slots.SportsSlots plans their games) ------------------
+    def sports_slots(self):
+        with self.lock:
+            return copy.deepcopy(self.data['sports'])
+
+    def add_sports_slot(self, value):
+        slot = lineup.validate_sports(value, LEAGUES)
+        with self.lock:
+            if len(self.data['sports']) >= lineup.MAX_SPORTS:
+                raise ConfigError(f'At most {lineup.MAX_SPORTS} sports slots')
+            if any(other['id'] == slot['id'] for other in self.data['sports']):
+                raise ConfigError('Sports slot ids must be unique')
+            self.data['sports'].append(slot)
+            self._save_locked()
+        self.sports_changed()
+        return copy.deepcopy(slot)
+
+    def update_sports_slot(self, slot_id, changes):
+        if not isinstance(changes, dict):
+            raise ConfigError('A sports slot change must be an object')
+        with self.lock:
+            old = copy.deepcopy(next((s for s in self.data['sports'] if s['id'] == slot_id), None))
+        if old is None:
+            return None
+        slot = lineup.validate_sports({**old, **changes}, LEAGUES, old=old)
+        with self.lock:
+            self.data['sports'] = [slot if s['id'] == slot_id else s for s in self.data['sports']]
+            self._save_locked()
+        self.sports_changed()
+        return copy.deepcopy(slot)
+
+    def remove_sports_slot(self, slot_id):
+        with self.lock:
+            slot = next((s for s in self.data['sports'] if s['id'] == slot_id), None)
+            if slot is None:
+                return None
+            self.data['sports'] = [s for s in self.data['sports'] if s['id'] != slot_id]
+            self._save_locked()
+        self.sports_changed()
+        return copy.deepcopy(slot)
+
+    def planned(self):
+        """The games sports slots scheduled: {"league:id": {show_id, start, slot}}."""
+        with self.lock:
+            return copy.deepcopy(self.data['planned'])
+
+    def note_planned(self, key, show, slot_id):
+        with self.lock:
+            self.data['planned'][key] = {'show_id': show['id'], 'start': show['start'], 'slot': slot_id}
+            self._save_locked()
+
+    def forget_planned(self, keys):
+        with self.lock:
+            gone = [key for key in keys if key in self.data['planned']]
+            for key in gone:
+                del self.data['planned'][key]
+            if gone:
+                self._save_locked()
+
+    def tag_show(self, show_id, **fields):
+        """Set fields of a show (the sports planner's: slot, slot_priority, priority)."""
+        with self.lock:
+            show = next((s for s in self.data['shows'] if s['id'] == show_id), None)
+            if show is None:
+                return None
+            for key, value in fields.items():
+                if value is None:
+                    show.pop(key, None)
+                else:
+                    show[key] = _priority(value) if key == 'priority' else value
+            self._save_locked()
+        self.sync()
+        return copy.deepcopy(show)
+
     def _order(self):
         try:
             return list(self.favorites())
         except Exception:  # No favorites: every show keeps its own priority.
             return []
 
-    def add_show(self, value, favorites=None):
+    def add_show(self, value, favorites=None, slot=None):
         """favorites: the favorites a game is (favorites.matches), when the favorites planner
-        adds it; its rank then follows their place on the list."""
+        adds it; its rank then follows their place on the list. slot: the sports slot whose
+        game this is, when the sports planner adds it (it may be a favorite's too)."""
         if not isinstance(value, dict):
             raise ConfigError('A show must be an object')
         mode = value.get('mode', 'program')
@@ -288,13 +510,17 @@ class Programming:
         else:
             show['target'] = self._target(value.get('target'))
             show['title'] = _text(value.get('title'), 'Show title', 72)
-        if favorites is not None:
+        if favorites is not None or slot is not None:
             if mode != 'game':
-                raise ConfigError('Only games come from the favorites')
-            show['favorites'], show['added_by'] = list(favorites), 'favorites'
+                raise ConfigError('Only games come from the favorites and sports slots')
+            if favorites:
+                show['favorites'] = list(favorites)
+            show['added_by'] = 'favorites' if slot is None else 'slot'
+            if slot is not None:
+                show['slot'], show['slot_priority'] = slot, show['priority']
         order = self._order()
         with self.lock:
-            if favorites is not None:
+            if favorites is not None or slot is not None:
                 # Starting with another show: first, or after one that outranks it.
                 taken, rank, step = {parse_time(o['start']): o for o in self.data['shows']}, show_rank(show, order), None
                 while start in taken:
@@ -445,35 +671,267 @@ class Programming:
         return text if at.date() == near.date() else f'{at:%a} {text}'
 
     # Resolution ------------------------------------------------------------
-    def _grid_segments(self, data, start, end):
-        blocks = {b['id']: b for b in data['blocks']}
-        segments = []
-        day = start.astimezone(self.zone).date() - timedelta(days=1)
-        while True:
-            midnight = datetime.combine(day, dtime(), self.zone)
-            if midnight >= end:
-                break
-            cells = data['grid'][DAYS[day.weekday()]]
-            for index, block_id in enumerate(cells):
-                cell_start = datetime.combine(day, dtime(index // 2, 30 * (index % 2)), self.zone)
-                cell_end = (datetime.combine(day + timedelta(days=1), dtime(), self.zone) if index == CELLS - 1
-                            else datetime.combine(day, dtime((index + 1) // 2, 30 * ((index + 1) % 2)), self.zone))
-                cell_start, cell_end = cell_start.astimezone(timezone.utc), cell_end.astimezone(timezone.utc)
-                if cell_end <= start or cell_start >= end:
+    # Where an airing comes from ------------------------------------------------
+    def _normalized(self, target):
+        """A found channel as a source target, or None when the station cannot tune it.
+        Remembered for ten minutes: the lineup is resolved many times a minute."""
+        key = target_key(target)
+        cached = self._targets.get(key)
+        if cached and time.monotonic() - cached[0] < 600:
+            return cached[1]
+        try:
+            found = self.normalize(dict(target))
+        except RokuStreamError:
+            found = None
+        self._targets[key] = (time.monotonic(), found)
+        return found
+
+    def _all_files(self):
+        """The media library's items, read at most every 30 seconds."""
+        at, items = self._files
+        if at is None or time.monotonic() - at > 30:
+            try:
+                listing = (self.library() or ()) if self.library else []
+                if isinstance(listing, dict):   # The library's own listing: items, and its roots' names.
+                    self._roots = {root['id']: root.get('name') or root['id'] for root in listing.get('roots') or ()}
+                    listing = listing.get('items') or ()
+                items = list(listing)
+            except Exception as exc:  # The library is away: its slots have nothing to air.
+                log.warning('Programming: cannot list the media library: %s', exc)
+                items = []
+            self._files = (time.monotonic(), items)
+        return items
+
+    def _library_files(self, what):
+        """The playable files a library slot draws from, in its order."""
+        items = self._all_files()
+        prefix = what.get('path')
+        files = [i for i in items if i.get('root') == what['root'] and i.get('playable') is not False
+                 and (not prefix or str(i.get('path') or '').startswith(prefix))
+                 and (not what.get('name') or i.get('title') == what['name'])]
+        # Of a recording kept twice (as aired, and with its ads cut), the cut one.
+        best = {}
+        for item in files:
+            key = (item.get('title'), item.get('aired')) if item.get('aired') else item['id']
+            if key not in best or (item.get('variant') or '') == 'no ads':
+                best[key] = item
+        files = list(best.values())
+        if what['order'] == 'newest':
+            return sorted(files, key=lambda i: i.get('aired') or i.get('modified') or 0, reverse=True)
+        if all(i.get('aired') for i in files):
+            return sorted(files, key=lambda i: i['aired'])
+        return sorted(files, key=lambda i: _natural(i.get('path') or i['id']))
+
+    def library_folders(self):
+        """What of the library a slot can air: each show or collection (a root's top folder),
+        each programme recorded more than once, and each root whole. [{root, path, name,
+        label, files, minutes (an average file), breaks (ad breaks found), order (the one
+        that suits it)}], the biggest first."""
+        groups = {}
+        for item in self._all_files():
+            if item.get('playable') is False or not isinstance(item.get('duration'), (int, float)):
+                continue
+            path = str(item.get('path') or '')
+            keys = [(item['root'], None, None, item.get('collection') if '/' not in path and not item.get('aired') else None)]
+            if item.get('aired') and item.get('title'):
+                keys.append((item['root'], None, item['title'], item['title']))
+            elif '/' in path:
+                top = path.split('/', 1)[0]
+                keys.append((item['root'], top + '/', None, top))
+            for root, prefix, name, label in keys:
+                group = groups.setdefault((root, prefix, name), {'root': root, 'path': prefix, 'name': name, 'label': label,
+                                                                 'files': 0, 'seconds': 0, 'breaks': False,
+                                                                 'aired': bool(item.get('aired'))})
+                group['label'] = group['label'] or label
+                group['files'] += 1
+                group['seconds'] += item['duration']
+                group['breaks'] = group['breaks'] or (item.get('ad_breaks') or {}).get('state') == 'ok'
+        result = []
+        for group in groups.values():
+            if group['name'] and group['files'] < 2:
+                continue  # A programme recorded once is not a strip.
+            average = group.pop('seconds') / group['files'] / 60
+            aired = group.pop('aired')
+            whole = not group['path'] and not group['name']
+            group.update(minutes=round(average), whole=whole, root_name=self._roots.get(group['root']) or group['root'],
+                         label=(self._roots.get(group['root']) if whole else group['label']) or group['label'] or group['root'],
+                         order='newest' if aired and not whole else 'shuffle' if average > 50 or whole else 'next')
+            result.append(group)
+        return sorted(result, key=lambda g: (g['whole'], -g['files'], g['label']))
+
+    def _lookup(self, slot, day, start, end, now):
+        """One airing's source, worked out afresh: {target, start, end, by, ...}. target is
+        None when it has nothing to air (by: unlisted or empty), with why."""
+        what = slot['what']
+        if what['kind'] == 'channel':
+            return {'target': dict(what['target']), 'start': start, 'end': end, 'by': 'fixed'}
+        if what['kind'] == 'program':
+            usual = what.get('target')
+            found = self.guide.find(what['title'], start, end, match=what.get('match') or 'exact', usual=usual) \
+                if self.guide else []
+            for airing in found:
+                target = self._normalized(airing['target'])
+                if target is None:
                     continue
-                block = blocks.get(block_id)
-                ref = block['id'] if block else None
-                if segments and segments[-1]['ref'] == ref and segments[-1]['end'] == cell_start:
-                    segments[-1]['end'] = cell_end
+                begins, ends = start, end
+                listed = (datetime.fromtimestamp(airing['start'], timezone.utc),
+                          datetime.fromtimestamp(airing['end'], timezone.utc))
+                if what.get('follow', True) and abs(listed[0] - start) <= FOLLOW and listed[1] > listed[0]:
+                    begins, ends = listed[0], min(listed[1], listed[0] + timedelta(hours=8))
+                return {'target': target, 'start': begins, 'end': ends, 'by': 'listings', 'label': airing['channel'],
+                        'listed': {'title': airing['title'], 'episode_title': airing.get('episode_title'),
+                                   'new': airing.get('new') is True, 'live': airing.get('live') is True,
+                                   'start': listed[0].isoformat(), 'end': listed[1].isoformat()}}
+            reach = self.guide.reach() if self.guide else None
+            why = ('No listings to look in' if reach is None else
+                   'The listings do not reach this far yet' if start >= reach else 'Not in the listings at this time')
+            if usual:
+                return {'target': dict(usual), 'start': start, 'end': end, 'by': 'usual', 'why': why,
+                        'label': self.guide.label(usual) if self.guide else None}
+            return {'target': None, 'start': start, 'end': end, 'by': 'unlisted', 'why': why}
+        files = self._library_files(what)
+        if not files:
+            return {'target': None, 'start': start, 'end': end, 'by': 'empty', 'why': 'No playable files in this folder'}
+        if what['order'] == 'shuffle':
+            # The same file however often the lineup is worked out: by the slot and the date.
+            index = sum(ord(c) * (n + 1) for n, c in enumerate(slot['id'] + day.isoformat())) % len(files)
+        elif what['order'] == 'newest':
+            index = 0
+        else:
+            with self.lock:
+                last = (self.data['cursors'].get(slot['id']) or {}).get('last')
+                pinned = {key for key in self.data['pins'] if key.split('|', 1)[0] == slot['id']}
+            ids = [f['id'] for f in files]
+            first = ids.index(last) + 1 if last in ids else 0
+            # Airings between now and this one each take the next file.
+            ahead = sum(1 for other, begins, _ in occurrences(slot, now, start, self.zone)
+                        if begins < start and f"{slot['id']}|{other.isoformat()}" not in pinned)
+            index = (first + ahead) % len(files)
+        item = files[index]
+        target = {'source_id': 'library', 'channel_id': item['id']}
+        if what.get('ad_breaks') and (item.get('ad_breaks') or {}).get('state') == 'ok':
+            target['ad_breaks'] = what['ad_breaks']
+        length = item.get('duration') if isinstance(item.get('duration'), (int, float)) else None
+        if length and target.get('ad_breaks'):
+            length += target['ad_breaks'] * len((item.get('ad_breaks') or {}).get('at') or ())
+        # The airing is the file: the time left in its slot is OFF AIR (the queue never cuts a
+        # file for that), and a file longer than its slot is cut by whatever starts next.
+        ends = min(end, start + timedelta(seconds=round(length))) if length else end
+        return {'target': target, 'start': start, 'end': ends, 'by': 'library', 'label': item.get('title'),
+                'file': item['id'], 'length': length, 'fits': not length or start + timedelta(seconds=length) <= end}
+
+    def _resolve(self, slot, day, start, end, now):
+        """An airing's source: as pinned, else worked out. It is pinned from PIN_AHEAD before
+        it starts until it ends, so an entry in Up next keeps its key whatever the listings do."""
+        key, sig = f"{slot['id']}|{day.isoformat()}", signature(slot)
+        with self.lock:
+            pin = self.data['pins'].get(key)
+        if pin and pin.get('sig') == sig:
+            found = {k: v for k, v in pin.items() if k not in ('sig', 'until')}
+            found.update(start=parse_time(pin['start']), end=parse_time(pin['end']), pinned=True)
+            return found
+        found = self._lookup(slot, day, start, end, now)
+        if found['target'] is not None and found['start'] - PIN_AHEAD <= now < found['end']:
+            with self.lock:
+                pins = self.data['pins']
+                pins[key] = {**found, 'start': found['start'].isoformat(), 'end': found['end'].isoformat(),
+                             'sig': sig, 'until': found['end'].isoformat()}
+                for old in [k for k, v in pins.items() if parse_time(v['until']) < now - PINS_KEPT]:
+                    del pins[old]
+                if found.get('file') and slot['what'].get('order') == 'next':
+                    self.data['cursors'][slot['id']] = {'last': found['file'], 'at': now.isoformat()}
+                try:
+                    self._save_locked()
+                except OSError as exc:  # Still pinned in memory.
+                    log.warning('Programming: cannot save a pinned airing: %s', exc)
+        return found
+
+    def airings(self, start, end, data=None):
+        """Every airing of every slot overlapping [start, end), as the Schedule page draws
+        the plan: one per slot and date, with where it comes from. Skipped airings, those of
+        slots switched off and those with nothing to air are included, and say so."""
+        if data is None:
+            with self.lock:
+                data = copy.deepcopy(self.data)
+        now, result = utc_now(), []
+        for slot in data['slots']:
+            skipped = set(slot.get('skip') or ())
+            for day, begins, ends in occurrences({**slot, 'skip': []}, start - FOLLOW, end + FOLLOW, self.zone):
+                off = day.isoformat() in skipped
+                found = ({'target': None, 'start': begins, 'end': ends, 'by': 'skipped'} if off
+                         else self._resolve(slot, day, begins, ends, now))
+                if found['end'] <= start or found['start'] >= end:
                     continue
-                segments.append({'start': cell_start, 'end': cell_end, 'ref': ref,
-                                 'kind': 'block' if block else 'off_air',
-                                 'title': block['name'] if block else 'OFF AIR',
-                                 'color': block['color'] if block else None,
-                                 'target': block['target'] if block else dict(OFF_AIR)})
-            day += timedelta(days=1)
-        for segment in segments:
-            segment['start'], segment['end'] = max(segment['start'], start), min(segment['end'], end)
+                result.append({'slot': slot['id'], 'date': day.isoformat(), 'title': slot['title'],
+                               'color': slot['color'], 'priority': slot.get('priority') or 'normal',
+                               'enabled': slot.get('enabled', True), 'skipped': off, 'kind': slot['what']['kind'],
+                               'slot_start': begins.isoformat(), 'slot_end': ends.isoformat(),
+                               **{k: v for k, v in found.items() if k not in ('start', 'end')},
+                               'start': found['start'].isoformat(), 'end': found['end'].isoformat()})
+        return sorted(result, key=lambda a: (a['start'], a['title']))
+
+    def _slot_segments(self, data, start, end):
+        """The lineup over [start, end): each slot's airings as 'block' segments, OFF AIR
+        between them. Where airings overlap, the higher priority has the time, then the one
+        starting later; the other resumes when it ends."""
+        now, pieces = utc_now(), []
+        for slot in data['slots']:
+            if not slot.get('enabled', True):
+                continue
+            rank = PRIORITIES.index(slot.get('priority') or 'normal')
+            for day, begins, ends in occurrences(slot, start - FOLLOW, end + FOLLOW, self.zone):
+                found = self._resolve(slot, day, begins, ends, now)
+                if found['target'] is None or found['end'] <= start or found['start'] >= end:
+                    continue
+                piece = {'start': found['start'], 'end': found['end'], 'ref': slot['id'], 'kind': 'block',
+                         'title': slot['title'], 'color': slot['color'], 'target': dict(found['target']),
+                         'by': found['by'], '_rank': rank}
+                for key in ('label', 'listed', 'file', 'length', 'why'):
+                    if found.get(key) is not None:
+                        piece[key] = found[key]
+                pieces.append(piece)
+        # Lower priorities are laid down first; within one, earlier starts, then longer airings.
+        pieces.sort(key=lambda p: (p['_rank'], p['start'], p['start'] - p['end']))
+        laid = []
+        for piece in pieces:
+            carved = []
+            for segment in laid:
+                if segment['end'] <= piece['start'] or segment['start'] >= piece['end']:
+                    carved.append(segment)
+                    continue
+                if segment['start'] < piece['start']:
+                    carved.append({**segment, 'end': piece['start']})
+                if segment['end'] > piece['end']:
+                    carved.append({**segment, 'start': piece['end']})
+            carved.append(piece)
+            laid = carved
+        laid.sort(key=lambda s: s['start'])
+        segments, at = [], start
+
+        def add(segment):
+            segment.pop('_rank', None)
+            last = segments[-1] if segments else None
+            # One programme through several slots (or one resumed at once) is one segment.
+            if (last and last['end'] == segment['start'] and last['kind'] == segment['kind']
+                    and last['title'] == segment['title'] and target_key(last['target']) == target_key(segment['target'])):
+                last['end'] = segment['end']
+            else:
+                segments.append(segment)
+
+        def off_air(begins, ends):
+            add({'start': begins, 'end': ends, 'ref': None, 'kind': 'off_air', 'title': 'OFF AIR', 'color': None,
+                 'target': dict(OFF_AIR)})
+
+        for segment in laid:
+            begins, ends = max(segment['start'], start), min(segment['end'], end)
+            if ends <= begins:
+                continue
+            if begins > at:
+                off_air(at, begins)
+            add({**segment, 'start': begins, 'end': ends})
+            at = ends
+        if at < end:
+            off_air(at, end)
         return segments
 
     @staticmethod
@@ -496,7 +954,7 @@ class Programming:
         A later show overrides an earlier one from its start, unless the earlier one outranks it."""
         with self.lock:
             data = copy.deepcopy(data or self.data)
-        segments = self._grid_segments(data, start, end)
+        segments = self._slot_segments(data, start, end)
         order = self._order()
         # Lower priorities are laid down first; within one, in start order (a stable sort).
         for show, s_start, s_end in sorted(self._windows(data['shows']), key=lambda w: show_rank(w[0], order)):
@@ -604,9 +1062,9 @@ class Programming:
         return added
 
     def colors(self):
-        """Block colors by block id."""
+        """Slot colors by slot id (a 'block' segment's ref)."""
         with self.lock:
-            return {b['id']: b['color'] for b in self.data['blocks']}
+            return {slot['id']: slot['color'] for slot in self.data['slots']}
 
     def segment_at(self, at):
         """The schedule's segment at a moment, or None while the schedule is off."""
@@ -702,7 +1160,7 @@ class Programming:
             shows = copy.deepcopy(self.data['shows'])
         return [s for s in shows if parse_time(s['start']) > now and s['id'] not in exclude][:limit]
 
-    def describe(self, now=None, hours=24):
+    def describe(self, now=None, hours=24, days=8):
         now = now or utc_now()
         with self.lock:
             data = copy.deepcopy(self.data)
@@ -717,7 +1175,13 @@ class Programming:
             return result
 
         timeline = [public(s) for s in self.timeline(now, now + timedelta(hours=hours), data)]
-        return {'settings': data, 'timezone': str(self.zone), 'now': now.isoformat(),
+        # The plan: every slot's airings from the start of today for `days` days.
+        today = datetime.combine(now.astimezone(self.zone).date(), dtime(), self.zone).astimezone(timezone.utc)
+        airings = self.airings(today, today + timedelta(days=days), data)
+        settings = {key: value for key, value in data.items() if key not in ('pins', 'cursors', 'planned')}
+        return {'settings': settings, 'timezone': str(self.zone), 'now': now.isoformat(),
+                'airings': airings, 'airings_from': today.isoformat(), 'airings_days': days,
+                'guide': self.guide.status() if self.guide else {'available': False, 'error': 'No listings'},
                 'on_now': timeline[0] if timeline else None, 'timeline': timeline,
                 'lookahead_minutes': int(LOOKAHEAD.total_seconds() // 60), 'last_sync': last_sync,
                 'games_checked_at': last_game_check, 'game_check_minutes': int(GAME_CHECK.total_seconds() // 60),

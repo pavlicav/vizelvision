@@ -65,6 +65,9 @@ from .favorites import Favorites, FavoritesPlanner
 from .sports_join import SportsJoin
 from .ident import ident_file
 from .programming import Programming
+from .guide_index import GuideIndex
+from .sports_slots import SportsSlots
+from .discover import Discovery
 from .sports import SportsCatalog
 from .library import MediaLibrary
 
@@ -156,6 +159,8 @@ def handler_factory(
     promo_desk: PromoDesk | None = None,
     station_watch: StationWatch | None = None,
     favorites: FavoritesPlanner | None = None,
+    sports_slots=None,
+    discovery=None,
 ) -> type[BaseHTTPRequestHandler]:
     master = coordinator or MasterClient(config.master)
     master_preview = MasterPreview(config.master)
@@ -831,6 +836,27 @@ def handler_factory(
                     if programming is None:
                         raise ConfigError('Programming requires the master queue')
                     self._json(HTTPStatus.OK, programming.describe())
+                elif path == '/v1/programming/ideas':
+                    # What would make a good schedule, from what there is to air (discover.py).
+                    if discovery is None:
+                        raise ConfigError('Schedule discovery requires the master queue')
+                    self._json(HTTPStatus.OK, discovery.ideas(force='fresh' in parse_qs(parsed.query)))
+                elif path == '/v1/programming/sports':
+                    # The sports slots, the ready-made ones, and the games they found (sports_slots.py).
+                    if sports_slots is None:
+                        raise ConfigError('Sports slots require the master queue')
+                    self._json(HTTPStatus.OK, sports_slots.view())
+                elif path == '/v1/programming/search':
+                    # Programmes by name, for a slot that follows one: listed ones, then remembered ones.
+                    if programming is None or programming.guide is None:
+                        raise ConfigError('Programme search requires the listings')
+                    self._json(HTTPStatus.OK, {'programmes': programming.guide.search(
+                        parse_qs(parsed.query).get('q', [''])[0][:80])})
+                elif path == '/v1/programming/library':
+                    # The library's folders a slot can air: shows, collections and recorded programmes.
+                    if programming is None:
+                        raise ConfigError('Programming requires the master queue')
+                    self._json(HTTPStatus.OK, {'folders': programming.library_folders()})
                 elif path == '/v1/playback':
                     # What will actually air: Up next and the schedule under the queue's rules.
                     if projector is None:
@@ -1268,8 +1294,43 @@ def handler_factory(
                 elif path.startswith('/v1/programming'):
                     if programming is None:
                         raise ConfigError('Programming requires the master queue')
+                    if discovery is not None and path != '/v1/programming/sports/preview':
+                        discovery.forget()  # Ideas are worked out against the lineup as it is.
+
+                    def slot_answer(result, what='slot'):
+                        # A change answers with the whole schedule, as the page draws it.
+                        if result is None:
+                            self._json(HTTPStatus.NOT_FOUND, {"error": {"code": "not_found", "message": f"Unknown {what}"}})
+                        else:
+                            self._json(HTTPStatus.OK, {**programming.describe(), 'changed': result})
+
+                    parts = path.split('/')[3:]  # After /v1/programming.
                     if path == '/v1/programming':
-                        self._json(HTTPStatus.OK, programming.save_grid(data))
+                        # {enabled}: the automation switch. An old grid body (blocks, grid) replaces the lineup.
+                        if isinstance(data, dict) and 'grid' in data:
+                            self._json(HTTPStatus.OK, programming.save_grid(data))
+                        else:
+                            self._json(HTTPStatus.OK, programming.set_enabled((data or {}).get('enabled')))
+                    elif path == '/v1/programming/slots':
+                        slot_answer(programming.add_slot(data))
+                    elif len(parts) == 2 and parts[0] == 'slots':
+                        slot_answer(programming.update_slot(parts[1], data))
+                    elif len(parts) == 3 and parts[0] == 'slots' and parts[2] == 'skip':
+                        # {date, skip}: leave one airing out, or put it back.
+                        slot_answer(programming.skip_slot(parts[1], data.get('date'), data.get('skip', True)))
+                    elif path == '/v1/programming/sports/preview':
+                        if sports_slots is None:
+                            raise ConfigError('Sports slots require the master queue')
+                        self._json(HTTPStatus.OK, {'games': sports_slots.preview(data)})
+                    elif path == '/v1/programming/sports/plan':
+                        if sports_slots is None:
+                            raise ConfigError('Sports slots require the master queue')
+                        sports_slots.plan()
+                        self._json(HTTPStatus.OK, {**programming.describe(), 'sports': sports_slots.view()})
+                    elif path == '/v1/programming/sports':
+                        slot_answer(programming.add_sports_slot(data), 'sports slot')
+                    elif len(parts) == 2 and parts[0] == 'sports':
+                        slot_answer(programming.update_sports_slot(parts[1], data), 'sports slot')
                     elif path == '/v1/programming/shows':
                         self._json(HTTPStatus.CREATED, programming.add_show(data))
                     elif path.startswith('/v1/programming/shows/'):
@@ -1471,8 +1532,22 @@ def handler_factory(
                     if programming is None:
                         raise ConfigError('Programming requires the master queue')
                     result = programming.remove_show(path.rsplit('/', 1)[1])
+                    if discovery is not None:
+                        discovery.forget()
                     self._json(HTTPStatus.OK if result else HTTPStatus.NOT_FOUND,
                                result or {"error": {"code": "not_found", "message": "Unknown show"}})
+                elif path.startswith('/v1/programming/slots/') or path.startswith('/v1/programming/sports/'):
+                    # Answers with the schedule, and what was removed (to put back: POST it again).
+                    if programming is None:
+                        raise ConfigError('Programming requires the master queue')
+                    sport = path.startswith('/v1/programming/sports/')
+                    removed = (programming.remove_sports_slot if sport else programming.remove_slot)(path.rsplit('/', 1)[1])
+                    if discovery is not None:
+                        discovery.forget()
+                    if removed is None:
+                        self._json(HTTPStatus.NOT_FOUND, {"error": {"code": "not_found", "message": "Unknown slot"}})
+                    else:
+                        self._json(HTTPStatus.OK, {**programming.describe(), 'removed_slot': removed})
                 elif path.startswith("/v1/queue/"):
                     if playout is None:
                         raise ConfigError("Playout queue is not configured")
@@ -1555,8 +1630,19 @@ def serve(config: AppConfig) -> None:
         programming.favorites = favorite_list.order
         coordinator.favorites = favorite_list.order
         planner = FavoritesPlanner(favorite_list, programming, sports)
+        # The lineup's slots follow programmes through the listings, and air library folders
+        # (lineup.py). The listings by programme, with what they showed on other days:
+        programming.guide = GuideIndex(lambda: sources.tv.get('guide-long')['data'],
+                                       config.state_file.with_name('guide-atlas.json'), zone=programming.zone)
+        if config.library.enabled:
+            programming.library = library.listing
+        # Sports slots ("Monday Night Football") put their games on the Schedule (sports_slots.py).
+        sports_slots = SportsSlots(programming, sports, favorites=favorite_list.order)
+        # What would make a good schedule, from what there is to air (discover.py).
+        discovery = Discovery(programming, programming.guide, sports_slots=sports_slots,
+                              library=programming.library, queue=playout)
     else:
-        programming = station_watch = planner = None
+        programming = station_watch = planner = sports_slots = discovery = None
         # Without master control, a legacy job or queue entry only puts the channel on the Roku.
         def play(channel):
             if roku is None:
@@ -1626,7 +1712,8 @@ def serve(config: AppConfig) -> None:
     server = ThreadingHTTPServer(
         (config.server.host, config.server.port),
         handler_factory(config, roku, scheduler, baseball, playout, sources, coordinator, programming, sports,
-                        production_monitor, projector, continuity, crawl_desk, promo_desk, station_watch, planner),
+                        production_monitor, projector, continuity, crawl_desk, promo_desk, station_watch, planner,
+                        sports_slots, discovery),
     )
     if roku is not None:
         roku.hold.start()
@@ -1643,6 +1730,7 @@ def serve(config: AppConfig) -> None:
         playout.start()
         programming.start()
         planner.start()
+        sports_slots.start()
         continuity.start()
     if crawl_desk:
         crawl_desk.start()
@@ -1666,6 +1754,8 @@ def serve(config: AppConfig) -> None:
             station_watch.stop()
         if planner:
             planner.close()
+        if sports_slots:
+            sports_slots.close()
         if programming:
             programming.close()
         if continuity:

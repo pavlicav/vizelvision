@@ -322,13 +322,17 @@ The deployed master service at `http://viviserv/vizelvision/` (On Air) has a mix
 
 ## Programming schedule
 
-`/schedule` is a weekly programming grid modeled on Cairo Radio's scheduler
-(clocks painted onto a 7×24 grid, shows and calendar events that override it).
-It is available with master enabled.
+`/schedule` is the station's week. Since 2026-11-09 it is a calendar of **slots** rather than a
+painted grid ([docs/schedule.md](docs/schedule.md)). It is available with master enabled.
 
-- **Programming blocks** are named, colored sources, such as *Morning news →
-  YouTube TV · NBC*. Paint them onto a Monday–Sunday grid of half-hour cells.
-- **OFF AIR** fills every unpainted cell. The grid and the next-24-hours rundown show it
+- **Slots** are programmes that repeat: days of the week, a start to the minute, a length. A
+  slot airs a programme by name (each airing is looked up in the listings, so the channel
+  follows the programme), a fixed channel, or the next file of a library folder.
+- **Sports slots** are standing appointments (*Monday Night Football*): every game the rule
+  finds goes on by itself, with the slot's priority.
+- **Ideas** suggests what to add from the listings, the library, the sports feeds and what is
+  put on by hand, and can draft a week.
+- **OFF AIR** is all time no slot covers. The week and the next-24-hours rundown show it
   explicitly, and an OFF AIR change returns master to the off-air test card (Presentation).
 - **Scheduled shows** are one-off, dated windows that override the grid, such as
   election coverage on a given evening. Shows and games may overlap but not start
@@ -381,7 +385,7 @@ It is available with master enabled.
   now* / *Next* cards use the same projection. It is an estimate: preparation
   time, station IDs, failures and a paused queue are not modelled.
 
-Precedence is scheduled show > grid block > OFF AIR. The schedule does not cut
+Precedence is scheduled show > lineup slot > OFF AIR. The schedule does not cut
 master directly. About ten minutes before each change it inserts an entry into
 the master **Up next** queue in time order. The entry is labeled *Schedule ·
 title*. Pause, Retry/Skip and the startup review therefore apply unchanged.
@@ -407,7 +411,7 @@ automatically.
 Turning the schedule on queues only future changes. **Queue what's on now**
 queues the current block to release in two seconds. Use it after enabling the
 schedule or after a service restart. The queue still starts paused after every
-restart, so resume it on On Air. Grid times use the server's local
+restart, so resume it on On Air. Slot times use the server's local
 time zone. State is stored in `state/programming.json`.
 
 API: `GET /v1/programming` returns settings, `on_now`, a 24-hour `timeline` with

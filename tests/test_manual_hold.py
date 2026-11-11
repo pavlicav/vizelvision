@@ -281,10 +281,11 @@ class TakeBackTests(unittest.TestCase):
                                        start_worker=False)
 
     def paint(self, enabled=True):
+        grid = {day: [None] * 48 for day in ('mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun')}
+        grid['wed'][cell(11):cell(14)] = ['news'] * (cell(14) - cell(11))
         value = self.programming.validate_grid({
             'enabled': enabled, 'blocks': [{'id': 'news', 'name': 'News', 'color': '#3a6f8f', 'target': NBC}],
-            'grid': {day: [None] * 48 for day in ('mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun')}})
-        value['grid']['wed'][cell(11):cell(14)] = ['news'] * (cell(14) - cell(11))
+            'grid': grid})
         with self.programming.lock:
             self.programming.data.update(value)
 

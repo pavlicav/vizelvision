@@ -33,6 +33,8 @@ class TvThingClient:
         "digital": "api/v1/sources/digital",
         "analog": "api/v1/sources/cable",
         "guide": "api/v1/guide?hours=24",
+        # As far as the listings go (a day or two), for the schedule's lineup and discovery.
+        "guide-long": "api/v1/guide?hours=168",
         "status": "api/v1/status",
         # The source Roku is TV Thing's Roku lane: its YouTube TV channels.
         "youtube-tv": "api/v1/sources/youtube-tv",
@@ -52,10 +54,10 @@ class TvThingClient:
     def _validate(key: str, data: object) -> dict:
         if not isinstance(data, dict):
             raise ValueError("Expected a JSON object")
-        if key != "guide" and data.get("api_version") != "v1":
+        if key not in ("guide", "guide-long") and data.get("api_version") != "v1":
             raise ValueError("Unsupported or missing TV-Thing API version")
         field = {"sources": "sources", "digital": "items", "analog": "items",
-                 "guide": "channels", "status": "lanes", "youtube-tv": "items"}[key]
+                 "guide": "channels", "guide-long": "channels", "status": "lanes", "youtube-tv": "items"}[key]
         expected = list if field in ("sources", "items") else dict
         if not isinstance(data.get(field), expected):
             raise ValueError(f"Invalid {field} in TV-Thing response")
@@ -68,7 +70,7 @@ class TvThingClient:
             raise SourceUnavailableError("TV-Thing is not configured")
         if key not in self._PATHS:
             raise ValueError("Unsupported TV-Thing read operation")
-        ttl = (self.config.guide_cache_seconds if key == "guide" else
+        ttl = (self.config.guide_cache_seconds if key in ("guide", "guide-long") else
                2.0 if key == "status" else self.config.catalog_cache_seconds)
         # Per-endpoint lock coalesces simultaneous refreshes without serializing
         # guide/status/catalog requests behind one another.

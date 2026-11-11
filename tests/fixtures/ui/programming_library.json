@@ -1,0 +1,28 @@
+{
+ "folders": [
+  {
+   "breaks": true,
+   "files": 8,
+   "label": "How It's Made",
+   "minutes": 21,
+   "name": null,
+   "order": "next",
+   "path": "How It's Made/",
+   "root": "jellyfin-tv",
+   "root_name": "Jellyfin TV",
+   "whole": false
+  },
+  {
+   "breaks": true,
+   "files": 8,
+   "label": "Jellyfin TV",
+   "minutes": 21,
+   "name": null,
+   "order": "shuffle",
+   "path": null,
+   "root": "jellyfin-tv",
+   "root_name": "Jellyfin TV",
+   "whole": true
+  }
+ ]
+}

@@ -1,0 +1,235 @@
+{
+ "count": 5,
+ "draft": [
+  {
+   "days": [
+    "mon",
+    "tue",
+    "wed",
+    "thu"
+   ],
+   "id": "strip:wheel"
+  },
+  {
+   "days": [
+    "sat",
+    "sun"
+   ],
+   "id": "library:cab-rides"
+  }
+ ],
+ "generated_at": "2026-10-02T02:16:36.632711+00:00",
+ "groups": [
+  {
+   "blurb": "Standing appointments: every game the rule finds goes on by itself.",
+   "id": "sports",
+   "ideas": [
+    {
+     "apply": {
+      "body": {
+       "days": [
+        "sun"
+       ],
+       "from": "19:00",
+       "league": "nfl",
+       "networks": [
+        "NBC"
+       ],
+       "pick": "all",
+       "preset": "nfl-snf",
+       "priority": "high",
+       "title": "Sunday Night Football",
+       "to": "23:30"
+      },
+      "method": "POST",
+      "path": "v1/programming/sports"
+     },
+     "count": 1,
+     "detail": "Kansas City Chiefs at Buffalo Bills \u00b7 NBC",
+     "games": [
+      {
+       "networks": [
+        "NBC"
+       ],
+       "start_time": "2026-10-05T00:20:00+00:00",
+       "title": "Kansas City Chiefs at Buffalo Bills"
+      }
+     ],
+     "group": "sports",
+     "id": "sports:nfl-snf",
+     "score": 48,
+     "title": "Sunday Night Football",
+     "when": "2026-10-05T00:20:00+00:00",
+     "why": "The Sunday night game on NBC."
+    }
+   ],
+   "title": "Sports slots"
+  },
+  {
+   "blurb": "Slots tied to one channel whose programme the listings know.",
+   "id": "fixups",
+   "ideas": [
+    {
+     "apply": {
+      "body": {
+       "what": {
+        "follow": true,
+        "kind": "program",
+        "target": {
+         "channel_id": "wjla_7_1",
+         "quality": "medium",
+         "source_id": "tv-thing-digital"
+        },
+        "title": "The View"
+       }
+      },
+      "method": "POST",
+      "path": "v1/programming/slots/slot01"
+     },
+     "detail": "Weekdays \u00b7 11:00 AM \u00b7 7.1 WJLA",
+     "group": "fixups",
+     "id": "fix:slot01",
+     "score": 24,
+     "slot": "slot01",
+     "title": "The View",
+     "why": "It is in the listings: follow it, and its channel and times look after themselves."
+    }
+   ],
+   "title": "Let these follow the listings"
+  },
+  {
+   "blurb": "From the listings, and what the atlas has seen so far.",
+   "id": "strips",
+   "ideas": [
+    {
+     "apply": {
+      "body": {
+       "days": [
+        "mon",
+        "tue",
+        "wed",
+        "thu",
+        "fri"
+       ],
+       "minutes": 30,
+       "start": "19:00",
+       "title": "Wheel of Fortune",
+       "what": {
+        "follow": true,
+        "kind": "program",
+        "target": {
+         "channel_id": "wjla_7_1",
+         "source_id": "tv-thing-digital"
+        },
+        "title": "Wheel of Fortune"
+       }
+      },
+      "method": "POST",
+      "path": "v1/programming/slots"
+     },
+     "days": [
+      "mon",
+      "tue",
+      "wed",
+      "thu",
+      "fri"
+     ],
+     "detail": "30 min \u00b7 seen on 4 days",
+     "free": true,
+     "group": "strips",
+     "id": "strip:wheel",
+     "minutes": 30,
+     "part": 3,
+     "score": 22,
+     "start": "19:00",
+     "title": "Wheel of Fortune",
+     "when": "2026-10-02T23:00:00+00:00",
+     "why": "Weekdays at 7:00 PM on 7.1 WJLA \u00b7 new episodes"
+    }
+   ],
+   "title": "On at the same time every day"
+  },
+  {
+   "blurb": "Live events, premieres and new episodes in the next day or two.",
+   "id": "soon",
+   "ideas": [
+    {
+     "apply": {
+      "body": {
+       "end": "2026-10-03T02:00:00+00:00",
+       "mode": "program",
+       "priority": "normal",
+       "start": "2026-10-03T00:00:00+00:00",
+       "target": {
+        "channel_id": "wjla_7_1",
+        "source_id": "tv-thing-digital"
+       },
+       "title": "Dancing With the Stars"
+      },
+      "method": "POST",
+      "path": "v1/programming/shows"
+     },
+     "detail": "7.1 WJLA \u00b7 120 min",
+     "group": "soon",
+     "id": "soon:wjla_7_1:1",
+     "score": 13,
+     "title": "Dancing With the Stars",
+     "when": "2026-10-03T00:00:00+00:00",
+     "why": "live \u00b7 new"
+    }
+   ],
+   "title": "Coming up once"
+  },
+  {
+   "blurb": "Folders with enough to fill a slot every day.",
+   "id": "library",
+   "ideas": [
+    {
+     "apply": {
+      "body": {
+       "days": [
+        "sat",
+        "sun"
+       ],
+       "minutes": 120,
+       "start": "13:00",
+       "title": "Cab Rides",
+       "what": {
+        "kind": "library",
+        "order": "shuffle",
+        "root": "cab-rides"
+       }
+      },
+      "method": "POST",
+      "path": "v1/programming/slots"
+     },
+     "days": [
+      "sat",
+      "sun"
+     ],
+     "detail": "144 files \u00b7 about 101 min each",
+     "free": true,
+     "group": "library",
+     "id": "library:cab-rides",
+     "minutes": 120,
+     "score": 20,
+     "start": "13:00",
+     "title": "Cab Rides",
+     "why": "One at random each time."
+    }
+   ],
+   "title": "From the library"
+  }
+ ],
+ "guide": {
+  "airings": 4,
+  "atlas_programmes": 4,
+  "atlas_since": "2026-10-01",
+  "available": true,
+  "channels": 1,
+  "error": null,
+  "programmes": 4,
+  "reaches": "2026-10-05T03:35:00+00:00"
+ },
+ "seconds": 0.4
+}

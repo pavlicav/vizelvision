@@ -236,7 +236,8 @@ class FavoritesPlanner:
                 entry.update(favorite=order[best], rank=best + 1)
                 existing = by_game.get((game['league'], game['game_pk']))
                 if existing is not None:
-                    entry.update(status='scheduled' if existing.get('added_by') == 'favorites' else 'by_hand',
+                    # On the Schedule by this planner or a sports slot (sports_slots.py), else by hand.
+                    entry.update(status='scheduled' if existing.get('added_by') in ('favorites', 'slot') else 'by_hand',
                                  show_id=existing['id'], start=existing['start'])
                 elif game['done']:
                     continue

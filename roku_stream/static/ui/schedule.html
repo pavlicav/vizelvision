@@ -5,138 +5,248 @@
 <title>Schedule · VizelVision</title>
 <link rel="stylesheet" href="static/ui/vv.css">
 <style>
-.status{display:grid;grid-template-columns:240px repeat(2,minmax(0,1fr)) 260px}
+.status{display:grid;grid-template-columns:230px repeat(2,minmax(0,1fr)) 250px}
 .status>div{padding:14px 16px;border-left:1px solid var(--line);display:grid;gap:6px;align-content:start;min-width:0}
 .status>div:first-child{border-left:0}
 .status .big{font:700 22px/1.1 var(--display);letter-spacing:.02em;text-transform:uppercase;overflow-wrap:anywhere}
-.week{display:grid;grid-template-columns:250px minmax(0,1fr);gap:var(--gap);align-items:start}
-.blocks{list-style:none;margin:0;padding:0;display:grid;gap:6px}
-.blocks li{display:flex;gap:6px}
-.brush{flex:1;height:auto;justify-content:flex-start;text-align:left;padding:8px 10px;gap:10px;background:var(--well)}
-.brush[aria-pressed=true]{border-color:var(--touch);box-shadow:inset 0 0 0 1px var(--touch)}
-.brush small{display:block;color:var(--muted);font-size:12px;font-weight:400}
-.swatch{width:16px;height:16px;border-radius:3px;flex:none}
-.swatch.off{background:repeating-linear-gradient(135deg,#1a2227 0 4px,#0d1114 4px 8px);border:1px solid var(--line-2)}
-.savebar{position:sticky;top:calc(var(--top) + 12px)}
-.grid-wrap{overflow:auto;max-height:76vh;border-top:1px solid var(--line);background:var(--well);border-radius:0 0 var(--r-lg) var(--r-lg)}
-.grid-canvas{position:relative;min-width:780px}
-table.grid{border-collapse:separate;border-spacing:0;width:100%;min-width:780px;table-layout:fixed;user-select:none;touch-action:none}
-.grid th{position:sticky;top:0;background:#0d1013;z-index:2;font:500 11px/1 var(--mono);letter-spacing:.08em;text-transform:uppercase;padding:9px 4px;border-bottom:1px solid var(--line-2);color:var(--muted)}
-.grid th.today{color:var(--touch)}
-.grid th.time,.grid td.time{width:54px;position:sticky;left:0;background:#0d1013;z-index:2;text-align:right;padding-right:8px;color:var(--dim);font:500 10.5px/1 var(--mono)}
-.grid th.time{z-index:3}
-.grid td.cell{height:19px;padding:0 6px;font-size:11px;line-height:19px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:crosshair;border-left:1px solid #161b20;color:#fff}
-.grid tr.hour td.cell,.grid tr.hour td.time{border-top:1px solid #1b2127}
-.grid td.off{background:repeating-linear-gradient(135deg,#101418 0 5px,#0b0e11 5px 10px);color:var(--dim)}
-.grid td.cell.now{box-shadow:inset 0 2px 0 var(--pgm)}.grid td.cell.run{font-weight:600}.grid td.cell.past{opacity:.35}
-.airs{position:absolute;inset:0;pointer-events:none;z-index:1}
-.chipx{position:absolute;overflow:hidden;border-radius:4px;padding:1px 5px;font-size:11px;line-height:14px;color:#fff;background:#0e2233f2;border:1px solid var(--touch);box-shadow:0 1px 6px #000a}
-.chipx strong,.chipx small{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.chipx small{color:#d0dae0;font-size:10.5px}
-.chipx.game{background:#3a2608f2;border-color:var(--warn)}.chipx.game.estimated{border-bottom:2px dashed var(--warn)}
-.chipx.recording{background:#251c40f2;border-color:var(--rec)}.chipx.manual{background:#0c2418f2;border-color:var(--pvw)}
-.chipx.late{border-style:dashed}.chipx.off_air{background:#14181cf2;border-color:var(--line-3);color:var(--ink-2)}
-.airs-now{position:absolute;height:0;border-top:2px solid var(--pgm);z-index:1}
-.legend{display:flex;gap:6px 16px;flex-wrap:wrap;padding:10px 16px;font-size:12px;color:var(--muted)}
+/* The week ------------------------------------------------------------------------- */
+.weekbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.cal-wrap{overflow:auto;max-height:78vh;border-top:1px solid var(--line);background:var(--well);overscroll-behavior:contain}
+.cal{--ppm:1.1;--cols:7;display:grid;grid-template-columns:50px repeat(var(--cols),minmax(124px,1fr));min-width:calc(50px + var(--cols)*124px)}
+.cal.one{grid-template-columns:50px minmax(0,1fr);min-width:0}
+.cal .dayhead{position:sticky;top:0;z-index:6;background:#0d1013;border-bottom:1px solid var(--line-2);border-left:1px solid #161b20;padding:7px 8px;display:flex;gap:6px;align-items:baseline;min-width:0}
+.cal .dayhead button{all:unset;cursor:pointer;font:500 11px/1.2 var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.cal .dayhead button:hover,.cal .dayhead button:focus-visible{color:var(--ink)}
+.cal .dayhead.today button{color:var(--touch)}
+.cal .dayhead small{color:var(--dim);font:400 10.5px/1.2 var(--mono);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cal .corner{position:sticky;top:0;left:0;z-index:7;background:#0d1013;border-bottom:1px solid var(--line-2)}
+.cal .gutter{position:sticky;left:0;z-index:5;background:#0d1013;border-right:1px solid var(--line)}
+.cal .gutter span{position:absolute;right:7px;transform:translateY(-50%);font:500 10.5px/1 var(--mono);color:var(--dim);white-space:nowrap}
+.col{position:relative;border-left:1px solid #161b20;cursor:cell;
+  background-image:linear-gradient(#1c2229 1px,transparent 1px),linear-gradient(#12161b 1px,transparent 1px);
+  background-size:100% calc(var(--ppm)*60px),100% calc(var(--ppm)*30px)}
+.col.today{background-color:#0d1319}
+.col .past{position:absolute;left:0;right:0;top:0;background:#08090bb0;pointer-events:none;z-index:1}
+.air{position:absolute;left:0;top:0;bottom:0;width:8px;z-index:2;pointer-events:none}
+.air i{position:absolute;left:1px;width:5px;border-radius:2px;background:var(--touch);pointer-events:auto;min-height:2px}
+.air i.game{background:var(--warn)}.air i.recording{background:var(--rec)}.air i.manual{background:var(--pvw)}
+.air i.off_air{background:repeating-linear-gradient(180deg,#2a3138 0 3px,transparent 3px 6px)}.air i.ident{background:var(--ink-2)}
+.nowline{position:absolute;left:0;right:0;height:0;border-top:2px solid var(--pgm);z-index:4;pointer-events:none}
+.nowline::before{content:'';position:absolute;left:-1px;top:-5px;width:8px;height:8px;border-radius:50%;background:var(--pgm)}
+.ev{position:absolute;z-index:3;border-radius:5px;padding:2px 6px 2px 7px;overflow:hidden;font-size:12px;line-height:1.25;color:#fff;cursor:pointer;
+  background:color-mix(in srgb,var(--c,#3a6f8f) 38%,#0c0e11);border:1px solid color-mix(in srgb,var(--c,#3a6f8f) 75%,#000);border-left:3px solid var(--c,#3a6f8f);
+  text-align:left;display:block;font-family:var(--body);height:auto;justify-content:flex-start;box-shadow:0 1px 4px #0008}
+.ev:hover,.ev:focus-visible{filter:brightness(1.25);z-index:5;outline:0;box-shadow:0 0 0 1px var(--touch),0 2px 10px #000c}
+.ev strong,.ev small{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ev strong{font-weight:600}.ev small{color:#d0dae0;font-size:10.5px}
+.ev.tall strong{white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.ev.game{--c:var(--warn);background:#3a2608;border-color:#7a5a1d;border-left-color:var(--warn)}
+.ev.show{--c:var(--touch);background:#0e2233;border-color:#245a85;border-left-color:var(--touch)}
+.ev.wont{opacity:.62;background-image:repeating-linear-gradient(135deg,#0006 0 6px,transparent 6px 12px)}
+.ev.wont strong{text-decoration:line-through;text-decoration-color:#fff8}
+.ev.nothing{background:var(--warn-bg);border:1px dashed var(--warn);color:#ffd9a0}
+.ev.skipped{background:none;border:1px dashed var(--line-3);color:var(--muted);box-shadow:none}.ev.skipped small{color:var(--dim)}
+.ev.gone{opacity:.4}
+.ev.ghost{background:#0c2418d0;border:1px dashed var(--pvw);border-left:3px dashed var(--pvw);color:#b6f0cf;z-index:4}
+.ev.ghost small{color:#8fd4ae}
+.ev .tag{display:inline-block;font:500 9.5px/1 var(--mono);letter-spacing:.06em;text-transform:uppercase;padding:2px 4px;border-radius:3px;background:#0008;margin-right:4px;vertical-align:1px}
+.ev .tag.warn{color:var(--warn)}.ev .tag.hi{color:var(--touch)}
+.ev .grip{position:absolute;left:0;right:0;bottom:0;height:7px;cursor:ns-resize}
+.ev.dragging{opacity:.85;z-index:8;box-shadow:0 0 0 2px var(--touch),0 6px 24px #000c;cursor:grabbing}
+.dragtip{position:fixed;z-index:95;pointer-events:none;background:var(--raised);border:1px solid var(--touch-line);border-radius:4px;padding:3px 7px;font:500 11.5px/1.2 var(--mono)}
+.legend{display:flex;gap:6px 16px;flex-wrap:wrap;padding:10px 16px;font-size:12px;color:var(--muted);border-top:1px solid var(--line)}
 .legend i{display:inline-block;width:11px;height:11px;border-radius:3px;margin-right:6px;vertical-align:-1px;border:1px solid}
-.shows li,.rundown-list li{display:flex;gap:12px;align-items:center}
-.shows li>div,.rundown-list li>div{flex:1;min-width:0}
-.shows small,.rundown-list small{display:block;color:var(--muted);font-size:12.5px}
-.shows time,.rundown-list time{font:500 12px/1.3 var(--mono);color:var(--muted);width:100px;flex:none}
-.shows li.day{padding:12px 16px 4px;border-top:1px solid var(--line);font:500 11px/1 var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--touch)}
-.shows small.note{color:var(--warn)}
-.shows select.prio{width:auto;height:28px;font-size:13px;flex:none}.shows select.prio.high{border-color:var(--touch)}
-.shows li.gone{opacity:.65}.shows li.gone strong{text-decoration:line-through}
-.rundown-list li.off{opacity:.75}.rundown-list li.current{box-shadow:inset 3px 0 0 var(--pgm);background:#ff44380a}
-.rundown-list .swatch{align-self:stretch;width:4px;height:auto}
+.legend i.rib{width:5px;border:0;border-radius:2px}
+.draftbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:10px 16px;background:var(--pvw-bg);border-top:1px solid var(--pvw-line);color:#b6f0cf;font-size:13.5px}
+.addmenu{position:absolute;z-index:60;background:var(--raised);border:1px solid var(--line-3);border-radius:var(--r-lg);box-shadow:var(--shadow);padding:8px;display:grid;gap:4px;min-width:230px}
+.addmenu .label{padding:4px 6px 6px}
+.addmenu button{justify-content:flex-start;background:none;border-color:transparent;height:auto;padding:7px 8px;text-align:left;gap:9px}
+.addmenu button:hover{background:var(--hover)}
+.addmenu button small{display:block;color:var(--muted);font-size:12px;font-weight:400}
+/* Ideas, sports, conflicts ----------------------------------------------------------- */
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px}
+.card{background:var(--well);border:1px solid var(--line);border-radius:var(--r);padding:11px 12px;display:grid;gap:6px;align-content:start;min-width:0}
+.card.on{border-color:var(--pvw-line);box-shadow:inset 3px 0 0 var(--pvw)}
+.card h3{font:600 15px/1.25 var(--body);margin:0;overflow-wrap:anywhere}
+.card p{margin:0;color:var(--muted);font-size:12.5px;line-height:1.4}
+.card .when{font:500 11px/1.3 var(--mono);color:var(--ink-2);letter-spacing:.04em}
+.card .actions{margin-top:4px;gap:6px}
+.group-head{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap;margin:18px 0 8px}
+.group-head:first-child{margin-top:0}
+.group-head h3{font:500 12px/1.3 var(--mono);letter-spacing:.13em;text-transform:uppercase;color:var(--ink-2);margin:0}
+.rows li{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.rows li>div.grow{flex:1;min-width:180px}
+.rows small{display:block;color:var(--muted);font-size:12.5px}
+.rows time{font:500 12px/1.3 var(--mono);color:var(--muted);width:118px;flex:none}
+.rows .swatch{width:4px;align-self:stretch;border-radius:2px;flex:none;min-height:28px}
+.rows li.off{opacity:.55}.rows li.current{box-shadow:inset 3px 0 0 var(--pgm);background:#ff44380a}
+.rows li.day{padding:12px 16px 4px;font:500 11px/1 var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--touch)}
+.rows small.note{color:var(--warn)}
+.conflict{border-left:3px solid var(--warn)}
+.count-pill{display:inline-block;min-width:17px;padding:1px 5px;border-radius:9px;background:var(--line-2);color:var(--ink);font:500 10.5px/1.3 var(--mono);text-align:center;margin-left:5px}
+.count-pill.warn{background:var(--warn);color:#201400}
+/* Dialogs ------------------------------------------------------------------------------ */
+dialog.wide{width:min(680px,calc(100vw - 24px))}
+dialog>.body,dialog>form>.body{overflow:auto;max-height:calc(100vh - 190px)}
+/* A dialog whose parts sit inside its form. */
+dialog>form>.head{display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--line)}
+dialog>form>.head h2{font:800 22px/1.1 var(--display);letter-spacing:.03em;text-transform:uppercase}
+dialog>form>.body{padding:16px 18px;display:grid;gap:14px}
+dialog>form>.foot{padding:12px 18px;border-top:1px solid var(--line);display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
+.daychips{display:flex;gap:4px;flex-wrap:wrap}
+.daychips button{width:44px;padding:0;height:34px;font:500 12px/1 var(--mono);text-transform:uppercase}
+.daychips button[aria-pressed=true]{background:var(--touch-bg);border-color:var(--touch);color:#d7eeff}
+.swatches{display:flex;gap:6px;flex-wrap:wrap}
+.swatches button{width:26px;height:26px;padding:0;border-radius:50%;border:2px solid transparent}
+.swatches button[aria-pressed=true]{border-color:#fff}
+.results{list-style:none;margin:0;padding:0;display:grid;gap:2px;max-height:230px;overflow:auto;border:1px solid var(--line);border-radius:var(--r);background:var(--well)}
+.results:empty{display:none}
+.results button{all:unset;box-sizing:border-box;display:block;width:100%;padding:7px 10px;cursor:pointer;font-size:13.5px}
+.results button:hover,.results button:focus-visible{background:var(--hover)}
+.results button[aria-selected=true]{background:var(--touch-bg);box-shadow:inset 3px 0 0 var(--touch)}
+.results small{display:block;color:var(--muted);font-size:12px}
+.choice{display:grid;gap:6px}
+.choice label{display:grid;grid-template-columns:18px 1fr;gap:8px;align-items:start;padding:8px 10px;border:1px solid var(--line);border-radius:var(--r);cursor:pointer}
+.choice label:has(input:checked){border-color:var(--touch-line);background:var(--touch-bg)}
+.choice small{display:block;color:var(--muted);font-size:12.5px}
+.facts{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;font-size:13.5px;margin:0}
+.facts dt{font:500 11px/1.5 var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.facts dd{margin:0;min-width:0;overflow-wrap:anywhere}
 .ladder{counter-reset:step;list-style:none;margin:0;padding:0;display:grid;gap:8px}
 .ladder li{counter-increment:step;display:grid;grid-template-columns:30px 1fr;gap:10px;align-items:start}
 .ladder li::before{content:counter(step);display:grid;place-items:center;width:26px;height:26px;border-radius:50%;border:1px solid var(--warn-line);color:var(--warn);font:500 12px/1 var(--mono)}
 @media (max-width:1180px){.status{grid-template-columns:1fr 1fr}.status>div:nth-child(3){border-left:0}.status>div:nth-child(n+3){border-top:1px solid var(--line)}}
-@media (max-width:980px){.week{grid-template-columns:1fr}.savebar{position:static}}
-@media (max-width:640px){.status{grid-template-columns:1fr}.status>div{border-left:0;border-top:1px solid var(--line)}.status>div:first-child{border-top:0}}
+@media (max-width:640px){.status{grid-template-columns:1fr}.status>div{border-left:0;border-top:1px solid var(--line)}.status>div:first-child{border-top:0}
+  .cal-wrap{max-height:70vh}.rows time{width:auto}dialog>.body,dialog>form>.body{max-height:calc(100vh - 170px)}}
 </style>
 </head>
 <body>
 <header class="topbar" data-page="schedule"></header><script src="static/ui/vv.js"></script>
 <script src="static/ui/onair.js"></script>
 <main class="page">
-  <div class="page-head"><div><h1>Schedule</h1><p>Paint blocks onto the week; anything unpainted is <strong>OFF AIR</strong> (the test card). Shows and games override the grid on their date. Changes join Up next about <span id="lookahead">10</span> minutes ahead.</p></div></div>
+  <div class="page-head"><div><h1>Schedule</h1><p>The week as planned, and beside each day (the coloured edge) what will really air. Tap a programme to change it, or an empty time to add one. Nothing changes until you choose it, and every change can be undone.</p></div></div>
   <div class="stack" id="workspace">
     <section class="panel status" aria-label="Automation status">
       <div><span class="label">Automation</span><label class="switch"><input type="checkbox" id="enabled"><span>Run this schedule</span></label><div id="queue-state" class="row" style="gap:6px"></div></div>
       <div><span class="label">On now</span><div class="big" id="on-now">—</div><div class="tiny muted" id="on-now-detail"></div></div>
       <div><span class="label">Next</span><div class="big" id="next">—</div><div class="tiny muted" id="next-detail"></div></div>
-      <div><span class="label">Catch up</span><button id="take-current" type="button" class="sm">Queue what's on now</button><p class="tiny muted">Turning the schedule on only queues future changes. Use this after turning it on, or after a restart, to air the current block.</p></div>
+      <div><span class="label">Catch up</span><button id="take-current" type="button" class="sm">Queue what's on now</button><p class="tiny muted">Changes join Up next about <span id="lookahead">10</span> minutes ahead. Use this after switching the schedule on, or after a restart, to air what should be on now.</p></div>
     </section>
 
-    <div class="week">
-      <div class="stack">
-        <section class="panel" aria-labelledby="blocks-title"><div class="head"><h2 id="blocks-title">Brushes</h2><div class="end"><button type="button" id="new-block" class="sm primary">+ New block</button></div></div>
-          <div class="body stack tight"><p class="hint tiny">Pick a brush, then click or drag across the week. OFF AIR erases. The grid repeats every week.</p><ul class="blocks" id="blocks"></ul></div></section>
-        <section class="panel savebar" aria-label="Save the grid"><div class="body stack tight">
-          <p class="small" id="dirty">No unsaved changes.</p>
-          <div class="actions"><button id="save" type="button" class="primary sm">Save schedule</button><button id="revert" type="button" class="quiet sm">Discard</button></div>
-          <p class="tiny muted">Times are <span id="zone"></span>. Half-hour cells.</p></div></section>
+    <section class="panel" id="week-panel" aria-labelledby="week-title">
+      <div class="head"><h2 id="week-title">The week</h2>
+        <div class="end weekbar">
+          <div class="seg" role="group" aria-label="View"><button type="button" id="view-week" aria-pressed="true">Week</button><button type="button" id="view-day" aria-pressed="false">Day</button></div>
+          <div class="seg" role="group" aria-label="Day" id="day-nav" hidden><button type="button" id="day-prev" aria-label="Previous day">‹</button><button type="button" id="day-next" aria-label="Next day">›</button></div>
+          <div class="seg" role="group" aria-label="Zoom"><button type="button" id="zoom-out" aria-label="Zoom out">−</button><button type="button" id="zoom-in" aria-label="Zoom in">+</button></div>
+          <label class="switch tiny"><input type="checkbox" id="overnight"><span>Overnight</span></label>
+          <button type="button" class="primary sm" id="add">+ Add</button>
+        </div></div>
+      <div class="draftbar" id="draftbar" hidden></div>
+      <div class="cal-wrap" id="cal-wrap"><div class="cal" id="cal" style="position:relative"></div></div>
+      <div class="legend"><span><i class="rib" style="background:var(--touch)"></i>Coloured edge: what will air</span><span><i style="background:#3a2608;border-color:var(--warn)"></i>Game · holds until its final</span><span><i style="background:#0e2233;border-color:var(--touch)"></i>One-off show</span><span><i style="background:transparent;border:1px dashed var(--warn)"></i>Nothing to air</span><span><i style="background:repeating-linear-gradient(135deg,#333 0 3px,#111 3px 6px);border-color:var(--line-3)"></i>Won't air as planned</span><span><i style="background:#0c2418;border:1px dashed var(--pvw)"></i>Suggestion</span><span class="muted" id="zone-note"></span></div>
+    </section>
+
+    <section class="panel" id="more" aria-label="Ideas, sports and the lineup">
+      <div class="head" style="padding-bottom:0;border-bottom:0"><div class="tabs" role="tablist" style="margin:0;border:0;width:100%">
+        <button type="button" role="tab" data-tab="ideas" aria-selected="true">Ideas<span class="count-pill" id="ideas-count" hidden></span></button>
+        <button type="button" role="tab" data-tab="sports" aria-selected="false">Sports</button>
+        <button type="button" role="tab" data-tab="clashes" aria-selected="false">Clashes<span class="count-pill warn" id="clash-count" hidden></span></button>
+        <button type="button" role="tab" data-tab="lineup" aria-selected="false">Lineup</button>
+        <button type="button" role="tab" data-tab="rundown" aria-selected="false">As it will air</button></div></div>
+      <div class="body" style="border-top:1px solid var(--line)">
+        <div data-panel="ideas"><div class="row" style="gap:10px;flex-wrap:wrap;margin-bottom:14px"><p class="hint grow" style="flex:1;min-width:240px;margin:0" id="ideas-note">Looking through the listings, the library and the sports feeds…</p>
+          <button type="button" class="primary sm" id="draft">Draft a week for me</button><button type="button" class="quiet sm" id="ideas-refresh">Look again</button></div><div id="ideas"></div></div>
+        <div data-panel="sports" hidden>
+          <p class="hint" style="margin-bottom:12px">A sports slot is a standing appointment: every game it finds goes on the schedule by itself, with the slot's priority. Favorite teams' games are added the same way from <a href="crawl#teams">Crawl › Favorites</a>.</p>
+          <div id="sports-slots"></div>
+          <div class="group-head"><h3>Every game</h3><span class="hint tiny">Schedule one game by hand: <strong>Schedule</strong> puts it on its channel, <strong>⋯</strong> picks the channel, window and what follows.</span></div>
+          <div id="sports-list"></div></div>
+        <div data-panel="clashes" hidden><p class="hint" style="margin-bottom:12px">Where two things want the same time, this is what happens, and how to change it.</p><div id="clashes"></div></div>
+        <div data-panel="lineup" hidden><p class="hint" style="margin-bottom:8px">Every slot, in order of its time of day. Shows and games on a date are on the week above.</p><ul class="list rows" id="lineup"></ul>
+          <div class="group-head"><h3>Shows and games on a date</h3><button type="button" class="quiet sm" id="follow-games">Check sports feeds now</button><span class="hint tiny" id="games-checked"></span></div><ul class="list rows" id="shows"></ul></div>
+        <div data-panel="rundown" hidden><p class="hint" style="margin-bottom:8px">Up next and the schedule played forward for 24 hours. Game ends (~) are estimates; preparation and station IDs are not shown. <strong id="rundown-paused" style="color:var(--warn)"></strong></p><ul class="list rows" id="rundown"></ul></div>
       </div>
-      <section class="panel" aria-labelledby="week-title"><div class="head"><h2 id="week-title">Next 7 days</h2><div class="end"><label class="switch tiny"><input type="checkbox" id="show-airs" checked><span>Show what will air</span></label></div></div>
-        <div class="grid-wrap" id="grid-wrap"><div class="grid-canvas"><table class="grid" id="grid" aria-describedby="blocks-title"></table><div class="airs" id="airs" aria-hidden="true"></div></div></div>
-        <div class="legend" id="legend"><span><i style="background:#3a2608;border-color:var(--warn)"></i>Game · until its final (dashed: estimated)</span><span><i style="background:#0e2233;border-color:var(--touch)"></i>Scheduled show</span><span><i style="background:#251c40;border-color:var(--rec)"></i>Recording from Up next</span><span><i style="background:#0c2418;border-color:var(--pvw)"></i>Queued by hand</span><span><i style="background:transparent;border:1px dashed var(--touch)"></i>Joins late</span></div>
-      </section>
-    </div>
+    </section>
 
     <section class="machine machinery" aria-label="How it works: what airs"><div class="head"><span class="title">How it works · what airs when</span></div>
       <div class="body cols-2">
         <div class="stack tight"><span class="label">Who gets master, in order</span>
-          <ol class="ladder"><li><span><strong>A game holds master until it is final.</strong> Never cut early, even past its window; estimated from the live inning or quarter.</span></li>
-            <li><span><strong>Then a game already under way</strong> (another one that started meanwhile).</span></li>
+          <ol class="ladder"><li><span><strong>A game holds master until it is final.</strong> Only a show or game of higher priority cuts in.</span></li>
+            <li><span><strong>Then a game already under way</strong> (one that started meanwhile joins in progress).</span></li>
             <li><span><strong>Then recordings waiting in Up next</strong>, until the next live show starts.</span></li>
-            <li><span><strong>Then the schedule:</strong> scheduled shows, else the painted grid, else OFF AIR.</span></li></ol></div>
-        <div class="stack tight"><span class="label">Games follow the sports feeds</span>
-          <p class="hint">Until a game starts, its show follows MLB Stats and ESPN every <span id="check-minutes">10</span> minutes: a moved game takes its whole window along (pregame lead kept), the title follows a decided matchup unless you renamed it, and a game missing for <span id="gone-minutes">20</span> minutes or cancelled is removed and listed below. A feed outage changes nothing.</p>
-          <p class="hint">The overlay on the grid is <code>GET /v1/playback</code>: Up next and the schedule played forward under these rules. Blocks airing as painted are not drawn again.</p></div></div></section>
-
-    <div class="cols-2">
-      <section class="panel" aria-labelledby="shows-title"><div class="head"><h2 id="shows-title">Upcoming shows and games</h2><div class="end"><button type="button" class="sm quiet" id="follow-games">Check sports feeds now</button></div></div>
-        <p class="tiny muted" id="games-checked" style="padding:10px 16px 0"></p><ul class="list shows" id="shows"></ul></section>
-      <section class="panel" aria-labelledby="rundown-title"><div class="head"><h2 id="rundown-title">As it will air · next 24 hours</h2></div>
-        <p class="tiny muted" id="rundown-note" style="padding:10px 16px 0">Game ends (~) are estimates; preparation and station IDs are not shown. <strong id="rundown-paused" style="color:var(--warn)"></strong></p>
-        <ul class="list rundown-list" id="rundown"></ul></section>
-    </div>
-
-    <section class="panel" aria-label="Add to the schedule">
-      <div class="head" style="padding-bottom:0;border-bottom:0"><div class="tabs" role="tablist" style="margin:0;border:0;width:100%">
-        <button type="button" role="tab" data-tab="sports" aria-selected="true">Sports</button><button type="button" role="tab" data-tab="add" aria-selected="false">Add a show or game</button></div></div>
-      <div class="body" style="border-top:1px solid var(--line)">
-        <div data-panel="sports"><p class="hint" style="margin-bottom:12px">A live game: <strong>▶ Play now</strong> or <strong>+ Add to queue</strong>. An upcoming game: <strong>Schedule</strong> adds it on the channel carrying it (NFL 3 h 45, college football and MLB 4 h). <strong>⋯</strong> opens the form to pick another channel, window or backup.</p><div id="sports-list"></div></div>
-        <form id="show-form" data-panel="add" hidden class="stack" style="max-width:860px">
-          <div class="seg" role="radiogroup" aria-label="Show type"><label class="check" style="padding:0 10px"><input type="radio" name="mode" value="program" checked>Program</label><label class="check" style="padding:0 10px"><input type="radio" name="mode" value="game">Sports game</label></div>
-          <div id="program-fields" class="stack tight"><label class="field"><span>Title</span><input id="show-title" maxlength="72" placeholder="Election night coverage"></label><div class="target" id="show-target"></div></div>
-          <div id="game-fields" class="stack tight" hidden>
-            <div class="fields"><label class="field"><span>League</span><select id="league"><option value="nfl">NFL</option><option value="ncaaf">College Football (Power 5)</option><option value="nba">NBA</option><option value="mlb">MLB</option><option value="nhl">NHL</option><option value="wnba">WNBA</option><option value="nwsl">NWSL</option></select></label>
-              <label class="field"><span>Game date</span><input type="date" id="game-date"></label><div class="field"><span>&nbsp;</span><button type="button" class="sm" id="load-games">Load games</button></div></div>
-            <label class="field"><span>Game</span><select id="game"><option value="">Load a date first</option></select></label>
-            <p class="tiny muted" id="game-note"></p>
-            <div class="target" id="game-target"></div>
-            <p class="tiny muted">Any channel you have works: YouTube TV networks, an over-the-air TV-Thing station, Sunday Ticket for NFL (found by reading the YouTube TV guide for its matchup, selectable once live), Prime Video for Thursday Night Football, or ESPN Unlimited in YouTube TV for NHL and NWSL games on ESPN+.</p>
-            <label class="field"><span>Title (optional)</span><input id="game-title" maxlength="72" placeholder="Uses the matchup"></label>
-            <fieldset class="panel inset" style="padding:12px 14px"><legend class="label" style="padding:0 6px">After the game ends</legend><div class="target" id="backup-target"></div>
-              <label class="field" id="backup-title-label" style="margin-top:8px"><span>Backup program title</span><input id="backup-title" maxlength="48" value="Postgame"></label>
-              <details class="more"><summary>How the backup works</summary><p class="hint" style="margin-top:6px">When the game is final (MLB Stats API; ESPN for the other leagues), <em>Return to schedule</em> airs whatever the grid and shows have, unless a game under way or recordings in Up next come first; the next live show still starts on time. A backup program airs until the window ends, which ends early where another show starts. A game running past its window stays on air, and the backup is skipped if it ends after the window.</p></details></fieldset>
-          </div>
-          <div class="fields"><label class="field"><span>Starts</span><input type="datetime-local" id="show-start" required></label><label class="field"><span>Window ends</span><input type="datetime-local" id="show-end" required></label>
-            <label class="field"><span>Priority</span><select id="show-priority"><option value="low">Low</option><option value="normal" selected>Normal</option><option value="high">High</option></select></label></div>
-          <p class="tiny muted">Priority decides overlaps. A show that outranks what is on air cuts in at its start, even into a game before its final or a take held to an end time (those are Normal). Otherwise what is on air keeps master, and the show joins in progress when it ends.</p>
-          <div class="actions"><button type="submit" id="add-show" class="primary">Add show</button></div>
-        </form>
-      </div>
-    </section>
+            <li><span><strong>Then the schedule:</strong> shows on a date, else the lineup's slots, else OFF AIR.</span></li></ol></div>
+        <div class="stack tight"><span class="label">Slots, listings and sports</span>
+          <p class="hint">A slot that follows a programme looks it up in the listings (<code>GET /v1/programming/search</code>) for each airing, and is settled 15 minutes before it starts. The listings reach <span id="guide-reach">a day or two</span>; past that, its usual channel is assumed. Sports slots and favorites are checked every 10 minutes, and scheduled games follow MLB Stats and ESPN until they start: a moved game takes its window along, and one missing for <span id="gone-minutes">20</span> minutes is removed.</p>
+          <p class="hint">The coloured edge is <code>GET /v1/playback</code>: Up next and the schedule played forward under the rules on the left.</p></div></div></section>
   </div>
 </main>
 
-<dialog id="block-dialog"><form id="block-form"><div class="head"><h2 id="block-dialog-title">Programming block</h2></div>
-<div class="body"><div class="fields" style="grid-template-columns:1fr auto"><label class="field"><span>Name</span><input id="block-name" maxlength="48" required placeholder="Morning news"></label><label class="field"><span>Colour</span><input type="color" id="block-color" value="#3a6f8f"></label></div>
-<div class="target" id="block-target"></div><p class="tiny muted">Blocks are saved with the schedule.</p></div>
-<div class="foot"><button type="button" class="danger" id="block-delete" style="margin-right:auto">Delete block</button><button type="button" class="quiet" id="block-cancel">Cancel</button><button type="submit" class="primary">Save block</button></div></form></dialog>
+<dialog id="slot-dialog" class="wide"><form id="slot-form" method="dialog"><div class="head"><h2 id="slot-dialog-title">Add to the lineup</h2></div>
+  <div class="body">
+    <div class="seg" role="tablist" aria-label="What airs" id="slot-kinds"><button type="button" data-kind="program" aria-selected="true">A programme</button><button type="button" data-kind="channel" aria-selected="false">A channel</button><button type="button" data-kind="library" aria-selected="false">From the library</button></div>
+    <div data-kind-panel="program" class="stack tight">
+      <label class="field"><span>Programme</span><input id="program-search" type="search" autocomplete="off" placeholder="Search the listings: Jeopardy, Nightly News, The Voice…"></label>
+      <ul class="results" id="program-results" role="listbox" aria-label="Programmes"></ul>
+      <p class="hint tiny" id="program-note">The channel follows the programme: each airing is looked up in the listings.</p>
+      <div class="field"><span>If the listings do not have it</span><div class="target" id="usual-target"></div></div>
+      <label class="check"><input type="checkbox" id="program-follow" checked> Use the listed start and end when they are within 45 minutes</label>
+    </div>
+    <div data-kind-panel="channel" class="stack tight" hidden><div class="target" id="channel-target"></div><p class="hint tiny">Whatever this channel has on. OFF AIR makes a planned test-card break.</p></div>
+    <div data-kind-panel="library" class="stack tight" hidden>
+      <div class="fields"><label class="field"><span>Folder</span><select id="library-folder"></select></label>
+        <label class="field"><span>Each time</span><select id="library-order"><option value="next">The next one, in order</option><option value="newest">The newest</option><option value="shuffle">One at random</option></select></label>
+        <label class="field" id="library-breaks-label"><span>Ad breaks</span><select id="library-breaks"><option value="0">None</option><option value="60">1:00 each</option><option value="120">2:00 each</option><option value="180">3:00 each</option></select></label></div>
+      <p class="hint tiny" id="library-note">One file per airing. It plays to its end; the rest of the slot is the test card, and a file longer than its slot is cut by what starts next.</p>
+    </div>
+    <label class="field"><span>Name on the schedule</span><input id="slot-title" maxlength="48" required placeholder="Jeopardy!"></label>
+    <div class="field"><span>When</span><div class="seg" role="group" aria-label="Repeats" id="slot-repeat" style="width:max-content"><button type="button" data-repeat="weekly" aria-pressed="true">Every week</button><button type="button" data-repeat="once" aria-pressed="false">Just once</button></div></div>
+    <div id="weekly-fields" class="stack tight"><div class="daychips" id="slot-days" role="group" aria-label="Days"></div>
+      <div class="actions"><button type="button" class="quiet xs" data-days="mon,tue,wed,thu,fri">Weekdays</button><button type="button" class="quiet xs" data-days="mon,tue,wed,thu,fri,sat,sun">Every day</button><button type="button" class="quiet xs" data-days="sat,sun">Weekends</button></div></div>
+    <label class="field" id="once-fields" hidden><span>Date</span><input type="date" id="slot-date"></label>
+    <div class="fields"><label class="field"><span>Starts</span><input type="time" id="slot-start" step="300" required></label>
+      <label class="field"><span>Runs for</span><select id="slot-minutes"></select></label>
+      <label class="field"><span>Ends</span><input id="slot-ends" readonly tabindex="-1"></label></div>
+    <details class="more"><summary>Colour and priority</summary><div class="stack tight" style="margin-top:8px"><div class="swatches" id="slot-colors" role="group" aria-label="Colour"></div>
+      <label class="field" style="max-width:260px"><span>Priority</span><select id="slot-priority"><option value="low">Low · gives way to other slots</option><option value="normal" selected>Normal</option><option value="high">High · has the time over other slots</option></select></label>
+      <p class="hint tiny">Where two slots overlap, the higher priority has the time, then the one that starts later; the other picks up again when it ends. For a one-off show, High also cuts into a game on air.</p></div></details>
+    <p class="note warn" id="slot-warning" hidden></p>
+  </div>
+  <div class="foot"><button type="button" class="danger" id="slot-delete" style="margin-right:auto" hidden>Remove slot</button><button type="button" class="quiet" id="slot-cancel">Cancel</button><button type="submit" class="primary" id="slot-save">Add to the lineup</button></div></form></dialog>
+
+<dialog id="sports-dialog" class="wide"><form id="sports-form" method="dialog"><div class="head"><h2 id="sports-dialog-title">Sports slot</h2></div>
+  <div class="body">
+    <div class="fields"><label class="field"><span>Name</span><input id="sp-title" maxlength="48" required placeholder="Monday Night Football"></label>
+      <label class="field"><span>League</span><select id="sp-league"><option value="nfl">NFL</option><option value="ncaaf">College Football (Power 5)</option><option value="nba">NBA</option><option value="mlb">MLB</option><option value="nhl">NHL</option><option value="wnba">WNBA</option><option value="nwsl">NWSL</option></select></label></div>
+    <div class="field"><span>Games starting on</span><div class="daychips" id="sp-days" role="group" aria-label="Days"></div></div>
+    <div class="fields"><label class="field"><span>Between</span><input type="time" id="sp-from" step="900" required></label><label class="field"><span>And</span><input type="time" id="sp-to" step="900" required></label>
+      <label class="field"><span>Lead-in</span><select id="sp-lead"><option value="0">From the start</option><option value="15">15 min of pregame</option><option value="30">30 min of pregame</option></select></label></div>
+    <label class="field"><span>Only on these networks (optional)</span><input id="sp-networks" placeholder="ESPN, ABC · leave empty for any channel you get"></label>
+    <label class="field"><span>Only these teams (optional)</span><input id="sp-teams" placeholder="DET, Commanders · leave empty for any team"></label>
+    <div class="field"><span>When several games match on a day</span><div class="choice" id="sp-pick"><label><input type="radio" name="sp-pick" value="all" checked><span>Air them all<small>Each goes on at its start; overlaps follow priority.</small></span></label><label><input type="radio" name="sp-pick" value="best"><span>Air the best one<small>A favorite's game first, then one on a regular channel, then the earliest.</small></span></label></div></div>
+    <div class="field"><span>Priority</span><div class="choice" id="sp-priority"><label><input type="radio" name="sp-priority" value="high"><span>High · cuts in at its start<small>Even into another game before its final, or something you put on by hand.</small></span></label><label><input type="radio" name="sp-priority" value="normal" checked><span>Normal · waits its turn<small>Takes over from the lineup, but a game already on air finishes first, and it joins in progress.</small></span></label><label><input type="radio" name="sp-priority" value="low"><span>Low · gives way<small>Any Normal game or show outranks it.</small></span></label></div></div>
+    <div class="field"><span>Games it finds in the next 8 days</span><ul class="list rows" id="sp-preview" style="border:1px solid var(--line);border-radius:var(--r)"><li class="hint">Choose a league, days and times.</li></ul></div>
+  </div>
+  <div class="foot"><button type="button" class="danger" id="sp-delete" style="margin-right:auto" hidden>Remove slot</button><button type="button" class="quiet" id="sp-cancel">Cancel</button><button type="submit" class="primary" id="sp-save">Add sports slot</button></div></form></dialog>
+
+<dialog id="game-dialog" class="wide"><form id="show-form" method="dialog"><div class="head"><h2>Schedule a game</h2></div>
+  <div class="body">
+    <div class="fields"><label class="field"><span>League</span><select id="league"><option value="nfl">NFL</option><option value="ncaaf">College Football (Power 5)</option><option value="nba">NBA</option><option value="mlb">MLB</option><option value="nhl">NHL</option><option value="wnba">WNBA</option><option value="nwsl">NWSL</option></select></label>
+      <label class="field"><span>Game date</span><input type="date" id="game-date"></label><div class="field"><span>&nbsp;</span><button type="button" class="sm" id="load-games">Load games</button></div></div>
+    <label class="field"><span>Game</span><select id="game"><option value="">Load a date first</option></select></label>
+    <p class="tiny muted" id="game-note"></p>
+    <div class="target" id="game-target"></div>
+    <label class="field"><span>Title (optional)</span><input id="game-title" maxlength="72" placeholder="Uses the matchup"></label>
+    <fieldset class="panel inset" style="padding:12px 14px"><legend class="label" style="padding:0 6px">After the game ends</legend><div class="target" id="backup-target"></div>
+      <label class="field" id="backup-title-label" style="margin-top:8px"><span>Backup program title</span><input id="backup-title" maxlength="48" value="Postgame"></label></fieldset>
+    <div class="fields"><label class="field"><span>Starts</span><input type="datetime-local" id="show-start" required></label><label class="field"><span>Window ends</span><input type="datetime-local" id="show-end" required></label>
+      <label class="field"><span>Priority</span><select id="show-priority"><option value="low">Low</option><option value="normal" selected>Normal</option><option value="high">High</option></select></label></div>
+    <p class="tiny muted">The game stays on until its final whatever the window. A High game cuts in at its start; otherwise it waits for what holds master and joins in progress.</p>
+  </div>
+  <div class="foot"><button type="button" class="quiet" id="game-cancel">Cancel</button><button type="submit" id="add-show" class="primary">Add game</button></div></form></dialog>
+
+<dialog id="info-dialog"><div class="head"><h2 id="info-title"></h2><div class="end"><button type="button" class="quiet sm" id="info-close" aria-label="Close">Close</button></div></div>
+  <div class="body" id="info-body"></div><div class="foot" id="info-foot"></div></dialog>
 <script src="static/ui/schedule.js"></script>
 </body>
 </html>

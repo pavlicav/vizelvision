@@ -1,4 +1,31 @@
 {
+ "dropped": [
+  {
+   "due": "2026-10-02T23:30:00+00:00",
+   "item": null,
+   "key": "2026-10-02T23:30:00+00:00|block|slot04|",
+   "kind": "block",
+   "target": {
+    "channel_id": "wjla_7_1",
+    "quality": "medium",
+    "source_id": "tv-thing-digital"
+   },
+   "title": "Jeopardy",
+   "why": "Its slot ends before Philadelphia Phillies at Atlanta Braves does"
+  },
+  {
+   "due": "2026-10-02T03:36:00+00:00",
+   "item": null,
+   "key": "2026-10-02T04:00:00+00:00|off_air|None|{}",
+   "kind": "off_air",
+   "target": {
+    "channel_id": "off-air",
+    "source_id": "off-air"
+   },
+   "title": "OFF AIR",
+   "why": "OFF AIR gives way to Up next"
+  }
+ ],
  "hold": null,
  "now": "2026-10-02T02:16:36.601631+00:00",
  "pause_reason": "Review the queue and resume after startup",
@@ -14,6 +41,8 @@
     "league": "mlb",
     "title": "Philadelphia Phillies at Atlanta Braves"
    },
+   "item": "21d1b99b6eb14d51b7bc06a85106676d",
+   "key": "2026-10-02T02:16:36.601631+00:00|game|4c61739c27af4efa8961bdcef828f32e|",
    "kind": "game",
    "notes": [
     "Joins in progress"
@@ -24,14 +53,15 @@
     "channel_id": "NBC",
     "source_id": "youtube-tv"
    },
-   "title": "Philadelphia Phillies at Atlanta Braves",
-   "item": "21d1b99b6eb14d51b7bc06a85106676d"
+   "title": "Philadelphia Phillies at Atlanta Braves"
   },
   {
    "color": null,
    "end": "2026-10-02T04:00:00+00:00",
    "estimated": false,
    "game": null,
+   "item": "d33ae12bfbcb4257ab79c634f851d074",
+   "key": null,
    "kind": "manual",
    "notes": [],
    "source": "queue",
@@ -41,14 +71,15 @@
     "date": "2026-10-01",
     "source_id": "thursday-night-football"
    },
-   "title": "",
-   "item": "d33ae12bfbcb4257ab79c634f851d074"
+   "title": ""
   },
   {
    "color": null,
    "end": "2026-10-02T15:00:00+00:00",
    "estimated": false,
    "game": null,
+   "item": null,
+   "key": null,
    "kind": "off_air",
    "notes": [],
    "source": "schedule",
@@ -57,14 +88,15 @@
     "channel_id": "off-air",
     "source_id": "off-air"
    },
-   "title": "OFF AIR",
-   "item": null
+   "title": "OFF AIR"
   },
   {
    "color": "#2f7d5b",
    "end": "2026-10-02T16:00:00+00:00",
    "estimated": false,
    "game": null,
+   "item": null,
+   "key": "2026-10-02T15:00:00+00:00|block|slot01|",
    "kind": "block",
    "notes": [],
    "source": "schedule",
@@ -74,14 +106,15 @@
     "quality": "medium",
     "source_id": "tv-thing-digital"
    },
-   "title": "The View",
-   "item": null
+   "title": "The View"
   },
   {
    "color": "#a0582f",
    "end": "2026-10-02T16:30:00+00:00",
    "estimated": false,
    "game": null,
+   "item": null,
+   "key": "2026-10-02T16:00:00+00:00|block|slot02|",
    "kind": "block",
    "notes": [],
    "source": "schedule",
@@ -90,14 +123,15 @@
     "channel_id": "CBS",
     "source_id": "youtube-tv"
    },
-   "title": "6 News",
-   "item": null
+   "title": "6 News"
   },
   {
    "color": null,
    "end": "2026-10-02T22:00:00+00:00",
    "estimated": false,
    "game": null,
+   "item": null,
+   "key": null,
    "kind": "off_air",
    "notes": [],
    "source": "schedule",
@@ -106,14 +140,15 @@
     "channel_id": "off-air",
     "source_id": "off-air"
    },
-   "title": "OFF AIR",
-   "item": null
+   "title": "OFF AIR"
   },
   {
    "color": "#7a4f9a",
    "end": "2026-10-02T22:30:00+00:00",
    "estimated": false,
    "game": null,
+   "item": null,
+   "key": "2026-10-02T22:00:00+00:00|block|slot03|",
    "kind": "block",
    "notes": [],
    "source": "schedule",
@@ -122,36 +157,8 @@
     "channel_id": "NBC",
     "source_id": "youtube-tv"
    },
-   "title": "News 10",
-   "item": null
+   "title": "News 10"
   }
  ],
- "until": "2026-10-03T02:16:36.601631+00:00",
- "dropped": [
-  {
-   "item": null,
-   "key": "2026-10-02T23:30:00+00:00|block|jeopardy|{}",
-   "title": "Jeopardy",
-   "kind": "block",
-   "target": {
-    "channel_id": "wjla_7_1",
-    "quality": "medium",
-    "source_id": "tv-thing-digital"
-   },
-   "due": "2026-10-02T23:30:00+00:00",
-   "why": "Its slot ends before Philadelphia Phillies at Atlanta Braves does"
-  },
-  {
-   "item": null,
-   "key": "2026-10-02T04:00:00+00:00|off_air|None|{}",
-   "title": "OFF AIR",
-   "kind": "off_air",
-   "target": {
-    "channel_id": "off-air",
-    "source_id": "off-air"
-   },
-   "due": "2026-10-02T03:36:00+00:00",
-   "why": "OFF AIR gives way to Up next"
-  }
- ]
+ "until": "2026-10-03T02:16:36.601631+00:00"
 }

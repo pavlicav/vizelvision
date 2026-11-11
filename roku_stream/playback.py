@@ -71,6 +71,7 @@ class Program:
     notes: list = field(default_factory=list)
     rank: float = NORMAL
     item: str | None = None   # The Up next entry it aired from.
+    key: str | None = None    # Its schedule key ("run_at|kind|ref|target"): ref is its slot or show.
 
 
 @dataclass
@@ -111,7 +112,8 @@ def project(now, horizon, current, entries, recordings, *, game_end, schedule_at
             segments.append({'start': start.isoformat(), 'end': end.isoformat(), 'title': program.title,
                              'kind': program.kind, 'target': program.target, 'game': program.game,
                              'color': program.color, 'source': program.source, 'estimated': program.holds
-                             and program.kind == 'game', 'notes': list(program.notes), 'item': program.item})
+                             and program.kind == 'game', 'notes': list(program.notes), 'item': program.item,
+                             'key': program.key})
 
     def cut_by(cur, end):
         """The first entry starting after cur and due by end that outranks it (not a game's return)."""
@@ -137,7 +139,7 @@ def project(now, horizon, current, entries, recordings, *, game_end, schedule_at
         return Program(entry.title, entry.kind, entry.target, at, game_end(game, entry.due) if game else None, bool(game),
                        entry.game, entry.color, entry.source,
                        ['Joins in progress'] if entry.scheduled < at - LATE and entry.target.get('source_id') != 'off-air' else [],
-                       entry.rank, entry.item)
+                       entry.rank, entry.item, entry.key)
 
     def off_air(at):
         return Program('OFF AIR', 'off_air', dict(OFF_AIR), at)
@@ -330,7 +332,8 @@ def describe(now, horizon, *, queue, programming, on_air, game_info, length, lab
         if segment is None:
             return None
         return Entry(segment['start'], segment['title'], segment['kind'], dict(segment['target']),
-                     color=segment.get('color'))
+                     color=segment.get('color'),
+                     key='|'.join((segment['start'].isoformat(), segment['kind'], str(segment.get('ref')), '')))
 
     current = _current(now, status, items, on_air, game_end, length, label, colors, queue)
     dropped = []
@@ -384,6 +387,7 @@ def _current(now, status, items, on_air, game_end, length, label, colors, queue)
     aired = next((i for i in items if i.status == 'succeeded' and _same(i.target, on_air)), None) if on_air else None
     since = datetime.fromisoformat(aired.completed_at) if aired and aired.completed_at else now
     mine = aired.id if aired else None
+    key = aired.schedule_key if aired else None
     if hold and hold.get('game'):
         return Program(hold['game'].get('title') or '', 'game', hold.get('target'), since,
                        game_end(hold['game']), True, hold['game'], source='queue', rank=HELD, item=mine)
@@ -407,9 +411,9 @@ def _current(now, status, items, on_air, game_end, length, label, colors, queue)
     if aired and aired.game:  # A scheduled game, or a game queued by hand: on until its final.
         return Program(aired.title or aired.game.get('title') or '', 'game', on_air, since,
                        game_end(aired.game, since), True, aired.game, source='queue',
-                       rank=getattr(queue, '_rank', lambda item: NORMAL)(aired), item=mine)
+                       rank=getattr(queue, '_rank', lambda item: NORMAL)(aired), item=mine, key=key)
     return Program((aired.title or (aired.program or {}).get('title') or '') if aired else '', kind or 'manual',
-                   on_air, since, color=colors.get(ref), source='queue' if aired else 'schedule', item=mine)
+                   on_air, since, color=colors.get(ref), source='queue' if aired else 'schedule', item=mine, key=key)
 
 
 class Projector:

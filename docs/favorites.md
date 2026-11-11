@@ -13,6 +13,10 @@ crawl's old followed teams seeded it on 2026-10-17.
   every 10 minutes and right after a change. Games on no such channel (ESPN+ only), or
   without a start time yet, are listed on the tab instead.
 
+Sports slots ([schedule.md](schedule.md#sports-slots)) put games on the Schedule the same way, by
+rule rather than by team (*Monday Night Football*). A favorite's game that a slot also finds is
+one show: it keeps its favorite's rank and takes the slot's priority when that is higher.
+
 ## Ranks
 
 A favorite's game is a normal-priority game show that ranks a little above normal, the

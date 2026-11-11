@@ -27,7 +27,9 @@ function fixtures() {
 function reads(F) {
   return [
     [/^\/v1\/master$/, () => F.master], [/^\/v1\/queue$/, () => F.queue], [/^\/v1\/playback$/, () => F.playback],
-    [/^\/v1\/programming$/, () => F.programming], [/^\/v1\/sources$/, () => F.sources], [/^\/v1\/networks$/, () => F.networks],
+    [/^\/v1\/programming$/, () => F.programming], [/^\/v1\/programming\/ideas$/, () => F.programming_ideas],
+    [/^\/v1\/programming\/sports$/, () => F.programming_sports], [/^\/v1\/programming\/library$/, () => F.programming_library],
+    [/^\/v1\/programming\/search$/, () => F.programming_search], [/^\/v1\/sources$/, () => F.sources], [/^\/v1\/networks$/, () => F.networks],
     [/^\/v1\/sources\/([^/]+)\/programs$/, m => F.programs[decodeURIComponent(m[1])] || {channels: [], items: []}],
     [/^\/v1\/crawl$/, () => F.crawl], [/^\/v1\/favorites$/, () => F.favorites], [/^\/v1\/crawl\/alerts$/, () => F.alerts], [/^\/v1\/crawl\/bus-routes$/, () => ({routes: [{id: 'D60', name: '14TH ST - D60'}, {id: 'D6X', name: 'SIBLEY - D6X'}, {id: 'X2', name: 'BENNING RD-H ST - X2'}]})],
     [/^\/v1\/admute$/, () => F.admute], [/^\/v1\/admute\/recordings$/, () => F.admute_recordings],
