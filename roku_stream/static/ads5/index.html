@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ads 5</title>
+<meta name="description" content="VizelVision's channel of nothing but ads: on air, Next up, the format and the library.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23ffb340'/%3E%3Ctext x='16' y='25' font-family='Arial Narrow,Arial' font-weight='900' font-size='24' text-anchor='middle' fill='%2308090b'%3E5%3C/text%3E%3C/svg%3E">
+<link rel="stylesheet" href="ads5.css">
+</head>
+<body>
+<header class="top">
+  <a class="mark" href="/vizelvision/ads#my-ads" title="VizelVision's Ads page (its own settings)">
+    <span class="bars"><i></i><i></i><i></i><i></i></span><span>VizelVision</span>
+  </a>
+  <div class="title">
+    <span class="five">5</span>
+    <div><h1>Ads&nbsp;5</h1><p class="sub">Nothing but ads. All day.</p></div>
+  </div>
+  <div class="tally" id="tally"><span class="lamp"></span><span id="tally-text">Standby</span></div>
+  <div class="clock num" id="clock">--:--</div>
+</header>
+
+<main>
+  <section class="hero">
+    <div class="screen" id="screen">
+      <video id="video" playsinline muted autoplay></video>
+      <div class="bug" aria-hidden="true">5</div>
+      <div class="veil" id="veil">
+        <div class="veil-in">
+          <div class="five big">5</div>
+          <p id="veil-text">Ads 5 plays while someone watches.</p>
+          <button class="btn primary" id="watch">Watch</button>
+        </div>
+      </div>
+      <button class="sound" id="sound" title="Sound on/off" aria-label="Sound on or off">
+        <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M4 9v6h4l5 4V5L8 9H4z"/><path id="sound-x" stroke="currentColor" stroke-width="2" d="M16 9l5 6m0-6l-5 6"/><path id="sound-w" fill="none" stroke="currentColor" stroke-width="2" d="M16 8.5a5 5 0 010 7M18.5 6a8.5 8.5 0 010 12" hidden/></svg>
+      </button>
+    </div>
+
+    <div class="onair panel">
+      <div class="row between"><span class="label">On air</span><span class="chip" id="oa-kind">—</span></div>
+      <h2 id="oa-name" class="oa-name">Nothing yet</h2>
+      <p class="oa-meta muted" id="oa-meta"></p>
+      <div class="progress"><i id="oa-bar"></i></div>
+      <div class="row between tiny muted num"><span id="oa-at">0:00</span><span id="oa-left"></span></div>
+      <div class="row">
+        <button class="btn" id="skip-on-air" title="Cut to what is next (the viewer sees it a few seconds later)">Skip</button>
+        <span class="tiny dim" id="oa-note"></span>
+      </div>
+      <div class="soon">
+        <div class="label">Coming up</div>
+        <ol id="soon"></ol>
+      </div>
+    </div>
+  </section>
+
+  <section class="strip panel" aria-label="The next few minutes">
+    <div class="row between"><span class="label">The next few minutes</span><span class="tiny dim" id="strip-note"></span></div>
+    <div class="tape" id="tape"><div class="playhead" id="playhead"></div></div>
+    <div class="ticks num" id="ticks"></div>
+  </section>
+
+  <section class="grid3">
+    <div class="panel format">
+      <div class="row between"><h3>The format</h3><span class="tiny dim">Ads 5's own</span></div>
+      <div class="wheel-wrap">
+        <svg id="wheel" viewBox="0 0 200 200" role="img" aria-label="An hour of Ads 5"></svg>
+        <div class="wheel-legend tiny">
+          <span><i class="sw ad"></i>Ads</span><span><i class="sw ident"></i>Ident</span><span><i class="sw sid"></i>Station ID</span>
+        </div>
+      </div>
+      <div class="field">
+        <div class="label">An ident every (minutes)</div>
+        <div class="seg" id="ident_every"></div>
+      </div>
+      <div class="field">
+        <div class="label">Station ID every (minutes)</div>
+        <div class="seg" id="station_id_every"></div>
+      </div>
+      <div class="field">
+        <div class="label">Order</div>
+        <div class="seg" id="order"></div>
+      </div>
+      <div class="field">
+        <div class="label">Longest ad</div>
+        <div class="seg" id="longest_ad"></div>
+      </div>
+      <div class="toggles">
+        <label class="tog"><input type="checkbox" id="idents"><span></span>Idents and promos</label>
+        <label class="tog"><input type="checkbox" id="open_with_ident"><span></span>An ident when someone tunes in</label>
+        <label class="tog"><input type="checkbox" id="limits"><span></span>Hold ads to their limits</label>
+        <label class="tog"><input type="checkbox" id="always_on"><span></span>Keep airing with nobody watching</label>
+      </div>
+      <div class="row">
+        <button class="btn" id="reset-limits">Reset all limits</button>
+        <span class="tiny dim" id="limits-note"></span>
+      </div>
+    </div>
+
+    <div class="panel next">
+      <div class="row between"><h3>Next up</h3><button class="btn ghost small" id="redraw" title="Draw the rotation again">Draw again</button></div>
+      <ol class="next-list" id="next"></ol>
+    </div>
+
+    <div class="panel mixer">
+      <div class="row between"><h3>The mix</h3><span class="tiny dim" id="mix-note"></span></div>
+      <p class="tiny muted">Each kind's share of the ads. The count under each is its plays on Ads 5 in the last day.</p>
+      <div class="faders" id="faders"></div>
+    </div>
+  </section>
+
+  <section class="panel library">
+    <div class="row between lib-head">
+      <div class="tabs" role="tablist">
+        <button role="tab" class="tab" data-tab="ads" aria-selected="true">Ads <span class="count" id="n-ads"></span></button>
+        <button role="tab" class="tab" data-tab="idents" aria-selected="false">Idents <span class="count" id="n-idents"></span></button>
+        <button role="tab" class="tab" data-tab="history" aria-selected="false">Aired</button>
+      </div>
+      <div class="row">
+        <input type="search" id="search" placeholder="Find an ad or ident…" autocomplete="off">
+        <select id="sort" aria-label="Sort">
+          <option value="name">A–Z</option>
+          <option value="chance">Most likely next</option>
+          <option value="plays">Most played here</option>
+          <option value="recent">Aired most recently</option>
+          <option value="length">Longest</option>
+        </select>
+      </div>
+    </div>
+    <div class="kinds row" id="kind-filter"></div>
+    <div class="cards" id="cards"></div>
+    <div class="empty muted" id="empty" hidden>Nothing matches.</div>
+    <div class="row" style="justify-content:center;margin-top:14px"><button class="btn" id="more" hidden>Show more</button></div>
+  </section>
+
+  <footer class="foot">
+    <div class="prep">
+      <div class="row between tiny"><span class="label">Clips ready to air</span><span class="num muted" id="prep-text"></span></div>
+      <div class="progress thin"><i id="prep-bar"></i></div>
+      <p class="tiny dim" id="prep-working"></p>
+    </div>
+    <div class="about tiny muted">
+      <p>Ads 5 plays VizelVision's ad library with its own switches, limits, mix and counts: nothing here changes
+        VizelVision's breaks, and nothing there changes Ads 5, except the library itself (new uploads appear here too).
+        <span id="forked"></span> <button class="link" id="fork">Copy VizelVision's settings again…</button></p>
+      <details>
+        <summary>For agents and scripts</summary>
+        <pre>GET  /ads5/v1/status                   on air, Next up, aired
+GET  /ads5/v1/library                  every ad and ident, kinds, counts
+POST /ads5/v1/settings  {"ident_every": 2, "station_id_every": 30, "order": "mix",
+                         "longest_ad": 60, "limits": true, "limits_from": "now",
+                         "idents": true, "open_with_ident": true, "always_on": false}
+POST /ads5/v1/ads/&lt;id&gt;     {"enabled": false, "limit": {"count": 1, "minutes": 60}, "boost": 2}
+POST /ads5/v1/promos/&lt;id&gt;  {"enabled": false}
+POST /ads5/v1/mix         {"kinds": {"transit": {"weight": 6}}, "tuning": {"rest_hours": 12}}
+POST /ads5/v1/next        {"op": "add", "kind": "ad"|"promo"|"id", "id": "…", "next": true}
+                          {"op": "skip", "key": "on-air"|"&lt;key&gt;"}   {"op": "move", "key": "…", "by": -1}
+Stream: /ads5/index.m3u8 (TV Thing channel 5)</pre>
+      </details>
+    </div>
+  </footer>
+</main>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<dialog id="confirm">
+  <form method="dialog">
+    <h3>Copy VizelVision's settings again?</h3>
+    <p class="muted small">Every ad's switch and limit, the order, the mix's tuning and shares and each ident's switch
+      become VizelVision's as they are now. Ads 5's play log and counts stay.</p>
+    <div class="row end"><button class="btn" value="cancel">Keep Ads 5's</button><button class="btn primary" value="ok">Copy them</button></div>
+  </form>
+</dialog>
+<script src="hls.js"></script>
+<script src="ads5.js"></script>
+</body>
+</html>
