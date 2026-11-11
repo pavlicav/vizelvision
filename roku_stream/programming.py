@@ -80,6 +80,8 @@ REMOVED_KEPT = timedelta(days=2)    # How long games removed by their feeds stay
 # queued by hand are normal.
 PRIORITIES = ('low', 'normal', 'high')
 NORMAL = PRIORITIES.index('normal')
+# A game a High slot cut comes back at the slot's end this far ahead of what starts then.
+RESUME_FIRST = timedelta(seconds=1)
 # How far above normal the top favorite's game ranks; the last one ranks just above normal.
 # A take held by hand ranks normal + 0.5 (source_queue.HELD), above every favorite.
 FAVORITE_SPAN = 0.4
@@ -556,8 +558,12 @@ class Programming:
 
     def rank(self, key):
         """The priority rank of an Up next entry from its schedule key: its show's (a game's
-        return to the schedule has the game's), else normal (grid blocks, OFF AIR)."""
+        return to the schedule has the game's), a slot's airing its slot's, else normal (OFF AIR)."""
         parts = (key or '').split('|', 3)
+        if len(parts) == 4 and parts[1] == 'block':   # a slot's airing: the slot's (High cuts in)
+            with self.lock:
+                slot = next((s for s in self.data['slots'] if s['id'] == parts[2]), None)
+            return PRIORITIES.index(slot.get('priority') or 'normal') if slot else NORMAL
         if len(parts) != 4 or parts[1] not in ('show', 'game', 'backup'):
             return NORMAL
         show_id = parts[2].split(':', 1)[0]
@@ -955,6 +961,7 @@ class Programming:
         with self.lock:
             data = copy.deepcopy(data or self.data)
         segments = self._slot_segments(data, start, end)
+        airings = list(segments)
         order = self._order()
         # Lower priorities are laid down first; within one, in start order (a stable sort).
         for show, s_start, s_end in sorted(self._windows(data['shows']), key=lambda w: show_rank(w[0], order)):
@@ -972,6 +979,58 @@ class Programming:
             carved.append({'start': max(s_start, start), 'end': min(s_end, end), 'ref': show['id'],
                            'kind': 'game' if show['mode'] == 'game' else 'show', 'title': show['title'],
                            'color': None, 'target': show['target'], 'show': show})
+            segments = sorted(carved, key=lambda s: s['start'])
+        return self._slot_cuts(segments, airings, data, order)
+
+    @staticmethod
+    def _slot_cuts(segments, airings, data, order):
+        """A High slot cuts into a show or game it outranks at its start, as a show of higher
+        priority does (Jeopardy at 7:30 into a hockey game). A game it cut comes back when it
+        ends, until its final, ahead of what starts then unless that outranks the game: it gets
+        RESUME_FIRST of that time, as two shows starting together are a second apart."""
+        ranks = {slot['id']: PRIORITIES.index(slot.get('priority') or 'normal') for slot in data['slots']}
+        cutters = [b for b in airings if b['kind'] == 'block' and ranks.get(b['ref'], NORMAL) > NORMAL]
+        for cutter in cutters:
+            rank = ranks[cutter['ref']]
+            cut = [s for s in segments if s['kind'] in ('show', 'game') and s['start'] < cutter['end']
+                   and s['end'] > cutter['start'] and show_rank(s['show'], order) < rank]
+            if not cut:
+                continue
+            # What outranks the slot keeps its time; the slot has the rest of its own.
+            above = [s for s in segments if s['kind'] in ('show', 'game') and s not in cut
+                     and s['start'] < cutter['end'] and s['end'] > cutter['start']]
+            carved, free = [], [(cutter['start'], cutter['end'])]
+            for segment in segments:
+                if segment in above or segment['end'] <= cutter['start'] or segment['start'] >= cutter['end']:
+                    carved.append(segment)
+                    continue
+                if segment['start'] < cutter['start']:
+                    carved.append({**segment, 'end': cutter['start']})
+                if segment['end'] > cutter['end']:
+                    carved.append({**segment, 'start': cutter['end']})
+            for segment in above:
+                free = [piece for a, b in free for piece in ((a, min(b, segment['start'])), (max(a, segment['end']), b))
+                        if piece[1] > piece[0]]
+            carved += [{**cutter, 'start': a, 'end': b} for a, b in free]
+            back = cutter['end']
+            for segment in cut:
+                show = segment['show']
+                if (segment['kind'] != 'game' or segment['end'] > back or parse_time(show['end']) <= back
+                        or any(c.get('show', {}).get('id') == show['id'] and c['start'] == back for c in carved)):
+                    continue   # not a game, its own tail comes back by itself, or it is over
+                after = next((c for c in carved if c['start'] <= back < c['end']), None)
+                if after is not None and after['kind'] in ('show', 'game') and \
+                        show_rank(after['show'], order) > show_rank(show, order):
+                    continue   # what starts then outranks the game: it would cut it anyway
+                ends = min(back + RESUME_FIRST, parse_time(show['end']))
+                if after is not None:
+                    ends = min(ends, after['end'])
+                    carved = [c for c in carved if c is not after]
+                    if after['start'] < back:
+                        carved.append({**after, 'end': back})
+                    if after['end'] > ends:
+                        carved.append({**after, 'start': ends})
+                carved.append({**segment, 'start': back, 'end': ends})
             segments = sorted(carved, key=lambda s: s['start'])
         return segments
 

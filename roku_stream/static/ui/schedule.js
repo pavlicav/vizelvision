@@ -736,7 +736,7 @@
           game ? fact('Then', show.backup.source_id === 'schedule' ? 'Back to the schedule after the final' : show.backup_title + ' on ' + channelName(show.backup)) : [],
           fact('Added by', slot ? 'The sports slot ' + slot.title : show.added_by === 'favorites' ? 'A favorite team (Crawl › Favorites)' : show.added_by === 'slot' ? 'A sports slot' : ''),
           fact('Changed', show.update ? show.update.text + ' · ' + hm(show.update.at) : ''), fact('Feed', show.missing_since ? 'Not on its league’s schedule since ' + hm(show.missing_since) : '')),
-        h('div', {class: 'field'}, h('span', 'Priority'), prio, h('p', {class: 'hint tiny'}, game ? 'High cuts in at its start, even into another game. Normal waits for what holds master and joins in progress. Low gives way to Normal.' : 'High cuts into a game on air at its start. Otherwise it waits for the game to end.')));
+        h('div', {class: 'field'}, h('span', 'Priority'), prio, h('p', {class: 'hint tiny'}, game ? 'High cuts in at its start, even into another game. Normal waits for what holds master and joins in progress. Low gives way to Normal.' : 'High cuts into a game on air at its start, and the game comes back when it ends. Otherwise it waits for the game to end.')));
       foot.append(act('Remove', () => removeShow(show), 'danger'));
       foot.firstChild.style.marginRight = 'auto';
     }

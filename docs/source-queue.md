@@ -130,6 +130,15 @@ Each scheduled show or game has a **priority**: Low, Normal (the default) or Hig
 
 - **A show that outranks what holds master cuts in at its start.** For a take held by hand (until a game's final, a program's end or a time), the hold's end moves to the show's start. The station ID, the warm-up and the hand-back then run as they do for an end time, and Up next says *until <show> cuts in at <time>*. The hold keeps its own end under `hold.cut.until` and goes back to it if the show is removed or loses its priority. Only shows starting after the take do this: **Play now** is not cut by a show that is already due.
 - **A scheduled game on air** is cut the same way. Once the show is due (its early preparation, or the station ID's 30 s), the entries ahead of it are skipped as `cut`. These are the game's return to the schedule, which was waiting for the final, and anything overdue behind it, provided each has a lower priority.
+- **A High slot of the lineup cuts into a game too** (November 10). *Jeopardy* at 7:30, High, cuts
+  into the 7:00 hockey game it outranks, and the game **comes back when the slot ends**, held to its
+  final as before. On the timeline (`Programming._slot_cuts`) the game gets the slot's end; when
+  another show or game starts right then (the 8:00 game), the cut game has the first second
+  (`RESUME_FIRST`) unless that one outranks it, so in Up next the game's return comes first and
+  the 8:00 game joins after its final. In Up next a slot's airing ranks as its slot
+  (`Programming.rank` on a `block` key; it was Normal until then). A High game is not cut, and a
+  game that ends during the slot does not come back. Normal and Low slots still never cut a show
+  or a game.
 - **Equal or lower priority changes nothing:** what is on air keeps master, and the show joins in progress afterwards, as before.
 - **A program show starting inside one that outranks it** waits for that one to end. A game held back this way joins in progress, and returns to the schedule from that point.
 

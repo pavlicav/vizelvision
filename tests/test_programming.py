@@ -979,3 +979,61 @@ class FollowGamesTests(unittest.TestCase):
                                           'backup': {'source_id': 'schedule'}})
         self.assertEqual(show['game_start'], first_pitch.isoformat())
         self.assertNotIn('game_start', show['game'])  # The queue's copy of the game stays as it was.
+
+
+class SlotCutsGameTests(unittest.TestCase):
+    """A High slot cuts into a game it outranks; the game comes back when it ends (2026-11-10)."""
+
+    def setUp(self):
+        from roku_stream.source_queue import SourceQueue
+        from tests.test_lineup import ZONE
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.queue = SourceQueue(Path(self.tmp.name) / 'queue.json', lambda item: {}, lambda *_: {'finished': True},
+                                 poll_seconds=.01, start_worker=False)
+        self.addCleanup(self.queue.close)
+        self.programming = Programming(Path(self.tmp.name) / 'programming.json', self.queue, zone=ZONE, start_worker=False)
+
+    def hockey(self, show_id, start, end, game_pk, **more):
+        from roku_stream.programming import SCHEDULE
+        return {'id': show_id, 'mode': 'game', 'title': show_id, 'priority': 'normal',
+                'game': {'league': 'nhl', 'game_pk': game_pk, 'game_date': '2026-09-23', 'title': show_id},
+                'target': {'source_id': 'nhl', 'channel_id': str(game_pk)}, 'backup': dict(SCHEDULE),
+                'backup_title': 'Schedule', 'start': start.isoformat(), 'end': end.isoformat(), **more}
+
+    def timeline(self, start, end):
+        from tests.test_lineup import ZONE
+        return [(s['title'], s['start'].astimezone(ZONE).strftime('%H:%M:%S'))
+                for s in self.programming.timeline(start, end)]
+
+    def test_a_high_slot_cuts_into_a_game_and_the_game_comes_back_after_it(self):
+        from tests.test_lineup import WJLA, channel, local, slot
+        # 2026-11-10: Jeopardy at 7:30 over the Leafs at 7:00; the Red Wings start at 8:00.
+        jeopardy = self.programming.add_slot(slot('Jeopardy', '19:30', 30, channel(WJLA), priority='high'))
+        self.programming.data['shows'] = [self.hockey('Leafs', local(19), local(22), 1),
+                                          self.hockey('Wings', local(20), local(23), 2)]
+        self.assertEqual(self.timeline(local(18, 30), local(21)),
+                         [('OFF AIR', '18:30:00'), ('Leafs', '19:00:00'), ('Jeopardy', '19:30:00'),
+                          ('Leafs', '20:00:00'), ('Wings', '20:00:01')],
+                         'the Leafs come back first and hold to their final; the Wings join after it')
+        changes = self.programming.transitions(local(18, 30), local(21))
+        self.assertEqual([c['title'] for c in changes if c['kind'] == 'game'], ['Leafs', 'Leafs', 'Wings'])
+        cut = next(c for c in changes if c['title'] == 'Jeopardy')
+        self.assertEqual(self.programming.rank(cut['key']), 2, 'in Up next it outranks the game it cuts')
+        # A game alone comes back for the rest of its window.
+        self.programming.data['shows'] = [self.hockey('Leafs', local(19), local(22), 1)]
+        self.assertEqual(self.timeline(local(19), local(22)),
+                         [('Leafs', '19:00:00'), ('Jeopardy', '19:30:00'), ('Leafs', '20:00:00')])
+        # Normal, it waits for the game as before.
+        self.programming.update_slot(jeopardy['id'], {'priority': 'normal'})
+        self.assertEqual([t[0] for t in self.timeline(local(19), local(22))], ['Leafs'])
+
+    def test_a_game_that_outranks_the_slot_or_ends_inside_it_does_not_come_back(self):
+        from tests.test_lineup import WJLA, channel, local, slot
+        self.programming.add_slot(slot('Jeopardy', '19:30', 30, channel(WJLA), priority='high'))
+        self.programming.add_slot(slot('Late Jeopardy', '21:30', 30, channel(WJLA), priority='high'))
+        self.programming.data['shows'] = [self.hockey('Leafs', local(19), local(19, 45), 1),
+                                          self.hockey('Playoff', local(21), local(23), 3, priority='high')]
+        self.assertEqual([t[0] for t in self.timeline(local(19), local(20, 30))], ['Leafs', 'Jeopardy', 'OFF AIR'])
+        self.assertEqual([t[0] for t in self.timeline(local(21), local(23))], ['Playoff'],
+                         'a High game is not cut by a High slot')
