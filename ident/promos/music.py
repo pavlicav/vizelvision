@@ -2680,7 +2680,8 @@ CUES = {'time-temp': (10.0, time_temp), 'watching': (10.0, watching), 'only-on':
         'wnba': (10.0, beside('wnba')), 'mnba': (10.0, beside('mnba')), 'non-denom': (10.0, beside('non-denom')), 'elca': (10.0, beside('elca')), 'presbyterian': (10.0, beside('presbyterian')), 'shinto': (10.0, beside('shinto')),
         'robot': (10.0, beside('robot')), 'lds': (10.0, beside('lds')), 'shaadi': (10.0, beside('shaadi')),
         'cat-leaf-pile': (10.0, beside('cat-leaf-pile')), 'guest-of-honor': (10.0, beside('guest-of-honor')),
-        'hand-turkey': (10.0, beside('hand-turkey'))}
+        'hand-turkey': (10.0, beside('hand-turkey')),
+        'thanksgiving-annotated': (10.0, beside('thanksgiving-annotated'))}
 
 
 def render(promo_id, voiced=True):

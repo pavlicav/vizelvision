@@ -757,5 +757,27 @@
         "text": "Happy Thanksgiving!"
       }
     ]
+  },
+  "thanksgiving-annotated": {
+    "host": "Zeus, the filmstrip; Theia, the station",
+    "model": "aura-2-zeus-en",
+    "lines": [
+      {
+        "id": "promo-thanksgiving-annotated-1",
+        "at": 0.35,
+        "text": "The Pilgrims and the Indians shared a feast..."
+      },
+      {
+        "id": "promo-thanksgiving-annotated-2",
+        "at": 4.6,
+        "text": "The end."
+      },
+      {
+        "id": "promo-thanksgiving-annotated-3",
+        "at": 6.35,
+        "model": "aura-2-theia-en",
+        "text": "Thanksgiving. Now with footnotes."
+      }
+    ]
   }
 }

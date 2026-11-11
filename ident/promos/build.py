@@ -38,7 +38,8 @@ PROMOS = ('time-temp', 'watching', 'only-on', 'legal', 'press-start', 'metro', '
           'happy-little', 'forecast', 'popcorn', 'metro-5', 'baseball-5', 'cat-remote-5',
           'heure-decimale', 'cat-witching-hour', 'basketball', 'hockey', 'all-are-welcome',
           'wnba', 'mnba', 'non-denom', 'elca', 'presbyterian', 'shinto',
-          'robot', 'lds', 'shaadi', 'cat-leaf-pile', 'guest-of-honor', 'hand-turkey')
+          'robot', 'lds', 'shaadi', 'cat-leaf-pile', 'guest-of-honor', 'hand-turkey',
+          'thanksgiving-annotated')
 BUILD = IDENT / 'build' / 'promos'
 LOUDNESS, TRUE_PEAK = id_build.LOUDNESS, id_build.TRUE_PEAK
 VERSION = 1
