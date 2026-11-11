@@ -12,8 +12,10 @@ from roku_stream.master import MasterStreamError
 from roku_stream.tv_control import (OUTAGE_GRACE_SECONDS, OUTAGE_PROBE_SECONDS, OUTAGE_RETRY_SECONDS,
                                     RokuLease, TvControl, TvThingUnavailable)
 
-TARGET = {"source_id": "tv-thing-digital", "channel_id": "abc", "quality": "medium"}
-URL = "http://tv.test/tv/stream/digital.m3u8"
+# The ride-out is every lease's (Lease.check); the analog lease shows it plainly. A pool lease's
+# own case, its peer's tuner not answering, is PoolOutageTests.
+TARGET = {"source_id": "tv-thing-analog", "channel_id": 7, "quality": "medium"}
+URL = "http://tv.test/tv/stream/analog.m3u8"
 
 
 class Clock:
@@ -52,11 +54,11 @@ class OutageTests(unittest.TestCase):
     def lock(self, **extra):
         return {"token": "private", "lock": {"expires_at": self.clock.time() + 90}, **extra}
 
-    def status(self, generation="g1", owner=None, ready=True, lane="digital", selection=None):
+    def status(self, generation="g1", owner=None, ready=True, lane="analog", selection=None):
         stream = {"generation": generation, "ready": ready,
                   "playback": [{"protocol": "hls", "url": f"stream/{lane}.m3u8"}]}
         return {"locks": {lane: {"owner": owner or self.client.owner}},
-                "lanes": {lane: {"selection": selection or {"id": "abc"}, "quality": "medium", "stream": stream}}}
+                "lanes": {lane: {"selection": selection or {"channel": 7}, "quality": "medium", "stream": stream}}}
 
     def lease(self):
         self.responses = [self.lock()]

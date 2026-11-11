@@ -64,8 +64,9 @@ class TvControl:
         try:
             # A retune can wait for the old encoder and hardware to stop, and
             # a Roku tune may first check that the Roku still plays (about 5 s);
+            # a tune relayed to the peer's tuner waits on the peer too (TV Thing allows it 25 s);
             # ordinary status/lease calls retain the short control timeout.
-            timeout = timeout or (15 if path in ("tune", "roku/check", "roku/cancel")
+            timeout = timeout or (30 if path == "tune" else 15 if path in ("roku/check", "roku/cancel")
                                   else min(4, self.config.request_timeout_seconds))
             with self.opener(request, timeout=timeout) as response:
                 raw = response.read(4 * 1024 * 1024 + 1)
@@ -81,12 +82,15 @@ class TvControl:
             # TV Thing says why it refused ({"error": {"code", "message"}}): "This NHL game is
             # not on ESPN Unlimited" reads better than its HTTP status.
             try:
-                refusal = json.loads(exc.read(64 * 1024)).get("error")
+                answer = json.loads(exc.read(64 * 1024))
+                refusal = answer.get("error")
             except (OSError, ValueError, AttributeError):
-                refusal = None
+                answer = refusal = None
             exc.close()
             refusal = refusal if isinstance(refusal, dict) else {}
             details = {"http_status": exc.code, **({"code": refusal["code"]} if isinstance(refusal.get("code"), str) else {})}
+            if isinstance(answer, dict) and isinstance(answer.get("tuner"), str):
+                details["tuner"] = answer["tuner"]      # the pool's 423 names a locked tuner
             message = ("TV-Thing tuner is reserved by another owner" if exc.code == 423
                        else f"TV-Thing refused {path}: {refusal['message']}" if isinstance(refusal.get("message"), str)
                        else f"TV-Thing rejected {path} (HTTP {exc.code})")
@@ -98,12 +102,15 @@ class TvControl:
             raise MasterStreamError(f"TV-Thing {path} failed ({type(exc).__name__}); no automatic tune retry") from exc
 
     def acquire(self, target):
-        lease = Lease(self, target)
+        pool = target["source_id"] == "tv-thing-digital"
+        lease = (PoolLease if pool else Lease)(self, target)
         try:
             lease.acquire()
         except MasterStreamError as exc:
             if exc.details.get("http_status") != 423:
                 raise
+            if pool:
+                return PoolSharedLease.join(self, target, exc)
             return SharedLease.join(self, target, exc)
         return lease
 
@@ -120,8 +127,17 @@ class Lease:
         self.outage_since = None    # when TV Thing stopped answering this lease's checks
         self.outage_error, self.retry_at = None, 0.
 
+    @property
+    def lock_lane(self):
+        """What TV Thing's lock calls name: the lane (a pool lease's tuner id)."""
+        return self.lane
+
+    def _read(self):
+        """TV Thing's word on this lease's tuner, which _confirmed checks."""
+        return self.client.request("status")
+
     def _lock(self, renew):
-        body = {"lane": self.lane, "owner": self.owner, "duration_seconds": 90, "until": "duration"}
+        body = {"lane": self.lock_lane, "owner": self.owner, "duration_seconds": 90, "until": "duration"}
         if renew:
             if not self.token or time.monotonic() >= self.deadline:
                 raise MasterStreamError("Tuner lease expired; prepare the source again")
@@ -203,7 +219,7 @@ class Lease:
             if self.outage_since is not None:
                 self.client.request("status", timeout=OUTAGE_PROBE_SECONDS)   # back yet?
             self.renew()
-            status = self.client.request("status")
+            status = self._read()
         except TvThingUnavailable as exc:
             return self._ride_out(exc, asked=True)
         if self.outage_since is not None:
@@ -235,6 +251,9 @@ class Lease:
             raise MasterStreamError("TV-Thing input failed")
         if not stream.get("ready"):
             return None
+        return self._playback_url(stream)
+
+    def _playback_url(self, stream):
         playback = stream.get("playback")
         if not isinstance(playback, list):
             raise MasterStreamError("TV-Thing returned invalid playback descriptors")
@@ -242,21 +261,24 @@ class Lease:
             if not isinstance(descriptor, dict):
                 continue
             if descriptor.get("protocol") == "hls":
-                if not isinstance(descriptor.get("url"), str):
-                    raise MasterStreamError("TV-Thing returned an invalid playback URL")
-                url = urljoin(self.client.config.base_url, descriptor.get("url", ""))
-                base, parsed = urlsplit(self.client.config.base_url), urlsplit(url)
-                if ((parsed.scheme, parsed.netloc) != (base.scheme, base.netloc)
-                        or not parsed.path.startswith(base.path + "stream/")
-                        or not parsed.path.endswith(".m3u8") or ".." in unquote(parsed.path).split("/")):
-                    raise MasterStreamError("TV-Thing playback URL is outside its configured application")
-                return url
+                return self._checked_url(descriptor.get("url"))
         raise MasterStreamError("TV-Thing has no HLS playback descriptor")
+
+    def _checked_url(self, relative):
+        if not isinstance(relative, str):
+            raise MasterStreamError("TV-Thing returned an invalid playback URL")
+        url = urljoin(self.client.config.base_url, relative)
+        base, parsed = urlsplit(self.client.config.base_url), urlsplit(url)
+        if ((parsed.scheme, parsed.netloc) != (base.scheme, base.netloc)
+                or not parsed.path.startswith(base.path + "stream/")
+                or not parsed.path.endswith(".m3u8") or ".." in unquote(parsed.path).split("/")):
+            raise MasterStreamError("TV-Thing playback URL is outside its configured application")
+        return url
 
     def release(self):
         if self.token:
             try:
-                self.client.request("tuner/lock/release", {"lane": self.lane, "token": self.token})
+                self.client.request("tuner/lock/release", {"lane": self.lock_lane, "token": self.token})
             except MasterStreamError:
                 # No stop/override/reacquire. The 90-second server lease bounds
                 # cleanup after a network failure or an ungraceful worker exit.
@@ -306,6 +328,174 @@ class SharedLease(Lease):
         self._verify((self.client.request("status").get("lanes", {}) or {}).get(self.lane) or {})
 
     def _check_owner(self, status):
+        pass
+
+    def release(self):
+        return True
+
+
+# How long after a pool lease tunes or locks a peer's tuner its listing may still show the
+# tuner as it was: control reads its peer every couple of seconds (TV Thing peers.py).
+PEER_SETTLE_SECONDS = 10
+
+
+class PoolLease(Lease):
+    """A digital tune through TV Thing's tuner pool (its tuner_pool.py, API.md "Tuner pool").
+
+    TV Thing chooses the tuner: this box's, or its peer's (viviserv2's) when this antenna plays
+    the station poorly and the peer's plays it well; a peer's feed comes through this box's
+    front door (/stream/peer/). So the tune comes first, without a lock: the pool only ever
+    takes an unlocked tuner for a change, or one already playing the channel (watching along).
+    Then this lease locks the tuner the pool chose, by its tuner id, and from there on is a
+    lease like any other: renewed, checked and released by that id. A tuner another owner has
+    locked is shared read-only (PoolSharedLease). Each check reads GET /api/v1/tuners.
+    """
+
+    def __init__(self, client, target):
+        super().__init__(client, target)
+        self.tuner = None           # the pool's tuner id, "<node>:<lane>"
+        self.local = True
+        self.settle_until = 0.
+        self.retune = False
+
+    @property
+    def lock_lane(self):
+        return self.tuner or self.lane
+
+    def acquire(self):
+        target = self.target
+        response = self.client.request("tune", {"source": "digital", "channel_id": target["channel_id"],
+                                                "quality": target["quality"]})
+        # A TV Thing from before the pool answers no tuner: its one digital lane.
+        self.tuner = response.get("tuner") if isinstance(response.get("tuner"), str) else self.lane
+        self.local = response.get("relayed") is not True
+        self.settle_until = time.monotonic() + PEER_SETTLE_SECONDS
+        self.generation = (response.get("stream") or {}).get("generation")
+        if not self.generation:
+            raise MasterStreamError("TV-Thing tune returned no stream generation")
+        try:
+            self._lock(False)
+        except MasterStreamError as exc:
+            if exc.details.get("http_status") == 423:
+                # Watching along a tuner someone else holds: shared from here on.
+                exc.details.setdefault("tuner", self.tuner)
+            self.release()
+            raise
+        try:
+            self._verify(response)
+        except MasterStreamError:
+            # The pool reused the channel's stream at another quality, say: under our lock now,
+            # tune it as asked (lease.tune).
+            self.retune = True
+
+    def tune(self):
+        """The pool tuned already (acquire); tune again under the lock only when what it
+        gave was not quite what was asked."""
+        if not self.retune:
+            return
+        target = self.target
+        response = self.client.request("tune", {"source": "digital", "channel_id": target["channel_id"],
+                                                "quality": target["quality"], "token": self.token,
+                                                "tuner": self.tuner})
+        self.generation = (response.get("stream") or {}).get("generation")
+        if not self.generation:
+            raise MasterStreamError("TV-Thing tune returned no stream generation")
+        self.settle_until = time.monotonic() + PEER_SETTLE_SECONDS
+        self._verify(response)
+        self.retune = False
+
+    def _read(self):
+        listing = self.client.request("tuners")
+        tuners = listing.get("tuners")
+        if not isinstance(tuners, list):
+            raise MasterStreamError("TV-Thing returned an invalid tuner list")
+        tuner = next((t for t in tuners if isinstance(t, dict) and t.get("id") == self.tuner), None)
+        if tuner is None and self.tuner == self.lane:
+            # Before the pool: the one digital lane, as status shows it.
+            return {"legacy": self.client.request("status")}
+        if tuner is None:
+            raise MasterStreamError(f"TV-Thing no longer lists tuner {self.tuner}")
+        if tuner.get("reachable") is False:
+            # The peer has not answered lately: like TV Thing itself not answering.
+            raise TvThingUnavailable(f"TV-Thing's tuner {self.tuner} is not answering ({tuner.get('error') or 'unknown'})")
+        return tuner
+
+    def _check_owner(self, tuner):
+        if "locks" in tuner:        # status, from a TV Thing before the pool
+            return super()._check_owner(tuner)
+        public = tuner.get("lock") or {}
+        if not isinstance(public, dict) or public.get("owner") != self.owner or time.monotonic() >= self.deadline:
+            raise MasterStreamError("TV-Thing tuner ownership was lost")
+
+    def _verify(self, lane):
+        if isinstance(lane, dict) and isinstance(lane.get("stream"), dict) and "generation" not in lane["stream"]:
+            # /api/v1/tuners names a stream's generation its id.
+            lane = {**lane, "stream": {**lane["stream"], "generation": lane["stream"].get("id")}}
+        return super()._verify(lane)
+
+    def _confirmed(self, tuner):
+        if "legacy" in tuner:
+            return super()._confirmed(tuner["legacy"])
+        try:
+            self._check_owner(tuner)
+            stream = self._verify(tuner)
+        except MasterStreamError:
+            if not self.local and time.monotonic() < self.settle_until:
+                return None         # the peer's tuner as last read, before our tune or lock
+            raise
+        if stream.get("state") == "failed":
+            raise MasterStreamError("TV-Thing input failed")
+        if not stream.get("ready"):
+            return None
+        path = stream.get("playlist_path")
+        if not isinstance(path, str):
+            raise MasterStreamError("TV-Thing returned an invalid playback URL")
+        # playlist_path, not playback: on a peer's tuner only the path is the relay's.
+        return self._checked_url(path.lstrip("/"))
+
+
+class PoolSharedLease(PoolLease, SharedLease):
+    """Reads a pool tuner another owner has locked, only while it carries the requested
+    channel (SharedLease, by tuner id). It never locks, tunes or releases."""
+
+    @classmethod
+    def join(cls, client, target, refusal):
+        lease = cls(client, target)
+        lease.tuner = refusal.details.get("tuner") or lease.lane
+        lease.settle_until = time.monotonic() + PEER_SETTLE_SECONDS
+        tuner = lease._read()
+        if "legacy" in tuner:
+            raise MasterStreamError("TV-Thing tuner is reserved by another owner", details=refusal.details) from refusal
+        lease.local = tuner.get("local") is not False
+        holder = tuner.get("lock") if isinstance(tuner.get("lock"), dict) else {}
+        selection = tuner.get("selection") if isinstance(tuner.get("selection"), dict) else {}
+        stream = tuner.get("stream") if isinstance(tuner.get("stream"), dict) else {}
+        if selection.get("id") != target["channel_id"] or not stream.get("id"):
+            who, why = holder.get("owner"), holder.get("reason")
+            label = selection.get("number") or selection.get("name") or selection.get("id") or "nothing"
+            raise MasterStreamError(
+                f"TV-Thing tuner {lease.tuner} is reserved by {who or 'another owner'}"
+                f"{f' ({why})' if why else ''} on {label}; only that channel can be shared",
+                details=refusal.details) from refusal
+        # The holder chose the encoding; a reader cannot change it without tuning.
+        lease.target = {**target, "quality": tuner.get("quality")}
+        lease.generation = stream["id"]
+        lease.shared_with = holder.get("owner")
+        return lease
+
+    def acquire(self):
+        pass
+
+    def renew(self, *, force=False):
+        pass
+
+    def tune(self):
+        # Joining is not a tune: confirm the holder's selection is still the one joined.
+        tuner = self._read()
+        if "legacy" not in tuner:
+            self._verify(tuner)
+
+    def _check_owner(self, tuner):
         pass
 
     def release(self):

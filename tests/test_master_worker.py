@@ -16,9 +16,11 @@ from roku_stream.tv_control import Lease, TvControl, target_from
 
 
 TARGET = {"source_id": "tv-thing-digital", "channel_id": "abc", "quality": "medium"}
+ANALOG = {"source_id": "tv-thing-analog", "channel_id": 7, "quality": "medium"}
 
 
 class LeaseTests(unittest.TestCase):
+    """The lock-first lease, as the analog tuner keeps it (digital: PoolLeaseTests)."""
     def setUp(self):
         self.calls = []
         self.responses = []
@@ -35,7 +37,7 @@ class LeaseTests(unittest.TestCase):
 
     def test_acquire_is_not_a_tune_and_renew_uses_token(self):
         self.responses = [self.lock(), self.lock(renewed=True), {}]
-        lease = self.client.acquire(TARGET)
+        lease = self.client.acquire(ANALOG)
         self.assertEqual(len(self.calls), 1)
         self.assertNotIn("token", self.calls[0][1])
         lease.renew(force=True)
@@ -46,7 +48,7 @@ class LeaseTests(unittest.TestCase):
 
     def test_reacquisition_during_renew_is_released_and_rejected(self):
         self.responses = [self.lock(), self.lock(token="new", renewed=False), {}]
-        lease = self.client.acquire(TARGET)
+        lease = self.client.acquire(ANALOG)
         with self.assertRaisesRegex(MasterStreamError, "ownership changed"):
             lease.renew(force=True)
         self.assertEqual(self.calls[-1][1]["token"], "new")
@@ -54,7 +56,7 @@ class LeaseTests(unittest.TestCase):
 
     def test_expiry_never_reacquires_or_tunes(self):
         self.responses = [self.lock()]
-        lease = self.client.acquire(TARGET)
+        lease = self.client.acquire(ANALOG)
         lease.deadline = time.monotonic() - 1
         with self.assertRaisesRegex(MasterStreamError, "expired"):
             lease.renew(force=True)
@@ -63,25 +65,25 @@ class LeaseTests(unittest.TestCase):
     def test_invalid_expiry_releases_known_token(self):
         self.responses = [{"token": "private", "lock": {"expires_at": "bad"}}, {}]
         with self.assertRaisesRegex(MasterStreamError, "expiry"):
-            self.client.acquire(TARGET)
+            self.client.acquire(ANALOG)
         self.assertEqual(self.calls[-1][1]["token"], "private")
 
     def test_lost_acquisition_response_is_not_retried(self):
         self.responses = [TimeoutError()]
         with self.assertRaises(MasterStreamError):
-            self.client.acquire(TARGET)
+            self.client.acquire(ANALOG)
         self.assertEqual(len(self.calls), 1)
 
     def test_selection_generation_and_url_must_match(self):
         self.responses = [self.lock()]
-        lease = self.client.acquire(TARGET)
+        lease = self.client.acquire(ANALOG)
         lease.generation = "generation1"
-        lane = {"selection": {"id": "abc"}, "quality": "medium", "stream": {
+        lane = {"selection": {"channel": 7}, "quality": "medium", "stream": {
             "generation": "generation1", "ready": True,
-            "playback": [{"protocol": "hls", "url": "stream/digital.m3u8"}]}}
-        status = {"locks": {"digital": {"owner": self.client.owner}}, "lanes": {"digital": lane}}
+            "playback": [{"protocol": "hls", "url": "stream/analog.m3u8"}]}}
+        status = {"locks": {"analog": {"owner": self.client.owner}}, "lanes": {"analog": lane}}
         self.responses = [status]
-        self.assertEqual(lease.check(), "http://tv.test/tv/stream/digital.m3u8")
+        self.assertEqual(lease.check(), "http://tv.test/tv/stream/analog.m3u8")
         lane["stream"]["generation"] = "generation2"
         self.responses = [status]
         with self.assertRaisesRegex(MasterStreamError, "generation changed"):
@@ -92,11 +94,11 @@ class LeaseTests(unittest.TestCase):
         with self.assertRaisesRegex(MasterStreamError, "outside"):
             lease.check()
 
-    def locked_status(self, channel="abc", generation="g1"):
-        lane = {"selection": {"id": channel, "number": "7.1"}, "quality": "high", "stream": {
+    def locked_status(self, channel=7, generation="g1"):
+        lane = {"selection": {"channel": channel, "number": "7.1"}, "quality": "high", "stream": {
             "generation": generation, "ready": True,
-            "playback": [{"protocol": "hls", "url": "stream/digital.m3u8"}]}}
-        return {"locks": {"digital": {"owner": "VCR", "reason": "recording Jeopardy!"}}, "lanes": {"digital": lane}}
+            "playback": [{"protocol": "hls", "url": "stream/analog.m3u8"}]}}
+        return {"locks": {"analog": {"owner": "VCR", "reason": "recording Jeopardy!"}}, "lanes": {"analog": lane}}
 
     def refused(self):
         return HTTPError("http://tv.test/tv/api/v1/tuner/lock", 423, "Locked", {}, io.BytesIO(b"{}"))
@@ -117,11 +119,11 @@ class LeaseTests(unittest.TestCase):
 
     def test_locked_lane_on_requested_channel_is_shared_read_only(self):
         self.responses = [self.refused(), self.locked_status(), self.locked_status(), self.locked_status()]
-        lease = self.client.acquire(TARGET)
+        lease = self.client.acquire(ANALOG)
         self.assertEqual((lease.shared_with, lease.generation, lease.target["quality"]), ("VCR", "g1", "high"))
         lease.renew(force=True)
         lease.tune()
-        self.assertEqual(lease.check(), "http://tv.test/tv/stream/digital.m3u8")
+        self.assertEqual(lease.check(), "http://tv.test/tv/stream/analog.m3u8")
         self.assertTrue(lease.release())
         paths = [url.rsplit("/api/v1/", 1)[1] for url, _ in self.calls]
         self.assertEqual(paths, ["tuner/lock", "status", "status", "status"])
@@ -130,15 +132,15 @@ class LeaseTests(unittest.TestCase):
             lease.check()
 
     def test_locked_lane_on_other_channel_names_holder(self):
-        self.responses = [self.refused(), self.locked_status(channel="other")]
+        self.responses = [self.refused(), self.locked_status(channel=9)]
         with self.assertRaisesRegex(MasterStreamError, r"reserved by VCR \(recording Jeopardy!\) on 7.1") as caught:
-            self.client.acquire(TARGET)
+            self.client.acquire(ANALOG)
         self.assertEqual(caught.exception.details.get("http_status"), 423)
         self.assertEqual(len(self.calls), 2)
 
     def test_release_failure_does_not_stop_shared_stream(self):
         self.responses = [self.lock(), TimeoutError()]
-        lease = self.client.acquire(TARGET)
+        lease = self.client.acquire(ANALOG)
         self.assertFalse(lease.release())
         self.assertEqual(len(self.calls), 2)
         self.assertTrue(self.calls[-1][0].endswith("release"))
