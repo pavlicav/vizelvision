@@ -124,6 +124,18 @@ original breaks (after the stand-up, mid-episode, before the closing stand-up); 
 October 21 the 90 s rule and a 2 s slug left each episode one break. Checked on episodes from
 seasons 1, 3, 4, 6 and 9: three each, How It's Made unchanged.
 
+**Jeopardy! with VizelVision's ads (November 10).** The ad stripper
+(`~/scratch/ad_detection/strip_watch.py`, run by `strip-ads.path` whenever a tape lands) cuts the
+ads out of each Jeopardy! tape as `... (no ads).mp4`, with a `.json` of the stretches it kept. It
+then files every such tape into Jellyfin's TV folder as `Jeopardy!/Season 43/Jeopardy! -
+2026-10-14.mp4`, its `.json` beside it, as hard links (no second copy on the disk). There they are
+a show of the Jellyfin TV root like any other, and Jellyfin lists them by air date. No scan is
+needed: where a show's file has the stripper's `.json` beside it, its breaks are where one kept
+stretch meets the next, so they are read as soon as the file is probed, unasked (about two
+seconds: each is moved onto the two or three frames of black at the join). *Add ads* then plays
+My ads exactly where the station's ads were. `strip_watch.py --jellyfin` files without stripping
+anything. Jeopardy!'s seasons begin in September (2026-27 is Season 43).
+
 **On master** ([master_worker.py](../roku_stream/master_worker.py)): 15 s before a break the
 first ad is cued (any length, unlike a wait fill's), 2 s before the file is told where to stop,
 and from the break's frame nothing more is passed on; the file freezes on that dark frame and

@@ -8,7 +8,8 @@ into the library when complete.
 In a root with ad_breaks (a show's own folder, such as Jellyfin's), a file can be scanned
 for its act breaks (library_breaks.py), only when the operator asks (Scan on the Media
 Library page). What is found is kept in the same cache, for as long as the file is
-unchanged. A target may then ask for them: {'ad_breaks': seconds}, about that long of My
+unchanged. A tape cut by the ad stripper (a "(no ads)" Jeopardy! filed into Jellyfin, with its
+.json beside it) is the exception: where its ads were is written down, so it is read at once. A target may then ask for them: {'ad_breaks': seconds}, about that long of My
 ads at each break while the file waits (master_worker.py).
 """
 from __future__ import annotations
@@ -212,6 +213,8 @@ class MediaLibrary:
                     items[item_id] = {'id': item_id, 'root': root.id, 'path': relative, 'bytes': stat.st_size,
                                       'modified': int(stat.st_mtime), 'identity': f'{stat.st_size}:{stat.st_mtime_ns}',
                                       **describe_name(relative, root.name)}
+                    if root.ad_breaks and Path(name).stem + '.json' in files:
+                        items[item_id]['cuts'] = True   # the ad stripper's account: breaks known
                     summary['count'] += 1
         return items, roots
 
@@ -224,7 +227,7 @@ class MediaLibrary:
     def _public(self, item):
         cached = self.probes.get(item['id'])
         info = cached if cached and cached.get('identity') == item['identity'] else {'probe': 'pending'}
-        result = {k: v for k, v in item.items() if k != 'identity'}
+        result = {k: v for k, v in item.items() if k not in ('identity', 'cuts')}
         result.update({k: v for k, v in info.items() if k not in ('identity', 'breaks')})
         result.setdefault('playable', None)
         if self._breaks_root(item['root']):
@@ -327,6 +330,10 @@ class MediaLibrary:
             if ready is None and probed:
                 ready = item
         self.wanted = keep
+        if ready is None:   # a cut tape's breaks are written down: read them unasked
+            ready = next((i for i in self.items.values() if i.get('cuts') and self._breaks_root(i['root'])
+                          and (info := self.probes.get(i['id']) or {}).get('identity') == i['identity']
+                          and info.get('playable') and 'breaks' not in info), None)
         return ready
 
     def _break_loop(self):

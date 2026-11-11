@@ -137,7 +137,8 @@ class LibraryScanTests(unittest.TestCase):
         with self.library.lock:
             self.library.probes[pending['id']]['breaks'] = {**info, 'scanned': 1}
             self.library._save_cache_locked()
-            self.library.wanted.remove(pending['id'])
+            if pending['id'] in self.library.wanted:
+                self.library.wanted.remove(pending['id'])
         return True
 
     def test_nothing_is_scanned_until_asked_and_what_was_found_is_kept(self):
@@ -179,6 +180,20 @@ class LibraryScanTests(unittest.TestCase):
         self.assertEqual(self.library.target({**body, 'ad_breaks': None}),
                          {'source_id': 'library', 'channel_id': 'shows/ep.mkv'})
 
+    def test_a_tape_the_ad_stripper_cut_is_read_without_being_asked(self):
+        base = Path(self.tmp.name)
+        for folder in ('Shows', 'Recordings'):
+            (base / folder / 'cut.mp4').write_bytes(b'x')
+            (base / folder / 'cut.json').write_text('{"kept": [[40, 340], [495, 810]]}')
+        self.library.listing(force=True)
+        for item_id in ('shows/cut.mp4', 'rec/cut.mp4'):
+            self.library.probes[item_id] = {**PLAYABLE, 'identity': self.library.items[item_id]['identity']}
+        self.assertNotIn('cuts', self.library.item('shows/cut.mp4'), 'internal')
+        self.assertTrue(self.scan_one())
+        self.assertEqual(self.library.item('shows/cut.mp4')['ad_breaks']['state'], 'ok')
+        self.assertEqual(self.library.item('shows/ep.mkv')['ad_breaks']['state'], 'not_scanned', 'others wait to be asked')
+        self.assertFalse(self.scan_one(), 'once; never a recording')
+
     def test_break_lengths_go_in_15_second_steps_up_to_3_minutes(self):
         base = {'source_id': 'library', 'channel_id': 'shows/ep.mkv'}
         for seconds in (15, 90, 180):
@@ -192,6 +207,45 @@ class LibraryScanTests(unittest.TestCase):
         self.assertFalse(_library({'roots': [{'id': 'a', 'name': 'x', 'path': '/x'}]}).roots[0].ad_breaks)
         with self.assertRaises(ConfigError):
             _library({'roots': [{'id': 'a', 'name': 'x', 'path': '/x', 'ad_breaks': 'yes'}]})
+
+
+class CutTapeTests(unittest.TestCase):
+    """Jeopardy!'s "(no ads)" tapes: the stripper's .json says where the ads were."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.tape = Path(self.tmp.name) / 'Jeopardy! - 2026-10-14.mp4'
+        self.tape.write_bytes(b'x')
+
+    def runner(self, blacks):
+        def run(command, **kwargs):
+            if command[0] == 'ffprobe':
+                out = {'streams': [{'index': 0, 'codec_type': 'video'}, {'index': 1, 'codec_type': 'audio'}]}
+                return SimpleNamespace(returncode=0, stdout=json.dumps(out).encode(), stderr=b'')
+            start = float(command[command.index('-ss') + 1])
+            lines = ''.join(f'black_start:{a - start} black_end:{b - start}\n'
+                            for a, b in blacks if start <= a <= start + 4)
+            return SimpleNamespace(returncode=0, stdout=b'', stderr=lines.encode())
+        return run
+
+    def test_breaks_go_where_the_kept_stretches_meet_on_their_black(self):
+        (self.tape.with_suffix('.json')).write_text(json.dumps(
+            {'kept': [[43.748, 339.84], [495.65, 809.59], [915.686, 1348.57], [1603.873, 1717.12]]}))
+        self.assertEqual(lb.kept_joins(self.tape), [296.092, 610.032, 1042.916])
+        found = lb.detect(self.tape, 1156.6, runner=self.runner([(296.15, 296.23), (1043.13, 1043.46)]))
+        self.assertEqual(found['state'], 'ok')
+        self.assertEqual([b['kind'] for b in found['breaks']], ['cut'] * 3)
+        self.assertEqual([b['at'] for b in found['breaks']], [296.19, 610.032, 1043.23],
+                         'on the dip to black when there is one, else the join itself')
+        self.assertTrue(all(b['resume'] == b['at'] for b in found['breaks']))
+
+    def test_without_the_account_the_file_is_searched_as_before(self):
+        self.assertIsNone(lb.kept_joins(self.tape))
+        (self.tape.with_suffix('.json')).write_text('{"kept": "nonsense"}')
+        self.assertIsNone(lb.kept_joins(self.tape))
+        (self.tape.with_suffix('.json')).write_text('{"kept": [[0, 1200]]}')
+        self.assertEqual(lb.detect(self.tape, 1200., runner=self.runner([]))['state'], 'none')
 
 
 @unittest.skipIf(GST is None, 'needs GStreamer (system python)')

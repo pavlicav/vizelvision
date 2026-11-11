@@ -23,14 +23,20 @@ Picking them (choose):
   - about one break every SPACING seconds (3 in a half hour), the transitions nearest
     evenly spaced points, none closer than MIN_APART.
 
-A break is {'at': seconds, 'resume': seconds, 'kind': 'slug'|'fade', 'score'}: the file
+A break is {'at': seconds, 'resume': seconds, 'kind': 'slug'|'fade'|'cut', 'score'}: the file
 pauses at `at` (a dark, quiet frame) and plays on from `resume` (past a slug's black).
+
+Tapes cut by the ad stripper (Jeopardy!'s "(no ads)" copies, November 2026) need no search:
+beside each lies "<same name>.json" with `kept`, the stretches of the broadcast it kept, so
+the breaks are exactly where one kept stretch meets the next (from_cuts, kind 'cut'). Each is
+moved onto the dip to black within CUT_SNAP seconds of the join, when there is one.
 """
 from __future__ import annotations
 
 import json
 import re
 import subprocess
+from pathlib import Path
 
 SILENCE_DB = -45
 SILENCE_MIN = .2
@@ -50,6 +56,8 @@ WINDOW_LONGEST = 14.
 RESUME_BEFORE = .25
 PASS_TIMEOUT = 600
 WINDOW_TIMEOUT = 60
+CUT_SNAP = 2.     # a stripper's join and the show's dip to black: within this of each other
+CUT_BLACK = .03   # Jeopardy!'s dip at a join can be two or three frames
 VERSION = 2   # a cached result from another version is found again (2: long fades near the ends, SLUG 4 s)
 
 _SILENCE = re.compile(r'silence_(start|end): (-?[\d.]+)')
@@ -110,14 +118,14 @@ def windows(quiet, duration):
     return [(a, b) for a, b in merged if b > a]
 
 
-def blacks(path, video, spans, *, runner=subprocess.run):
+def blacks(path, video, spans, *, least=BLACK_MIN, runner=subprocess.run):
     """[(start, end)] of black picture inside the given stretches."""
     found = []
     for start, end in spans:
         result = runner([*_nice(), 'ffmpeg', '-hide_banner', '-nostats', '-v', 'info', '-threads', '2',
                          '-ss', f'{start:.3f}', '-t', f'{end - start:.3f}', '-i', str(path),
                          '-map', f'0:{video}', '-an', '-sn', '-dn',
-                         '-vf', f'scale=320:-2,blackdetect=d={BLACK_MIN}:pix_th={BLACK_PIXEL}:pic_th=0.98',
+                         '-vf', f'scale=320:-2,blackdetect=d={least}:pix_th={BLACK_PIXEL}:pic_th=0.98',
                          '-f', 'null', '-'], capture_output=True, timeout=WINDOW_TIMEOUT, check=False)
         if result.returncode:
             continue
@@ -180,8 +188,54 @@ def _apart(found):
     return kept
 
 
+def cuts_file(path):
+    """The ad stripper's account of what it kept, beside a "(no ads)" tape."""
+    return Path(path).with_suffix('.json')
+
+
+def kept_joins(path):
+    """Where the kept stretches meet in the cut file (seconds), or None without a stripper's
+    account. [] when it kept a single stretch."""
+    try:
+        data = json.loads(cuts_file(path).read_text())
+    except (OSError, ValueError):
+        return None
+    kept = data.get('kept') if isinstance(data, dict) else None
+    if not isinstance(kept, list) or not kept or not all(
+            isinstance(k, list) and len(k) == 2 and all(isinstance(v, (int, float)) for v in k) and k[1] > k[0]
+            for k in kept):
+        return None
+    joins, at = [], 0.
+    for start, end in kept[:-1]:
+        at += end - start
+        joins.append(round(at, 3))
+    return joins
+
+
+def from_cuts(path, duration, joins, *, runner=subprocess.run):
+    """The breaks of a cut tape: one at each join, on the black there if there is any."""
+    video = tracks(path, runner=runner)[0]
+    breaks = []
+    for join in joins:
+        if duration and not EDGE <= join <= duration - EDGE:
+            continue
+        near = blacks(path, video, [(max(0., join - CUT_SNAP), join + CUT_SNAP)], least=CUT_BLACK, runner=runner) if video is not None else []
+        black = min(near, key=lambda b: abs(b[0] - join), default=None)
+        at = round(black[0] + min(.1, (black[1] - black[0]) / 2), 3) if black else join
+        breaks.append({'at': at, 'resume': at, 'kind': 'cut', 'black': round(black[1] - black[0], 3) if black else 0.,
+                       'join': join, 'score': 1.})
+    return _apart(breaks)
+
+
 def detect(path, duration, *, runner=subprocess.run):
     """{'state': 'ok'|'none'|'failed', 'breaks': [...], 'version', 'reason'?} for one file."""
+    joins = kept_joins(path)
+    if joins is not None:
+        try:
+            breaks = from_cuts(path, duration, joins, runner=runner)
+        except (OSError, ValueError, RuntimeError, subprocess.TimeoutExpired) as exc:
+            return {'state': 'failed', 'breaks': [], 'version': VERSION, 'reason': str(exc)[:200] or 'Could not look at this file'}
+        return {'state': 'ok' if breaks else 'none', 'breaks': breaks, 'version': VERSION, 'from': 'cuts'}
     try:
         video, audio, _ = tracks(path, runner=runner)
         if video is None or audio is None:
