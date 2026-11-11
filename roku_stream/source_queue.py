@@ -29,7 +29,7 @@ import uuid
 from .errors import ConfigError, ControlBusyError
 from .master import MasterStreamError
 from .roku_input import ROKU_SOURCE_IDS
-from .ident import IDENT_SECONDS, IDENT_SOURCE_ID
+from .ident import GAP_FILL, IDENT_SECONDS, IDENT_SOURCE_ID
 from .library import LIBRARY_SOURCE_ID
 from .playout_queue import PlayoutQueue, QueueItem
 from .scheduler import ScheduledJob, parse_time, utc_now
@@ -160,7 +160,7 @@ class SourceQueue(PlayoutQueue):
                  on_hold_end=None, hold_poll_seconds=15, ident=None, ident_seconds=IDENT_SECONDS,
                  on_air=None, game_on=None, hold_lost_seconds=HOLD_LOST_SECONDS, input_failure=None,
                  final_buffer_seconds=FINAL_BUFFER_SECONDS, ready=None, stop_preroll=None, schedule_now=None,
-                 alternates=None, upgrade=None, roku_playing=None, roku_player=None, rank=None):
+                 alternates=None, upgrade=None, roku_playing=None, roku_player=None, rank=None, gap_fill=None):
         """preroll(item) prepares a Roku or library entry without taking it: 'prepared', or
         'skipped' when the Roku is on air; a library cue returns {'outcome', 'input_id'}.
         A failed Roku preparation is retried before blocking.
@@ -214,6 +214,10 @@ class SourceQueue(PlayoutQueue):
         self.on_hold_end = on_hold_end
         self.rank = rank
         self.ident, self.ident_seconds = ident, ident_seconds
+        # gap_fill(seconds): the station ID on air holds its end card with ads for that long,
+        # a short gap before the next programme (coordinator.fill_gap); True when it does.
+        self.gap_fill = gap_fill
+        self._gap_for = None      # the ID airing a gap fill was asked for (its input id)
         self.preroll_seconds, self.retry_seconds = preroll_seconds, retry_seconds
         self.prepare_attempts = prepare_attempts
         self.hold_poll_seconds = hold_poll_seconds
@@ -1369,6 +1373,46 @@ class SourceQueue(PlayoutQueue):
         return bool(self.ident and not item.ident_at and item.release_type in ('at_time', 'scheduled_end')
                     and not gives_way and self.ident_seconds - IDENT_WINDOW <= delay <= self.ident_seconds)
 
+    def _gap_ahead_locked(self, now):
+        """Seconds until the next programme when only OFF AIR comes before it and it starts
+        within GAP_FILL (and after the ID itself would end): a gap ads can fill. None otherwise:
+        nothing timed is near, recordings wait to fill the time, or the queue is paused."""
+        if self.paused or self.hold is not None:
+            return None
+        timed, fill = self._lanes_locked()
+        if any(i.status == 'queued' for i in fill):
+            return None
+        for item in timed:
+            if item.status != 'queued':
+                continue
+            if not item.run_at or item.release_type != 'at_time':
+                return None   # a game's return waiting on its final, or the like: not a gap
+            if (item.target or {}).get('source_id') == 'off-air':
+                continue
+            delay = (parse_time(item.run_at) - now).total_seconds()
+            return delay if self.ident_seconds + 10 < delay <= GAP_FILL else None
+        return None
+
+    def _gap_step(self, on_air):
+        """A station ID on air with only OFF AIR before the next programme, due within
+        GAP_FILL: ask for ads over its end card until then (once per ID airing), not the
+        test card. November 10 2026."""
+        if self.gap_fill is None or on_air is UNKNOWN or (on_air or {}).get('source_id') != IDENT_SOURCE_ID:
+            return
+        airing = on_air.get('id')
+        position = (on_air.get('media') or {}).get('position_seconds')
+        if airing is None or airing == self._gap_for or (position is not None and position > 26.5):
+            return   # asked already, or too late to hold the end card (27.9 s)
+        with self._condition:
+            seconds = self._gap_ahead_locked(utc_now())
+        if seconds is None:
+            return
+        self._gap_for = airing
+        try:
+            self.gap_fill(seconds)
+        except Exception:   # Master unavailable: the ID ends on the test card as before.
+            logging.getLogger(__name__).warning('The gap before the next programme could not be filled', exc_info=True)
+
     def _waiting_fill_locked(self, fill, on_air):
         """Say why the first recording waits while a live program owns master."""
         head = fill[0] if fill and fill[0].status == 'queued' else None
@@ -1733,6 +1777,7 @@ class SourceQueue(PlayoutQueue):
                 continue
             self._warm_step(on_air)
             self._upgrade_step(on_air)
+            self._gap_step(on_air)
             preroll = ident = None
             with self._condition:
                 if self._closed:

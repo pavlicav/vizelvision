@@ -140,7 +140,10 @@ class ServiceFixture(unittest.TestCase):
                                   project=lambda: self.segments,
                                   spoken=lambda s, lang='en': spoken.get(s['title'], s['title']),
                                   master=self.master, video=root / 'id.mp4', music=root / 'music.wav',
-                                  sports=root / 'sports.mp4', start_worker=False)
+                                  sports=root / 'sports.mp4', sports_music=root / 'sports-music.wav',
+                                  sports_voice=root / 'sports-presentation.wav', start_worker=False)
+        (root / 'sports-music.wav').write_bytes(b'sports music')
+        (root / 'sports-presentation.wav').write_bytes(b'jupiter')
 
     def enable(self, duty='fixed'):
         settings = self.service.settings()
@@ -262,12 +265,12 @@ class SportsIdTests(ServiceFixture):
         for segment in (JEOPARDY, OFF_AIR, backup, None):
             self.assertFalse(is_game(segment))
 
-    def test_the_break_before_a_game_cues_the_plain_id_then_the_sports_id(self):
-        self.service.step()  # Announcements are off: the plain ID, then the Sports ID.
+    def test_the_break_before_a_game_cues_the_sports_id_alone(self):
+        self.service.step()  # Announcements are off: the Sports ID as built, 30 s (no plain ID first).
         (path,) = self.master.files
         self.assertTrue(Path(path).name.startswith('sports-'))
         self.assertEqual(Path(path).parent, self.service.work_dir)
-        self.assertEqual(Path(path).read_bytes(), b'id + sports id')
+        self.assertEqual(Path(path).read_bytes(), b'sports id')
         cued = self.cued()
         self.assertEqual((cued['name'], cued['lines'], cued['just_played'], cued['up_next']),
                          ('VizelVision Sports', [SPORTS_LINE], 'Jeopardy', 'the Phillies and the Braves'))
@@ -275,29 +278,45 @@ class SportsIdTests(ServiceFixture):
         self.assertEqual(self.voice.said, [])
         self.assertEqual(self.service.audio(cued['file']), Path(path))  # Listen works for it too.
         self.service.step()
-        self.assertEqual((len(self.master.files), len(self.joins)), (1, 1))
+        self.assertEqual((len(self.master.files), len(self.joins), len(self.mixes)), (1, 0, 0))
 
-    def test_the_announcement_says_what_is_next_before_the_sports_id(self):
+    def test_the_announcer_names_the_game_then_jupiter_presents_it_in_one_id(self):
         self.enable()
         self.service.step()
         path = Path(self.master.files[-1])
         self.assertTrue(path.name.startswith('sports-'))
-        self.assertEqual(path.read_bytes(), b'announcement + sports id')
         said = [text for _, text in self.voice.said]
-        self.assertEqual(said, ['That was Jeopardy.', "You're watching Vizel Vision.",
-                                'Coming up: the Phillies and the Braves.', 'Stay tuned.'])
+        self.assertEqual(said, ['That was Jeopardy.', 'Coming up: the Phillies and the Braves.'],
+                         'only the lines that name something: Jupiter says the rest')
         cued = self.cued()
-        self.assertEqual((cued['name'], cued['lines']), ('DJ Low Tide, then VizelVision Sports', said + [SPORTS_LINE]))
-        ((first, second),) = self.joins
-        self.assertEqual((first.parent, second), (self.service.work_dir, self.sports))
-        self.service.step()  # Nothing new: the same announcement, the same joined file.
-        self.assertEqual((len(self.master.files), len(self.joins)), (1, 1))
+        self.assertEqual((cued['name'], cued['lines']), ('DJ Low Tide and VizelVision Sports', said + [SPORTS_LINE]))
+        ((voiced, kwargs),) = self.mixes
+        self.assertEqual(kwargs['video'], self.sports)
+        self.assertEqual(kwargs['music'].name, 'sports-music.wav')
+        starts = [start for _, start in voiced]
+        self.assertEqual(starts[0], continuity.SPORTS_FIRST)
+        self.assertEqual((voiced[-1][0].name, starts[-1]), ('sports-presentation.wav', continuity.SPORTS_LINE_AT))
+        self.assertLess(starts[1], continuity.SPORTS_LAST)
+        self.assertEqual(self.joins, [], 'one 30-second ID, not two')
+        self.service.step()  # Nothing new: the same file.
+        self.assertEqual((len(self.master.files), len(self.mixes)), (1, 1))
 
-    def test_an_announcement_that_cannot_be_voiced_leaves_the_plain_id_first(self):
+    def test_lines_too_long_for_the_open_drop_what_just_played_then_the_announcer(self):
+        self.enable()
+        self.voice.lengths = {'That was Jeopardy.': 7.0, 'Coming up: the Phillies and the Braves.': 5.0}
+        self.service.step()
+        self.assertEqual(self.cued()['lines'], ['Coming up: the Phillies and the Braves.', SPORTS_LINE])
+        self.voice.folder = Path(self.tmp.name) / 'longer'   # voiced afresh
+        self.voice.folder.mkdir()
+        self.voice.lengths = {'That was Jeopardy.': 7.0, 'Coming up: the Phillies and the Braves.': 12.5}
+        self.service.step()
+        self.assertEqual((self.cued()['lines'], Path(self.master.files[-1]).read_bytes()), ([SPORTS_LINE], b'sports id'))
+
+    def test_an_announcement_that_cannot_be_voiced_leaves_the_sports_id_as_built(self):
         self.enable()
         self.voice.line = lambda model, text: (_ for _ in ()).throw(ConfigError('No Deepgram key'))
         self.service.step()
-        self.assertEqual(Path(self.master.files[-1]).read_bytes(), b'id + sports id')
+        self.assertEqual(Path(self.master.files[-1]).read_bytes(), b'sports id')
         self.assertIn('No Deepgram key', self.service.status()['error'])
 
     def test_it_opens_a_game_from_the_test_card(self):
@@ -307,8 +326,7 @@ class SportsIdTests(ServiceFixture):
         self.assertEqual(self.cued()['just_played'], 'OFF AIR')
         self.enable()  # Announced, nothing just played: no "That was".
         self.service.step()
-        self.assertEqual(self.cued()['lines'], ["You're watching Vizel Vision.", 'Coming up: the Phillies and the Braves.',
-                                                'Stay tuned.', SPORTS_LINE])
+        self.assertEqual(self.cued()['lines'], ['Coming up: the Phillies and the Braves.', SPORTS_LINE])
 
     def test_one_game_after_another(self):
         self.segments = [GAME, {**GAME, 'title': 'Chicago White Sox at Houston Astros', 'game': {'game_pk': 2}}]
@@ -371,13 +389,41 @@ class SportsIdTests(ServiceFixture):
         self.sports.write_bytes(b'sports id, rebuilt')
         self.service.step()
         self.assertNotEqual(self.master.files[-1], first)
-        self.assertEqual(Path(self.master.files[-1]).read_bytes(), b'id + sports id, rebuilt')
+        self.assertEqual(Path(self.master.files[-1]).read_bytes(), b'sports id, rebuilt')
 
     def test_without_a_projection_the_cue_stays(self):
         self.service.step()
         self.service.project = lambda: (_ for _ in ()).throw(RuntimeError('queue unavailable'))
         self.service.step()
         self.assertEqual(len(self.master.files), 1)
+
+
+class LaterTests(ServiceFixture):
+    """After a show, with OFF AIR before what is next, the announcer says when it starts (November 10)."""
+
+    def test_what_is_next_after_off_air_is_named_with_its_time(self):
+        import os
+        os.environ['TZ'] = 'America/New_York'
+        time.tzset()
+        self.addCleanup(time.tzset)
+        self.addCleanup(os.environ.pop, 'TZ')
+        news = {'kind': 'block', 'title': 'News 10', 'start': '2026-10-01T23:00:00+00:00', 'end': '2026-10-01T23:30:00+00:00',
+                'target': {'source_id': 'youtube-tv', 'channel_id': 'NBC'}}
+        gap = {**OFF_AIR, 'start': '2026-10-01T23:30:00+00:00', 'end': '2026-10-02T00:00:00+00:00'}
+        game = {**GAME, 'start': '2026-10-02T00:00:00+00:00'}
+        self.segments = [news, gap, game]
+        self.enable()
+        self.service.step()
+        self.assertEqual([text for _, text in self.voice.said],
+                         ['That was News 10.', "You're watching Vizel Vision.",
+                          'Coming up: the Phillies and the Braves, at 8.', 'Stay tuned.'])
+        # A short gap is not worth a time; the time has its minutes when it has some.
+        self.assertEqual(continuity.clock(datetime(2026, 10, 2, 0, 30, tzinfo=timezone.utc).timestamp()), '8:30')
+        self.assertEqual(continuity.clock(datetime(2026, 10, 2, 0, 30, tzinfo=timezone.utc).timestamp(), 'fr'), '20 h 30')
+        self.segments = [news, {**gap, 'end': '2026-10-01T23:31:00+00:00'}, {**game, 'start': '2026-10-01T23:31:00+00:00'}]
+        self.voice.said.clear()
+        self.service.step()
+        self.assertIn('Coming up: the Phillies and the Braves.', [text for _, text in self.voice.said])
 
 
 @unittest.skipUnless(shutil.which('ffmpeg'), 'needs ffmpeg')
@@ -422,11 +468,13 @@ class MixTests(unittest.TestCase):
                                          '-i', str(out), '-af', f'{band},volumedetect', '-f', 'null', '-'],
                                         capture_output=True, text=True).stderr
                 return float(report.split('mean_volume:')[1].split('dB')[0])
+            # Steep, so the hotter line (November 2026) does not leak into the music's band.
+            MUSIC_BAND = 'highpass=f=2000,highpass=f=2000,highpass=f=2000'
             self.assertAlmostEqual(level(8.2, 9.0), level(13.3, 14.1), delta=1.0, msg='each line at the same level')
-            music_alone, under = level(4.0, 5.0, 'highpass=f=2000'), level(8.2, 9.0, 'highpass=f=2000')
+            music_alone, under = level(4.0, 5.0, MUSIC_BAND), level(8.2, 9.0, MUSIC_BAND)
             self.assertAlmostEqual(music_alone - under, continuity.DUCK_DB, delta=1.0)
-            self.assertAlmostEqual(music_alone - level(13.3, 14.1, 'highpass=f=2000'), continuity.DUCK_DB, delta=1.0)
-            self.assertAlmostEqual(music_alone, level(10.5, 12.0, 'highpass=f=2000'), delta=1.0,
+            self.assertAlmostEqual(music_alone - level(13.3, 14.1, MUSIC_BAND), continuity.DUCK_DB, delta=1.0)
+            self.assertAlmostEqual(music_alone, level(10.5, 12.0, MUSIC_BAND), delta=1.0,
                                    msg='the music comes back up between lines')
 
     @unittest.skipUnless(continuity.IDENT_PATH.is_file() and continuity.SPORTS_IDENT_PATH.is_file(),

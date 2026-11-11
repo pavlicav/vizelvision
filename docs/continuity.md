@@ -6,6 +6,21 @@ the station ID, in the style of BBC continuity:
 > That was the Phillies and the Braves. You're watching Vizel Vision.
 > Coming up: the White Sox and the Astros. Stay tuned.
 
+When OFF AIR comes first, the announcer says when what is next starts: *Coming up: the
+Avalanche and the Maple Leafs, at 7.* (a gap of two minutes or more; "à 19 h" in French).
+
+**Before a game** (since November 10 2026) the break is the VizelVision Sports ID alone, 30 s
+instead of the ID and then the Sports ID (a full minute): the announcer's lines that name
+something (*That was Jeopardy. Coming up: the Avalanche and the Maple Leafs.*) in its first
+13 seconds, over its own music, then Jupiter's *The following... is a presentation of Vizel
+Vision Sports.* at 13.4 s, as built. Lines too long for that drop what just played first, then
+the announcer. With announcements off it is the Sports ID as built.
+
+**Levels** (November 10 2026): the voice is set to -16.5 LUFS against the music (was -20) and
+the music ducks 10 dB under it (was 7), so the announcer sits clearly over the bed; the whole is
+still levelled to -20 LUFS, with a peak limiter and a wide loudness range allowed so the
+levelling stays linear (`MIX_VERSION` 3 remixes what was made before).
+
 The ID keeps its picture and music. For that break only, its voice-over (DJ Low
 Tide's usual lines) is replaced by the announcer's. The lines sit on the ID's four
 voice cues (7.8, 12.9, 16.9 and 21.2 s) and end before its *Stay tuned* end card. If

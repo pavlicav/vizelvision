@@ -16,6 +16,10 @@ ident/promos/build.py), aired in the breaks ad mute takes off air, beside My ads
 - **Sports.** A promo with `leagues` in its manifest (baseball: mlb; football: nfl, ncaaf;
   basketball: nba, wnba; hockey: nhl) airs only while a game of one of them is on air.
   Otherwise it sits out, unless the operator queues it by hand (My ads, Next up).
+- **Seasons** (November 10 2026). A holiday promo airs only in its window of dates: Halloween's
+  in October, Thanksgiving's through Thanksgiving weekend, Festivus on December 23 (SEASONS, by
+  promo id, unless its manifest has its own `season`: [{"from": "MM-DD" or "YYYY-MM-DD", "to":
+  ...}], a window may run over New Year). Otherwise it sits out, unless queued by hand.
 - **A voiced name.** 'only-on' also says the programme's name: the web app has it voiced
   (Deepgram, as the continuity announcements are) and mixed into a copy of the promo
   whenever the programme changes (PromoDesk). Until that copy is ready, the promo airs
@@ -113,6 +117,92 @@ def validate(value, *, lenient=False):
     return result
 
 
+# Holiday promos' windows (the station's local dates), by promo id: a manifest's own `season`
+# wins. "MM-DD" repeats every year; "YYYY-MM-DD" is for a holiday that moves (Hanukkah).
+SEASONS = {
+    # Set in a season: summer (May 15 to Sep 15) or the snow (Dec 1 to Mar 15).
+    'dupont': [{'from': '05-15', 'to': '09-15'}],
+    'quebec': [{'from': '05-15', 'to': '09-15'}],
+    'elca': [{'from': '12-01', 'to': '03-15'}],
+    'elca-3d': [{'from': '12-01', 'to': '03-15'}],
+    'cat-witching-hour': [{'from': '10-01', 'to': '10-31'}],
+    # Thanksgiving is the fourth Thursday: through Thanksgiving Day, whatever the year.
+    'cat-leaf-pile': [{'from': '11-01', 'to': 'thanksgiving'}],
+    'guest-of-honor': [{'from': '11-01', 'to': 'thanksgiving'}],
+    'hand-turkey': [{'from': '11-01', 'to': 'thanksgiving'}],
+    'thanksgiving-annotated': [{'from': '11-01', 'to': 'thanksgiving'}],
+    'eleventh-hour': [{'from': '11-11', 'to': '11-11'}],
+    'eight-nights': [{'from': '2026-12-04', 'to': '2026-12-12'}, {'from': '2027-12-24', 'to': '2028-01-01'},
+                     {'from': '2028-12-12', 'to': '2028-12-20'}],
+    'cat-tree': [{'from': '12-01', 'to': '01-01'}],
+    'festivus': [{'from': '12-23', 'to': '12-23'}],
+}
+_SEASON_DAY = re.compile(r'^(\d{4}-)?\d{2}-\d{2}$|^thanksgiving([+-]\d{1,2})?$')
+
+
+def _season(raw, name):
+    """A promo's windows of dates, checked: its manifest's `season`, else SEASONS'; [] all year."""
+    season = raw.get('season') if raw.get('season') is not None else SEASONS.get(name, [])
+    if (not isinstance(season, list) or len(season) > 12 or not all(
+            isinstance(w, dict) and all(isinstance(w.get(k), str) and _SEASON_DAY.match(w[k]) for k in ('from', 'to'))
+            for w in season)):
+        raise ValueError('its season is a list of {from, to} dates (MM-DD or YYYY-MM-DD)')
+    return [{'from': w['from'], 'to': w['to']} for w in season]
+
+
+def _season_date(text, year):
+    """A window's end as a date in this year: MM-DD, YYYY-MM-DD, or thanksgiving(+/-days)."""
+    import datetime as _dt
+    if text.startswith('thanksgiving'):
+        first = _dt.date(year, 11, 1)
+        thursday = first + _dt.timedelta(days=(3 - first.weekday()) % 7 + 21)
+        return thursday + _dt.timedelta(days=int(text[len('thanksgiving'):] or 0))
+    parts = [int(x) for x in text.split('-')]
+    return _dt.date(*parts) if len(parts) == 3 else _dt.date(year, parts[0], parts[1])
+
+
+def in_season(season, now=None):
+    """Whether today (local) falls in one of a promo's windows; True with none."""
+    import datetime as _dt
+    if not season:
+        return True
+    today = _dt.date.fromtimestamp(time.time() if now is None else now)
+    for window in season:
+        dated = len(window['from']) == 10
+        for year in ((None,) if dated else (today.year - 1, today.year)):
+            start = _season_date(window['from'], year or today.year)
+            end = _season_date(window['to'], year or today.year)
+            if end < start:   # over New Year
+                end = _season_date(window['to'], (year or today.year) + 1)
+            if start <= today <= end:
+                return True
+    return False
+
+
+_MONTHS = ('Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec')
+
+
+def _day_words(text):
+    if text.startswith('thanksgiving'):
+        offset = int(text[len('thanksgiving'):] or 0)
+        return {0: 'Thanksgiving', 3: 'the Sunday after Thanksgiving'}.get(offset, f'Thanksgiving {offset:+d} days')
+    parts = [int(x) for x in text.split('-')]
+    words = f'{_MONTHS[parts[-2] - 1]} {parts[-1]}'
+    return f'{words}, {parts[0]}' if len(parts) == 3 else words
+
+
+def season_words(season, now=None):
+    """Why a holiday promo sits out, for the page: "only from Nov 1 to the Sunday after
+    Thanksgiving", "only on Dec 23" (a dated window that is over is left out)."""
+    import datetime as _dt
+    today = _dt.date.fromtimestamp(time.time() if now is None else now)
+    windows = [w for w in season if len(w['to']) != 10 or _season_date(w['to'], today.year) >= today] or season[-1:]
+    if all(len(w['from']) == 10 for w in windows):
+        windows = windows[:1]   # a moving holiday: its next dates
+    return 'only ' + ' or '.join(f"on {_day_words(w['from'])}" if w['from'] == w['to']
+                                 else f"from {_day_words(w['from'])} to {_day_words(w['to'])}" for w in windows)
+
+
 def switched_on(settings, promo_id):
     return (settings['promos'].get(promo_id) or {}).get('enabled', True)
 
@@ -144,13 +234,14 @@ def _manifest(raw, folder, name):
     if (not isinstance(leagues, list) or len(leagues) > 10
             or not all(isinstance(league, str) and _ID.match(league) for league in leagues)):
         raise ValueError('its leagues are a list of league ids (mlb, nfl, ...)')
+    season = _season(raw, name)
     still = raw.get('still')
     still = still if isinstance(still, str) and still == name + '.png' else None
     return {'id': name, 'name': str(raw.get('name') or name)[:60], 'kind': raw.get('kind') if raw.get('kind') in ('ident', 'promo') else 'promo',
             'description': str(raw.get('description') or '')[:400], 'order': raw.get('order') if isinstance(raw.get('order'), int) else 99,
             'duration': float(duration), 'file': raw['file'], 'still': still,
             'still_at': float(raw.get('still_at') or duration / 2), 'overlays': overlays, 'voice': voice,
-            'leagues': list(leagues),
+            'leagues': list(leagues), 'season': season,
             'needs': sorted({NEEDS[o['field']] for o in overlays if o['field'] in NEEDS} | ({'league'} if leagues else set())),
             'built_at': raw.get('built_at'), 'present': (folder / raw['file']).is_file()}
 
@@ -227,6 +318,9 @@ def readiness(promo, values, by_hand=False):
     leagues = promo.get('leagues')
     if leagues and not by_hand and (values.get('programme') or {}).get('league') not in leagues:
         return 'only during ' + ' or '.join(league.upper() for league in leagues) + ' games'
+    season = promo.get('season')
+    if season and not by_hand and not in_season(season):
+        return season_words(season)
     return None
 
 
@@ -345,10 +439,14 @@ def display_name(segment, game_info=None):
 
 
 def league_of(segment):
-    """The league of the game a segment airs ("mlb", "nfl", ...), or None if it is not a game."""
+    """The league of the game a segment airs ("mlb", "nfl", ...), or None if it is not a game.
+    A game queued by hand by its id (an NHL or MLB.TV stream) carries no game: its source says."""
+    from .playback import GAME_SOURCES
     game = (segment or {}).get('game')
     if not isinstance(game, dict) or game.get('game_pk') is None:
-        return None
+        target = (segment or {}).get('target') or {}
+        league = GAME_SOURCES.get(target.get('source_id'))
+        return league if league and str(target.get('channel_id') or '').isdigit() else None
     league = game.get('league') or 'mlb'
     return league if isinstance(league, str) and _ID.match(league) else None
 

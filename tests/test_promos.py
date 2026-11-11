@@ -139,12 +139,73 @@ class ValuesTests(unittest.TestCase):
         self.assertIsNone(promos.readiness(football, {'programme': {'title': 'Jeopardy!'}}, by_hand=True), 'queued by hand')
         self.assertEqual(promos.readiness({**football, 'present': False}, {}, by_hand=True), 'its video is not built')
 
+    def test_the_games_own_ident_goes_first_every_quarter_hour(self):
+        from types import SimpleNamespace
+        from roku_stream import ad_break
+        library = {'legal': {'id': 'legal'}, 'hockey': {'id': 'hockey', 'leagues': ['nhl']},
+                   'football': {'id': 'football', 'leagues': ['nfl']}, 'robot': {'id': 'robot', 'leagues': ['nfl']}}
+        choices = lambda *ids: [{'id': i} for i in ids]  # noqa: E731
+        pick = lambda me, ids, league, now: ad_break.AdBreak._league_ident(  # noqa: E731
+            me, choices(*ids), library, {'programme': {'title': 'x', 'league': league}} if league else {}, now)
+        me = SimpleNamespace(promo_aired={})
+        self.assertEqual(pick(me, ['legal', 'hockey'], 'nhl', 1000)['id'], 'hockey', 'the hockey ident in a hockey game')
+        self.assertIsNone(pick(me, ['legal'], None, 1000), 'no game: the shuffle')
+        me.promo_aired['hockey'] = 1000
+        self.assertIsNone(pick(me, ['legal', 'hockey'], 'nhl', 1000 + 14 * 60), 'not again within the quarter hour')
+        self.assertEqual(pick(me, ['legal', 'hockey'], 'nhl', 1000 + 15 * 60)['id'], 'hockey')
+        me.promo_aired['football'] = 2000
+        self.assertEqual(pick(me, ['football', 'robot'], 'nfl', 2000 + 900)['id'], 'robot', 'the one aired longest ago')
+        self.assertIsNone(pick(me, ['legal'], 'nhl', 9999), 'only one that may air now')
+
+    def test_holiday_promos_air_only_in_their_windows(self):
+        import datetime as dt
+        noon = lambda y, m, d: time.mktime(dt.date(y, m, d).timetuple()) + 43200  # noqa: E731
+        thanksgiving = promos.SEASONS['guest-of-honor']
+        self.assertFalse(promos.in_season(thanksgiving, noon(2026, 10, 31)))
+        self.assertTrue(promos.in_season(thanksgiving, noon(2026, 11, 26)), 'through Thanksgiving Day (Nov 26)')
+        self.assertFalse(promos.in_season(thanksgiving, noon(2026, 11, 27)))
+        self.assertTrue(promos.in_season(thanksgiving, noon(2027, 11, 25)), 'Thanksgiving 2027 is the 25th')
+        self.assertFalse(promos.in_season(thanksgiving, noon(2027, 11, 26)))
+        self.assertFalse(promos.in_season(promos.SEASONS['dupont'], noon(2026, 11, 10)), 'a summer afternoon')
+        self.assertTrue(promos.in_season(promos.SEASONS['elca'], noon(2027, 2, 1)), 'in the snow, over New Year')
+        tree = promos.SEASONS['cat-tree']
+        self.assertTrue(promos.in_season(tree, noon(2027, 1, 1)), 'over New Year')
+        self.assertFalse(promos.in_season(tree, noon(2027, 1, 2)))
+        self.assertTrue(promos.in_season([], noon(2026, 7, 4)), 'no window: all year')
+        promo = {'present': True, 'needs': [], 'season': promos.SEASONS['festivus']}
+        with patch.object(promos.time, 'time', lambda: noon(2026, 11, 10)):
+            self.assertEqual(promos.readiness(promo, {}), 'only on Dec 23')
+            self.assertIsNone(promos.readiness(promo, {}, by_hand=True), 'queued by hand: any day')
+            self.assertEqual(promos.season_words(thanksgiving), 'only from Nov 1 to Thanksgiving')
+        with patch.object(promos.time, 'time', lambda: noon(2026, 12, 23)):
+            self.assertIsNone(promos.readiness(promo, {}))
+        with self.assertRaises(ValueError):
+            promos._season({'season': [{'from': 'soon'}]}, 'x')
+        self.assertEqual(promos._season({'season': [{'from': '07-01', 'to': '07-04'}]}, 'festivus'),
+                         [{'from': '07-01', 'to': '07-04'}], "a manifest's own season wins")
+
+    def test_a_promo_that_missed_the_bag_joins_the_round(self):
+        from types import SimpleNamespace
+        from roku_stream import ad_break
+        from roku_stream.my_ads import Rotation
+        me = SimpleNamespace(promo_rotation=Rotation(), promo_round={'legal'})
+        me.promo_rotation.bag = ['metro', 'dupont']
+        ad_break.AdBreak._join_round(me, [{'id': 'metro'}, {'id': 'dupont'}, {'id': 'festivus'}, {'id': 'legal'}])
+        self.assertEqual(sorted(me.promo_rotation.bag), ['dupont', 'festivus', 'metro'],
+                         "the day's holiday promo joins; one aired this round does not come back")
+        me.promo_rotation.bag = []
+        ad_break.AdBreak._join_round(me, [{'id': 'festivus'}])
+        self.assertEqual(me.promo_round, set(), 'an empty bag: a new round, filled by the shuffle')
+
     def test_league_of_a_segment(self):
         self.assertEqual(promos.league_of({'kind': 'game', 'game': {'game_pk': 1, 'league': 'nfl'}}), 'nfl')
         self.assertEqual(promos.league_of({'kind': 'game', 'game': {'game_pk': 7}}), 'mlb', "a game's league defaults to MLB")
         self.assertIsNone(promos.league_of({'kind': 'manual', 'title': 'Jeopardy!'}))
         self.assertIsNone(promos.league_of({'kind': 'game', 'game': {'title': 'TBD'}}), 'no game id: not a game')
         self.assertIsNone(promos.league_of(None))
+        self.assertEqual(promos.league_of({'kind': 'manual', 'target': {'source_id': 'nhl', 'channel_id': '401892683'}}), 'nhl',
+                         'a game queued by hand by its id')
+        self.assertIsNone(promos.league_of({'kind': 'manual', 'target': {'source_id': 'youtube-tv', 'channel_id': 'TNT'}}))
 
     def test_due(self):
         settings = promos.validate({'every': 15})

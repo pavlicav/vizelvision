@@ -31,6 +31,11 @@ IDENT_HOLD_LIMIT = 120
 # With ads to fill the wait (ad_break.py), the hold lasts this long: YouTube TV can take over
 # two minutes to change channel, and ads are better than the test card meanwhile.
 FILL_HOLD_LIMIT = 300
+# A gap of up to GAP_FILL before the next programme is filled with ads over the end card
+# rather than the test card (November 10 2026: "less than 10 mins ... show ads"); the hold
+# such a gap asks for lasts at most GAP_HOLD_MOST.
+GAP_FILL = 600
+GAP_HOLD_MOST = 900
 # The join bumper (sports_join.py) freezes the ID at its end card only this soon after it:
 # later, the iris (or the Sports ID after it) is already on air, and the take follows that.
 JOIN_FREEZE_SLACK = 0.25

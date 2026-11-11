@@ -6,7 +6,7 @@ as breaks allow.** The settings are on the **Promos** tab of the Presentation pa
 (`/presentation#promos`; `/production` redirects there). **Ads › Idents** (`/ads#idents`)
 shows them beside the station ID and the Sports ID, with what is cued and what aired.
 
-## The fifty-four
+## The fifty-five
 
 VizelVision is said **"VIZZLE-VISION"** ([README](../README.md)). The newer lines write it
 "Vizzle Vision" so the voices say it that way; the first nine promos' lines spell it "Vizel Vision".
@@ -67,6 +67,7 @@ VizelVision is said **"VIZZLE-VISION"** ([README](../README.md)). The newer line
 | **Orange Cat Behavior: The Leaf Pile** (`cat-leaf-pile`) | 10 s | No. 7, for Thanksgiving (added 7 November 2026). A gold November afternoon in a Washington back yard: a board fence, the backs of the rowhouses, a maple letting go of its leaves, a rake. The cat sits before a freshly raked pile; on the open logo four leaves drift down onto it, the cat's head following each (vibes and pizzicato); a wiggle, the pounce (slide whistle), and the pile goes up and comes down again with only the tail sticking out. A wild turkey wanders in from next door to see; the cat pops out wearing a leaf (boing, mrrp), the turkey puts a hello. On the closed logo the turkey spreads its tail (its strut's puff and drum), the leaves swirl up and the wordmark drops in over the sky: HAPPY THANKSGIVING. Cat and turkey trade a slow blink. | Draco: "The orange cat... has found the leaf pile." / "The orange cat... is now the leaf pile." / "Happy Thanksgiving." |
 | **Guest of Honor** (`guest-of-honor`) | 10 s | Added 7 November 2026, for Thanksgiving. Dinner at dusk: striped wallpaper, a window on the November sky, the station's TV in an oval portrait like an ancestor, and a long table of every side there is (sweet potatoes under marshmallows, the cranberry sauce still the shape of its can, green bean casserole, rolls, mashed potatoes, a pumpkin pie, a cornucopia). At the head, an empty chair and a place card: *Guest of Honor*. The four candles light on the open logo (a match and a bell each); the door creaks open and a wild turkey walks in, hops up onto the chair and finds its plate of cranberries, corn and pie; it gobbles its thanks and four glasses of cider rise into the frame and clink. On the closed logo it spreads its tail, the feathers lighting gold a quarter a note from the middle out, a sunburst behind it, and the wordmark drops in over the table: HAPPY THANKSGIVING. Fingerpicked guitar, bells and choir. | Helena (`aura-2-helena-en`): "Everybody's here..." / "...and here's our guest of honor!" / "Happy Thanksgiving." |
 | **The Hand Turkey** (`hand-turkey`) | 10 s | Added 7 November 2026, for Thanksgiving. The kindergarten classic, from above: construction paper on a birch craft table (a box of VizelVision crayons, glue, macaroni; *by Sam, age 5*). A small hand lands on the paper and a brown crayon traces it, slowly round the thumb, then a finger on each note of the open logo (glockenspiel and xylophone). The hand lifts; four feathers are scribbled in (red, orange, yellow, green), a googly eye (boing), a beak, a wattle, legs, and the hand turkey blinks, hops twice and gobbles (GOBBLE! in a crayon bubble, with a kazoo). On the closed logo VIZELVISION is scribbled across the top a crayon a letter, HAPPY THANKSGIVIИG under it with its last N on backwards, and a gold GREAT JOB! star slaps down. | Iris (`aura-2-iris-en`), the teacher: "Okay, everybody... trace your hand!" / "Oh! Well, hello there!" / "Happy Thanksgiving!" |
+| **The First Thanksgiving (Annotated)** (`thanksgiving-annotated`) | 10 s | Added 7 November 2026, for Thanksgiving. A faded 1950s classroom filmstrip on the pull-down screen: THE FIRST THANKSGIVING, 1621 (a table under an autumn oak, the Mayflower at anchor; nobody drawn) and its caption, *The Pilgrims and the Indians shared a feast of turkey and pumpkin pie.* A record scratch, and a red permanent marker annotates it, a footnote on each note of the open logo: *the Indians* struck for **the Wampanoag**; *turkey* circled, **unconfirmed**; *pumpkin pie* struck, **no ovens yet!**; *shared a feast* underlined, **\*a 3-day diplomatic summit**. Each is the history (about ninety Wampanoag men came with Massasoit for three days; Winslow's letter has deer and wildfowl; Plymouth had no ovens that autumn). Beep: THE END, with a brass ta-da, scratched off too: **STILL HERE.** over a sincere swell, and in clean type THE WAMPANOAG NATION, MASHPEE · AQUINNAH · PEOPLE OF THE FIRST LIGHT. On the closed logo the wordmark drops in under the screen: WE READ THE FOOTNOTES; and in marker, *(please still enjoy your dinner)*. | Zeus (`aura-2-zeus-en`), the filmstrip: "The Pilgrims and the Indians shared a feast..." / "The end." Theia (`aura-2-theia-en`): "Thanksgiving. Now with footnotes." |
 
 All of them use the [sonic identity](sonic-identity.md): the open logo (C E G A) for "there's
 more", the closed logo (D F# A D, a whole step up) for the answer, 120 BPM, −20 LUFS, a
@@ -126,6 +127,25 @@ they changed the law". The fire chiefs of the day said they could not fight a fi
   `promos-now.json` (`programme.league`, from the playback projection's game) whenever an
   enabled promo needs it, and master and the page both check it (`promos.readiness`). A
   league's game aired as a bare channel, with no game attached, has no league, so they sit out.
+  A game queued by hand by its id (an NHL, MLB.TV, NWSL or Sunday Ticket stream) is known by
+  its source (`promos.league_of`, since November 10).
+- **The game's own ident goes first** (November 10). Until then the shuffle dealt from a bag
+  filled before the game, which held no sports idents, and lasted longer than a game: through
+  every NHL and NBA game from November 3 to 10 the hockey and basketball idents never aired
+  (about 20 and 50 promos did). Now, during a game, its league's ident is the next promo
+  whenever none of that league's has aired for 15 minutes (`LEAGUE_IDENT_EVERY`; of several,
+  the one aired longest ago), and any promo that becomes able to air mid-round (a game's
+  ident, a holiday's on its day) joins the bag at a random place (`AdBreak._join_round`).
+- **Holiday promos keep to their dates** (November 10). `promos.SEASONS` gives each holiday
+  promo its window, by id, in the station's local dates; a manifest's own `season`
+  (`[{"from": "MM-DD" or "YYYY-MM-DD" or "thanksgiving+3", "to": ...}]`) wins. Outside it a
+  promo sits out ("only on Dec 23"), unless queued by hand. From Dupont Circle (a summer
+  afternoon) and the Quebec one (a summer night): May 15 to September 15. Here I Stand and its
+  3D twin (in the snow): December 1 to March 15. The Witching Hour: October.
+  The Leaf Pile, Guest of Honor, The Hand Turkey, The First Thanksgiving (Annotated): November 1
+  through Thanksgiving Day. The Eleventh Hour: November 11. Eight Nights: Hanukkah
+  (December 4-12 2026, December 24 2027 to January 1 2028, December 12-20 2028; add later years).
+  The Tree: December 1 to January 1. Festivus: December 23.
 - **Sitting out.** A promo switched off on the tab sits out. So does one whose live text isn't
   known: no temperature reading in the last 3 hours, or no programme name (a bare channel, or
   the web app not writing for 5 minutes). A promo that fails to decode is left out for 10
@@ -197,7 +217,7 @@ Vision!", and the name on the TV.
   hum, a sonar ping, a smooth-jazz bed and a sousaphone; since 20 October a basketball's dribble on hardwood, a
   sneaker's squeak, the arena's buzzer, a swish, camera shutters and the arena DJ's groove, a puck ringing off the pipes, a stick's tap,
   skates carving and a slapshot.
-- `ident/promos/<id>_music.py`: since 21 October a promo's cue can live beside its picture (`def cue(voice)`, written with `music.py` as its kit); `music.beside()` puts it in CUES. The six of 21 October (The Tunnel Walk, The MNBA, VizelVision Church, Here I Stand, Decently and in Order, VizelVision Jinja) keep theirs there. So do the Thanksgiving three (The Leaf Pile, Guest of Honor, The Hand Turkey, 7 November), which share `harvest.py` (a gobble, a putt, claws on a floor, a match, dry leaves, a crayon) and, for the two with a wild turkey in them, `turkeys.py` (the bird from the side and from the front, its tail fanned).
+- `ident/promos/<id>_music.py`: since 21 October a promo's cue can live beside its picture (`def cue(voice)`, written with `music.py` as its kit); `music.beside()` puts it in CUES. The six of 21 October (The Tunnel Walk, The MNBA, VizelVision Church, Here I Stand, Decently and in Order, VizelVision Jinja) keep theirs there. So do the Thanksgiving four (The Leaf Pile, Guest of Honor, The Hand Turkey and The First Thanksgiving (Annotated), 7 November), which share `harvest.py` (a gobble, a putt, claws on a floor, a match, dry leaves, a crayon) and, for the two with a wild turkey in them, `turkeys.py` (the bird from the side and from the front, its tail fanned).
 - The 3D twins (`<id>-3d`, 22 October) are built outside the station, in three.js (vizelvision-ads: `node tools/render.mjs <id>-3d --promo`, as this build would: 60 fps, CRF 21, the touch of VHS, -20 LUFS), on their 2D twin's hit times and with its sound, and arrive as a finished `<id>-3d.mp4`, still and manifest; build.py does not list them.
 - **Land Acknowledgement** (`land-acknowledgement`, 7 November) came the same way, as a finished 10-second video (1280×720, 60 fps, already −20 LUFS). Its still (9.2 s, *we acknowledge you.*) and its manifest were written by hand. build.py does not list it, so to change it, replace the `.mp4` and then rewrite the `.json`.
 - `ident/promos/<id>.py` (pycairo): each picture. Hit points are constants at the top, and

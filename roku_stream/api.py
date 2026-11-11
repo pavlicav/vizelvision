@@ -1608,7 +1608,8 @@ def serve(config: AppConfig) -> None:
                               stop_preroll=coordinator.stop_preroll, alternates=coordinator.alternates,
                               upgrade=coordinator.upgrade_queue if coordinator.roku_enabled else None,
                               roku_playing=coordinator.roku_playing if coordinator.roku_enabled else None,
-                              roku_player=coordinator.roku_player if coordinator.roku_enabled else None)
+                              roku_player=coordinator.roku_player if coordinator.roku_enabled else None,
+                              gap_fill=coordinator.fill_gap)
         coordinator.queue = playout
         scheduler = QueueSchedules(playout)
         programming = Programming(config.state_file.with_name('programming.json'), playout,

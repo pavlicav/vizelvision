@@ -26,7 +26,7 @@ from urllib.request import urlopen
 from .errors import ConfigError, ControlBusyError
 from .master import MasterStreamError, _gst
 from .master_media import DecodedInput, FileInput, MasterMedia
-from .ident import (FILL_HOLD_LIMIT, IDENT_HOLD_AT, IDENT_HOLD_LIMIT, IDENT_PATH, IDENT_SECONDS, IDENT_SLOT,
+from .ident import (FILL_HOLD_LIMIT, GAP_HOLD_MOST, IDENT_HOLD_AT, IDENT_HOLD_LIMIT, IDENT_PATH, IDENT_SECONDS, IDENT_SLOT,
                     JOIN_FREEZE_SLACK, IdentLease)
 from .library import FileLease, LIBRARY_SOURCE_ID, cache_path, cached_breaks, library_target
 from .tv_control import RokuLease, SharedLease, TvControl, target_from
@@ -234,6 +234,14 @@ class MasterWorker:
                     raise ConfigError('join must be a join bumper in the announcements folder, with its seconds')
                 join = {'path': str(Path(path).resolve()), 'seconds': float(seconds)}
             limit = FILL_HOLD_LIMIT if self._fills() else IDENT_HOLD_LIMIT
+            # A gap before the next programme (source_queue's gap fill) asks for its own length:
+            # ads over the end card until it starts, never longer than GAP_HOLD_MOST.
+            seconds = body.get('seconds')
+            if seconds is not None:
+                if isinstance(seconds, bool) or not isinstance(seconds, (int, float)) or not 1 <= seconds <= GAP_HOLD_MOST:
+                    raise ConfigError(f'seconds must be 1-{GAP_HOLD_MOST}')
+                if self._fills():
+                    limit = max(limit, float(seconds))
             with self.lock:
                 self.ident_hold_until = time.monotonic() + limit if body['hold'] else None
                 self.ident_join = join

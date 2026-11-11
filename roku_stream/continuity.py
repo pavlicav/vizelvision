@@ -14,12 +14,17 @@ music bed (ident/build/music.wav), ducking the music 7 dB under the voice, level
 result to -20 LUFS like the ID, and copies the ID's picture unchanged. The master worker cues that file for the next ID
 only (`ident_file`), then returns to the plain ID.
 
-The break before a sporting event is two IDs in one file: first the announcement (or the
-plain ID when announcements are off) saying what is next, then the VizelVision Sports ID
-("The following... is a presentation of Vizel Vision Sports."). Its end card at 27.9 s
-holds while the game's source is prepared, so the Sports ID opens the game once it is
-ready. It plays even from the test card, and is cued the same way, from the announcements
-folder (sports-<hash>.mp4); the source coordinator starts it from the test card.
+The break before a sporting event is the VizelVision Sports ID alone, 30 s (until
+November 10 2026 it was the announcement's ID and then the Sports ID, a full minute): the
+announcer says what just played and which game is next in its first 13 seconds, over its
+picture and music, then Jupiter's own "The following... is a presentation of Vizel Vision
+Sports." at 13.4 s. With announcements off it is the Sports ID as built. Its end card at
+27.9 s holds while the game's source is prepared (with ads over it). It plays even from the
+test card, and is cued the same way, from the announcements folder (sports-<hash>.mp4); the
+source coordinator starts it from the test card.
+
+When OFF AIR comes before what is next, the announcer says when it starts: "Coming up: the
+Avalanche and the Maple Leafs, at 7." (a gap of LATER_GAP or more).
 
 Each ID that airs (master's last_station_id) is logged in ident-plays.jsonl, beside the
 settings, kind "station" or "sports" (a sports break), for the Idents page's counts.
@@ -38,6 +43,7 @@ import logging
 import os
 from pathlib import Path
 import re
+import shutil
 import subprocess
 import tempfile
 import threading
@@ -60,8 +66,10 @@ LOUDNESS, TRUE_PEAK = -20.0, -2.0   # As the ID (ident/build.py).
 # Each line against the music bed, and the music under it, as in the ID (ident/jingle.py):
 # its lines measure -19 to -20.4 LUFS over music.wav, which ducks 7 dB under them. Deepgram's
 # lines come back anywhere from -19 to -28 LUFS, so each one is measured and levelled.
-VOICE_LOUDNESS, DUCK_DB = -20.0, 7.0
-MIX_VERSION = 2   # In each announcement's name: a change to the mix remixes those already made.
+# November 10 2026: the user found the music loud under the announcer, so the voice is set
+# 3.5 dB hotter and the music ducks 10 dB (the whole is still levelled to -20 LUFS).
+VOICE_LOUDNESS, DUCK_DB = -16.5, 10.0
+MIX_VERSION = 3   # In each announcement's name: a change to the mix remixes those already made.
 _LINE = ('aformat=sample_rates=48000:channel_layouts=mono,'
          'silenceremove=start_periods=1:start_threshold=-42dB,highpass=f=85')
 DEFAULT_LINES = ("That was {just_played}.", "You're watching Vizel Vision.",
@@ -87,6 +95,14 @@ _FIELD = re.compile(r'\{([^{}]*)\}')
 _FILE = re.compile(r'^(sports-)?[0-9a-f]{16,64}\.(mp4|wav)$')
 SPORTS_NAME = 'VizelVision Sports'
 SPORTS_LINE = 'The following is a presentation of VizelVision Sports.'
+# The sports break: the Sports ID's music bed and Jupiter's take (ident/build.py --sports), the
+# take where the Sports ID has it (ident/sports_script.json), the announcer's lines before it.
+SPORTS_MUSIC_PATH = IDENT_PATH.parent / 'build' / 'sports-music.wav'
+SPORTS_VOICE_PATH = IDENT_PATH.parent / 'voice' / 'sports-presentation.wav'
+SPORTS_LINE_AT = 13.4
+SPORTS_FIRST, SPORTS_LAST = 1.2, 13.0
+# OFF AIR this long or more before what is next: the announcer says when it starts.
+LATER_GAP = 120
 SAMPLE = {'en': {'just_played': 'the Phillies and the Braves', 'up_next': 'the White Sox and the Astros'},
           'fr': {'just_played': 'les Phillies et les Braves', 'up_next': 'les White Sox et les Astros'}}
 
@@ -204,6 +220,28 @@ def place(lengths):
         starts.append(end + GAP if starts else end)
         end = starts[-1] + length
     return starts if end <= LAST_WORD else None
+
+
+def place_sports(lengths):
+    """Start times for the announcer's lines in a sports break: one after another from
+    SPORTS_FIRST, ending before Jupiter's line. None when they do not fit."""
+    starts, end = [], SPORTS_FIRST
+    for length in lengths:
+        starts.append(end + GAP if starts else end)
+        end = starts[-1] + length
+    return starts if end <= SPORTS_LAST else None
+
+
+def clock(at, lang='en'):
+    """A start time as the announcer says it: "7", "7:30" ("19 h", "19 h 30" in French)."""
+    local = time.localtime(at)
+    if lang == 'fr':
+        return f'{local.tm_hour} h' + (f' {local.tm_min:02d}' if local.tm_min else '')
+    hour = local.tm_hour % 12 or 12
+    return f'{hour}' + (f':{local.tm_min:02d}' if local.tm_min else '')
+
+
+LATER = {'en': '{name}, at {time}', 'fr': '{name}, à {time}'}
 
 
 def seconds(path):
@@ -340,15 +378,18 @@ def mix(voiced, out, *, music=MUSIC_PATH, video=None, length=30.0):
         # frames keep the duck's gain changes smooth.
         '[0:a]aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo,asetnsamples=n=256,'
         f"volume='{duck(spans)}':eval=frame[ducked]",
-        f'[ducked][voice]amix=inputs=2:normalize=0,atrim=0:{length:g}[mix]'])
+        # Peaks are held under -1 dBFS, and the levelling allows a wide range (LRA 20), so it stays linear
+        # (it falls back to compressing, and quieter, when the gain would break the peak limit).
+        f'[ducked][voice]amix=inputs=2:normalize=0,atrim=0:{length:g},'
+        'alimiter=limit=0.9:attack=3:release=60:level=disabled[mix]'])
     with tempfile.TemporaryDirectory(prefix='vv-continuity-') as work:
         dry = Path(work) / 'mix.wav'
         _ffmpeg('-y', *inputs, '-filter_complex', graph, '-map', '[mix]', '-c:a', 'pcm_f32le', str(dry))
-        report = _ffmpeg('-i', str(dry), '-af', f'loudnorm=I={LOUDNESS}:TP={TRUE_PEAK}:LRA=11:print_format=json',
+        report = _ffmpeg('-i', str(dry), '-af', f'loudnorm=I={LOUDNESS}:TP={TRUE_PEAK}:LRA=20:print_format=json',
                          '-f', 'null', '-')
         m = json.loads(report[report.rindex('{'):report.rindex('}') + 1])
         level = ('aformat=channel_layouts=stereo,'
-                 f"loudnorm=I={LOUDNESS}:TP={TRUE_PEAK}:LRA=11:measured_I={m['input_i']}:measured_TP={m['input_tp']}:"
+                 f"loudnorm=I={LOUDNESS}:TP={TRUE_PEAK}:LRA=20:measured_I={m['input_i']}:measured_TP={m['input_tp']}:"
                  f"measured_LRA={m['input_lra']}:measured_thresh={m['input_thresh']}:offset={m['target_offset']}:"
                  'linear=true,aresample=48000,aformat=sample_rates=48000:channel_layouts=stereo')
         partial = Path(out).with_name(Path(out).stem + '.part' + Path(out).suffix)
@@ -384,11 +425,13 @@ class Continuity:
     KEEP = 16
 
     def __init__(self, state_file, work_dir, *, voice, project, spoken, master, video=IDENT_PATH,
-                 music=MUSIC_PATH, sports=SPORTS_IDENT_PATH, poll_seconds=20, start_worker=True):
+                 music=MUSIC_PATH, sports=SPORTS_IDENT_PATH, sports_music=SPORTS_MUSIC_PATH,
+                 sports_voice=SPORTS_VOICE_PATH, poll_seconds=20, start_worker=True):
         self.path, self.work_dir = Path(state_file), Path(work_dir)
         self.voice, self.project, self.spoken, self.master = voice, project, spoken, master
         self.video, self.music, self.poll_seconds = Path(video), Path(music), poll_seconds
         self.sports = Path(sports)
+        self.sports_music, self.sports_voice = Path(sports_music), Path(sports_voice)
         self.lock = threading.Lock()
         self.wake = threading.Condition(self.lock)
         self.closed = False
@@ -465,10 +508,14 @@ class Continuity:
             return copy.deepcopy(next((a for a in self.data['announcers'] if a['id'] == wanted), None))
 
     def _names(self, context, announcer):
-        """What just played and what is next, as this announcer says them."""
-        current, following, _ = context
+        """What just played and what is next, as this announcer says them; after OFF AIR,
+        what is next with when it starts ("the Avalanche and the Maple Leafs, at 7")."""
+        current, following, _, starts = context
         lang = language(announcer['model'])
-        return self.spoken(current, lang), (self.spoken(following, lang) if following else None)
+        up_next = self.spoken(following, lang) if following else None
+        if up_next and starts:
+            up_next = LATER.get(lang, LATER['en']).format(name=up_next, time=clock(starts, lang))
+        return self.spoken(current, lang), up_next
 
     # Rendering -------------------------------------------------------------
     def _voiced(self, announcer, just_played, up_next):
@@ -545,14 +592,25 @@ class Continuity:
             return None
 
     def context(self, segments=None):
-        """(what is on now, what follows or None before OFF AIR, when the break comes as a
-        timestamp) from the projection; None when the ID will not play (nothing on air) or
-        the projection is unavailable."""
+        """(what is on now, what follows, when the break comes as a timestamp, when what follows
+        starts if OFF AIR comes first or None) from the projection; what follows is None when
+        nothing does. None when the ID will not play (nothing on air) or the projection is
+        unavailable."""
         segments = self.segments() if segments is None else segments
         if not segments or off_air(segments[0]):
             return None
+        break_at = self._break_at(segments[0])
         following = segments[1] if len(segments) > 1 else None
-        return segments[0], None if off_air(following) else following, self._break_at(segments[0])
+        if not off_air(following):
+            return segments[0], following, break_at, None
+        later = next((s for s in segments[2:] if not off_air(s)), None)
+        try:
+            starts = datetime.fromisoformat(later['start']).timestamp() if later else None
+        except (KeyError, TypeError, ValueError):
+            starts = None
+        if later is None or starts is None or break_at is None or starts - break_at < LATER_GAP:
+            return segments[0], later if starts is not None else None, break_at, None
+        return segments[0], later, break_at, starts
 
     def step(self):
         """Cue the sports break (what is next, then the Sports ID) when the next break leads
@@ -604,33 +662,47 @@ class Continuity:
             return None  # The same game carrying on: no break.
         return current, game
 
-    def _lead_in(self, current, game, break_at):
-        """The sports break's first half: (file, announcer or None, lines, problem). With
-        announcements on, the announcer on duty says what just played (nothing after the test
-        card) and which game is next; otherwise, or when that cannot be voiced, the plain ID."""
+    def _sports_lines(self, current, game, break_at):
+        """The announcer's part of a sports break: (announcer, lines, [(wav, start)], problem),
+        or (None, [], [], problem) for the Sports ID as built. Only the lines that name
+        something (what just played, which game is next) are said, before Jupiter's line;
+        what just played goes first when both do not fit."""
         with self.lock:
             enabled = self.data['enabled']
         announcer = self._announcer(at=break_at) if enabled else None
         if announcer is None:
-            return self.video, None, [], None
+            return None, [], [], None
         lang = language(announcer['model'])
+        named = [line for line in announcer['lines'] if _FIELD.search(line)]
+        just_played = None if off_air(current) else self.spoken(current, lang)
         try:
-            lines, out = self.render(announcer, None if off_air(current) else self.spoken(current, lang),
-                                     self.spoken(game, lang))
+            for lines in (script(named, just_played, self.spoken(game, lang)),
+                          script(named, None, self.spoken(game, lang))):
+                if not lines:
+                    continue
+                paths = [self.voice.line(announcer['model'], line) for line in lines]
+                starts = place_sports([seconds(path) for path in paths])
+                if starts is not None:
+                    return announcer, lines, list(zip(paths, starts)), None
         except (ConfigError, OSError) as exc:
-            return self.video, None, [], f'The plain ID leads into the Sports ID: {exc}'
-        return out, announcer, lines, None
+            return None, [], [], f'The Sports ID plays without the announcer: {exc}'
+        return None, [], [], 'The Sports ID plays without the announcer: the lines are too long'
 
-    def _sports_file(self, lead):
-        """The sports break: lead (the announcement or the plain ID), then the Sports ID, as one
-        file in the announcements folder the worker plays from. Its name changes with either
-        part, so a new announcement or a rebuilt ID is joined again."""
-        # An announcement's name already says what it is; the plain ID is known by its identity.
-        parts = json.dumps([file_identity(lead) if lead == self.video else lead.name, file_identity(self.sports)])
+    def _sports_file(self, announcer, lines, voiced):
+        """The sports break as a file in the announcements folder the worker plays from: the
+        Sports ID with the announcer's lines and Jupiter's (mixed again over its music), or a
+        copy of it as built. Its name changes with the words, the voice and the ID."""
+        parts = json.dumps([announcer['model'] if announcer else None, lines, file_identity(self.sports),
+                            file_identity(self.sports_music) if voiced else None, MIX_VERSION])
         out = self.work_dir / (SPORTS_PREFIX + hashlib.sha256(parts.encode()).hexdigest()[:16] + '.mp4')
         if not out.exists():
             self.work_dir.mkdir(parents=True, exist_ok=True)
-            join(lead, self.sports, out)
+            if voiced:
+                mix(voiced + [(self.sports_voice, SPORTS_LINE_AT)], out, music=self.sports_music, video=self.sports)
+            else:
+                partial = out.with_name(out.stem + '.part.mp4')
+                shutil.copyfile(self.sports, partial)
+                partial.replace(out)
         return out
 
     def _cue_sports(self, segments):
@@ -641,9 +713,11 @@ class Continuity:
             return False
         current, game = found
         break_at = self._break_at(current)
-        lead, announcer, lines, problem = self._lead_in(current, game, break_at)
+        announcer, lines, voiced, problem = self._sports_lines(current, game, break_at)
+        if voiced and not (self.sports_music.is_file() and self.sports_voice.is_file()):
+            announcer, lines, voiced, problem = None, [], [], "The Sports ID plays without the announcer: its music or Jupiter's take is missing"
         try:
-            out = self._sports_file(lead)
+            out = self._sports_file(announcer, lines, voiced)
         except (ConfigError, OSError) as exc:
             with self.lock:
                 self.error = f'The sports break could not be cued: {exc}'
@@ -652,7 +726,7 @@ class Continuity:
             self.error = problem
             if not self.next or self.next['file'] != out.name:
                 self.next = {'id': uuid.uuid4().hex, 'file': out.name, 'announcer': 'sports',
-                             'name': f"{announcer['name']}, then {SPORTS_NAME}" if announcer else SPORTS_NAME,
+                             'name': f"{announcer['name']} and {SPORTS_NAME}" if announcer else SPORTS_NAME,
                              'lines': lines + [SPORTS_LINE], 'kind': 'sports',
                              'just_played': 'OFF AIR' if off_air(current) else self.spoken(current, 'en'),
                              'up_next': self.spoken(game, 'en'), 'at': time.time(),

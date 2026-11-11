@@ -9,7 +9,8 @@ with the score read over it (roku_stream/sports_join.py voices that line when it
 1. DJ Low Tide's lines (voice.py): only lines that are missing or whose text
    changed are sent to Deepgram, and only when a key is available.
 2. The jingle (jingle.py), under a Python that has numpy and scipy.
-3. The picture (animation.py, pycairo), piped straight into ffmpeg with the
+3. The picture (clean_animation.py since November 10 2026, or with --classic the 1990s
+   animation.py; pycairo), piped straight into ffmpeg with the
    audio normalised to the loudness of the TV recordings it plays between.
 
 Everything runs at the lowest CPU priority: the live master shares this machine.
@@ -30,6 +31,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import animation  # noqa: E402
+import clean_animation  # noqa: E402  The station ID's picture since November 10 2026 (--classic: animation.py)
 import sports_animation  # noqa: E402
 import timeline as T  # noqa: E402
 import voice  # noqa: E402
@@ -78,7 +80,7 @@ def encode(audio, workers, picture=animation, output=OUTPUT):
                     f"measured_thresh={m['input_thresh']}:offset={m['target_offset']}:linear=true,"
                     "aresample=48000")
     # A touch of VHS: red and blue a pixel or two apart, and moving grain.
-    video_filter = 'rgbashift=rh=-2:bh=2,noise=alls=4:allf=t,format=yuv420p'
+    video_filter = getattr(picture, 'VIDEO_FILTER', 'rgbashift=rh=-2:bh=2,noise=alls=4:allf=t,format=yuv420p')
     partial = output.with_suffix('.part.mp4')
     command = ['ffmpeg', '-y', '-hide_banner', '-loglevel', 'error',
                '-f', 'rawvideo', '-pix_fmt', 'bgr0', '-s', f'{T.WIDTH}x{T.HEIGHT}', '-r', str(T.FPS), '-i', '-',
@@ -151,6 +153,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description='Build the VizelVision station ID')
     parser.add_argument('--sports', action='store_true', help='build the VizelVision Sports ID')
     parser.add_argument('--join', action='store_true', help='cut the join bumper from the Sports ID')
+    parser.add_argument('--classic', action='store_true', help="the station ID with the 1990s picture (animation.py)")
     parser.add_argument('--keys-file', type=Path, help='a file with DEEPGRAM_API_KEY=... for new voice lines')
     parser.add_argument('--numpy-python', help='Python to run the jingle with (needs numpy and scipy)')
     parser.add_argument('--workers', type=int, default=3, help='frame-drawing processes (default 3)')
@@ -176,7 +179,7 @@ def main(argv=None):
         audio, picture, output = BUILD / 'sports-audio.wav', sports_animation, SPORTS_OUTPUT
         subprocess.run([python, str(HERE / 'sports_jingle.py'), str(audio)], check=True)
     else:
-        audio, picture, output = BUILD / 'audio.wav', animation, OUTPUT
+        audio, picture, output = BUILD / 'audio.wav', animation if args.classic else clean_animation, OUTPUT
         subprocess.run([python, str(HERE / 'jingle.py'), str(audio)], check=True)
         # The same music without the voice: continuity announcements are mixed over it.
         subprocess.run([python, str(HERE / 'jingle.py'), '--no-voice', str(MUSIC)], check=True)

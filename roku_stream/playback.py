@@ -19,7 +19,7 @@ IDs, failures and pauses are not modelled.
 from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 # A recording of unknown length is assumed to run this long.
 UNKNOWN_LENGTH = timedelta(minutes=30)
@@ -468,4 +468,22 @@ class Projector:
             away, home = info.get('away') or {}, info.get('home') or {}
             if away.get('nickname') and home.get('nickname'):
                 return self.PAIRS.get(language, self.PAIRS['en']).format(away=away['nickname'], home=home['nickname'])
-        return segment.get('title') or info.get('title') or str(target.get('channel_id') or '') or None
+        return (segment.get('title') or info.get('title') or self._scheduled_title(segment)
+                or str(target.get('channel_id') or '') or None)
+
+    def _scheduled_title(self, segment):
+        """For a channel taken by hand with no title: what the schedule has on that channel at
+        that time (a Jeopardy slot on WJLA), so the announcer never reads out a channel id."""
+        target = segment.get('target') or {}
+        if getattr(self, 'programming', None) is None or not target.get('channel_id'):
+            return None
+        try:
+            at = datetime.fromisoformat(segment['start']) if segment.get('start') else datetime.now(timezone.utc)
+            at = max(at, datetime.now(timezone.utc))
+            for found in self.programming.timeline(at, at + timedelta(seconds=1)):
+                other = found.get('target') or {}
+                if (other.get('source_id'), other.get('channel_id')) == (target.get('source_id'), target.get('channel_id')):
+                    return found.get('title') or None
+        except Exception:  # The schedule cannot answer: the channel id stands.
+            return None
+        return None

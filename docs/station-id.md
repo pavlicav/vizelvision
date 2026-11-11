@@ -1,6 +1,21 @@
 # Station ID
 
-A 30-second, 1990s-style VizelVision network ID plays between programs on master.
+A 30-second VizelVision network ID plays between programs on master. Since November 10 2026
+its picture is the clean one (`ident/clean_animation.py`): a navy field with one soft glow, the
+TV emblem in line, VIZELVISION set evenly (VISION in the accent, teal warming to gold at the key
+change), a thin rule and STAY TUNED, then a fade to black; the user found the 1990s picture's
+confetti, neon grid and chrome too busy. Same music, beats and end card (27.9 s). The 1990s
+picture (`animation.py`) is still the promos', the Sports ID's and the break card's kit;
+`ident/build.py --classic` builds the ID with it. The ID it replaced is in
+`state/deploy-backup-20261110-clean-id/`.
+
+**A short gap is filled with ads** (November 10 2026). When the ID plays with only OFF AIR
+before the next programme, and that starts within 10 minutes (`GAP_FILL`), the ID holds its end
+card with My ads and promos over it until then (the wait fill), instead of ending on the test
+card: Up next asks once per ID (`source_queue._gap_step`, `coordinator.fill_gap`, master's
+`ident_hold` with `seconds`, at most `GAP_HOLD_MOST` 15 min), the OFF AIR entry in between is
+passed over, and the programme's own preparation keeps the hold to its time. Not with recordings
+waiting in Up next (they fill the time), a paused queue, or My ads and promos both off.
 DJ Low Tide (Deepgram Aura-2 Orpheus, the voice Cairo Radio uses for that host) does
 the voice-over over a synthesized jingle.
 

@@ -287,6 +287,20 @@ class IdentWorkerTests(unittest.TestCase):
         with self.assertRaises(Exception):
             self.worker.submit('ident_hold', {'hold': 'yes'})
 
+    def test_a_gap_asks_for_its_own_hold_length_with_ads_to_show(self):
+        from unittest.mock import patch as _patch
+        with _patch.object(type(self.worker), '_fills', lambda self: True):
+            self.worker.submit('ident_hold', {'hold': True, 'seconds': 540})
+            self.assertAlmostEqual(self.worker.ident_hold_until - time.monotonic(), 540, delta=2)
+            self.worker.submit('ident_hold', {'hold': True})   # a preparation's own: the usual limit
+            self.assertAlmostEqual(self.worker.ident_hold_until - time.monotonic(), 300, delta=2)
+        with _patch.object(type(self.worker), '_fills', lambda self: False):
+            self.worker.submit('ident_hold', {'hold': True, 'seconds': 540})
+            self.assertAlmostEqual(self.worker.ident_hold_until - time.monotonic(), 120, delta=2, msg='no ads: no long hold')
+        for bad in (0, 901, True, '60'):
+            with self.subTest(seconds=bad), self.assertRaises(Exception):
+                self.worker.submit('ident_hold', {'hold': True, 'seconds': bad})
+
     def test_a_continuity_announcement_plays_once_in_place_of_the_id(self):
         self.cue_ident()
         announcement = self.continuity / 'phillies-then-white-sox.mp4'
@@ -475,6 +489,51 @@ class IdentQueueTests(unittest.TestCase):
         self.wait(lambda: 'take' in self.kinds())
 
 
+class GapFillQueueTests(unittest.TestCase):
+    """A station ID with only OFF AIR before a programme due within 10 minutes: ads over its
+    end card until then, not the test card (November 10 2026)."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.asked = []
+        self.on_air = {'id': 'id-1', 'source_id': 'ident', 'media': {'position_seconds': 3.0, 'duration_seconds': 30.0}}
+        self.queue = SourceQueue(Path(self.tmp.name) / 'queue.json', lambda item: {}, lambda *_: {'finished': False},
+                                 poll_seconds=.01, start_worker=False, on_air=lambda: self.on_air,
+                                 gap_fill=lambda seconds: self.asked.append(seconds) or True)
+        self.addCleanup(self.queue.close)
+        self.queue.resume()
+
+    def test_a_short_gap_is_filled_once_per_id(self):
+        self.queue.add_target({'source_id': 'off-air', 'channel_id': 'off-air'}, 'at_time', run_at=soon(20))
+        self.queue.add_target(NEWS, 'at_time', run_at=soon(8 * 60))
+        self.queue._gap_step(self.on_air)
+        self.queue._gap_step(self.on_air)
+        self.assertEqual(len(self.asked), 1)
+        self.assertAlmostEqual(self.asked[0], 8 * 60, delta=2)
+        self.queue._gap_step({**self.on_air, 'id': 'id-2'})   # the next ID asks again
+        self.assertEqual(len(self.asked), 2)
+
+    def test_no_fill_for_a_long_gap_a_program_on_air_or_too_late_in_the_id(self):
+        self.queue.add_target(NEWS, 'at_time', run_at=soon(25 * 60))
+        self.queue._gap_step(self.on_air)
+        self.assertEqual(self.asked, [], 'over ten minutes: the test card')
+        later = self.queue.add_target(NEWS, 'at_time', run_at=soon(5 * 60))
+        self.queue._gap_step({'id': 'tv', **TV})
+        self.queue._gap_step({**self.on_air, 'id': 'late', 'media': {'position_seconds': 27.0}})
+        self.assertEqual(self.asked, [], 'only over a station ID, before its end card')
+        self.queue.pause()
+        self.queue._gap_step(self.on_air)
+        self.assertEqual(self.asked, [], 'a paused queue airs nothing next')
+        self.assertIsNotNone(later)
+
+    def test_recordings_waiting_fill_the_time_instead(self):
+        self.queue.add_target(NEWS, 'at_time', run_at=soon(5 * 60))
+        self.queue.add_target({'source_id': 'library', 'channel_id': 'rec/a.mp4'}, 'after_current')
+        self.queue._gap_step(self.on_air)
+        self.assertEqual(self.asked, [])
+
+
 class IdentCoordinatorTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -515,6 +574,20 @@ class IdentCoordinatorTests(unittest.TestCase):
         self.master.state['ident'] = {'ready': True, 'file': '0123456789abcdef0123.mp4'}  # An announcement.
         self.assertEqual(self.coordinator.station_id(TV), 'skipped')
         self.assertEqual(len(self.master.calls), 2)
+
+    def test_a_gap_holds_the_id_with_ads_and_off_air_passes_over(self):
+        self.master.state.update(on_air={'id': 'id', 'source_id': 'ident', 'media': {'position_seconds': 4.0}},
+                                 ident={'ready': True, 'on_air': True}, my_ads={'ads_on': False})
+        self.assertFalse(self.coordinator.fill_gap(300), 'nothing to show: the test card as before')
+        self.master.state['my_ads'] = {'ads_on': True}
+        self.assertTrue(self.coordinator.fill_gap(300))
+        self.assertEqual(self.master.calls[-1], ('ident_hold', {'hold': True, 'seconds': 300}))
+        self.coordinator.queue = Mock()
+        state = self.coordinator._queue_off_air(SimpleNamespace(id='off'))
+        self.assertEqual(state['on_air']['source_id'], 'ident', 'no fallback: the ads carry on to the programme')
+        self.assertNotIn(('fallback', {}), [c[:2] for c in self.master.calls])
+        self.coordinator.gap_until = time.time() - 1   # the gap is over: OFF AIR is the test card again
+        self.assertFalse(self.coordinator._filling_gap())
 
     def test_a_file_armed_behind_the_id_waits_for_it(self):
         self.master.state.update(on_air={'id': 'id', 'source_id': 'ident'},

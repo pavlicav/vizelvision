@@ -19,7 +19,7 @@ from .roku_input import ROKU_SOURCE_IDS, roku_target
 from .scheduler import parse_time, utc_now
 from .tv_control import target_from
 from .tv_roku import RokuRefusedError
-from .ident import IDENT_HOLD_AT, IDENT_SECONDS, IDENT_SOURCE_ID, IDENT_TAIL_SECONDS, is_sports_ident
+from .ident import GAP_HOLD_MOST, IDENT_HOLD_AT, IDENT_SECONDS, IDENT_SOURCE_ID, IDENT_TAIL_SECONDS, is_sports_ident
 from .library import LIBRARY_SOURCE_ID
 from .internet import SOURCE_ID as INTERNET_SOURCE_ID, internet_target
 from .networks import ANTENNA_SOURCE, youtube_only
@@ -89,6 +89,7 @@ class SourceCoordinator:
         self.roku_enabled = self.enabled and roku is not None
         self.lock = threading.RLock()
         self.state_lock = threading.Lock()
+        self.gap_until = None   # ads fill a short gap before the next programme until then (fill_gap)
         self.cancel = threading.Event()
         self.stopping = threading.Event()
         self.busy = False
@@ -690,12 +691,13 @@ class SourceCoordinator:
             pass  # Worker unavailable: nothing is armed there.
         self._hold_ident(False)  # Nothing will follow: the ID irises out.
 
-    def _hold_ident(self, hold, join=None):
+    def _hold_ident(self, hold, join=None, seconds=None):
         """Hold the station ID's end card while the next source is prepared (with ads over it,
         the wait fill), or let it end; join ({'path', 'seconds'}) plays the join bumper there
-        instead of the iris, and the take lands at its end."""
+        instead of the iris, and the take lands at its end. seconds: a gap's own hold length."""
         try:
-            self.master.request('ident_hold', {'hold': hold, **({'join': join} if join else {})})
+            self.master.request('ident_hold', {'hold': hold, **({'join': join} if join else {}),
+                                               **({'seconds': seconds} if seconds and hold else {})})
         except (MasterStreamError, ConfigError) as exc:
             if join:  # The bumper was refused: the ID ends as before.
                 logging.getLogger(__name__).warning('Master did not take the join bumper: %s', exc)
@@ -861,8 +863,41 @@ class SourceCoordinator:
             raise error_type(outcome['error'])
         return outcome['result']
 
+    def fill_gap(self, seconds):
+        """A short gap before the next programme (the queue's gap fill): the station ID on air
+        holds its end card with ads over it for that long, instead of ending on the test card.
+        True when master took it; only with My ads (or promos) to show, and an ID to hold."""
+        state = self.master.request()
+        breaks = state.get('my_ads') or {}
+        if not (breaks.get('ads_on') or breaks.get('promos')) or not self._ident_can_hold():
+            return False
+        try:
+            self.master.request('ident_hold', {'hold': True, 'seconds': round(min(max(seconds, 1), GAP_HOLD_MOST))})
+        except (MasterStreamError, ConfigError) as exc:
+            logging.getLogger(__name__).warning('Master did not hold the ID for the gap: %s', exc)
+            return False
+        with self.state_lock:
+            self.gap_until = time.time() + seconds
+        logging.getLogger(__name__).info('Ads fill the %.0f s before the next programme', seconds)
+        return True
+
+    def _filling_gap(self):
+        """Whether the ID on air is holding its end card, with ads, for a gap still to run."""
+        with self.state_lock:
+            until = getattr(self, 'gap_until', None)
+        if until is None or time.time() >= until:
+            return False
+        return bool((self.master.request().get('ident') or {}).get('on_air'))
+
+    def _gap_left(self):
+        """Seconds of hold a gap fill still needs: to the next programme, with a minute spare."""
+        with self.state_lock:
+            until = getattr(self, 'gap_until', None) or time.time()
+        return round(min(max(until - time.time() + 60, 1), GAP_HOLD_MOST))
+
     def _queue_off_air(self, item):
-        """A scheduled OFF AIR entry: return master to its test card."""
+        """A scheduled OFF AIR entry: return master to its test card; unless ads are filling a
+        short gap before the next programme, which then carries on to it."""
         with self.state_lock:
             if self.busy:
                 raise ControlBusyError('A master operation is already running')
@@ -870,6 +905,9 @@ class SourceCoordinator:
                 raise ControlBusyError('Roku navigation is already running')
         try:
             self.queue.admitted(item.id)
+            if self._filling_gap():
+                logging.getLogger(__name__).info('OFF AIR passed over: ads fill the gap to the next programme')
+                return self.master.request()
             self._after_station_id(cancellable=False)  # Signing off: the ID ends before the test card.
             state = self._worker('fallback', cancellable=False, queue_item=item)
             if state.get('on_air'):
@@ -889,8 +927,9 @@ class SourceCoordinator:
         # ending on the test card while a Roku or tuner changes channel.
         holding = action in ('_queue', '_preroll', 'prepare-take', 'take-known') and self._ident_can_hold()
         self.force = force
+        gap = holding and self._filling_gap()   # ads fill a gap before this entry: keep them to its time
         if holding:
-            self._hold_ident(True)
+            self._hold_ident(True, seconds=self._gap_left() if gap else None)
         if self.joiner is not None and action in ('_queue', '_preroll'):
             # A game joined in progress gets the join bumper: voice it while the source prepares.
             self.joiner.warm(sports_join.game_of(queue_item, body, game))
@@ -972,8 +1011,8 @@ class SourceCoordinator:
                     except Exception:
                         pass  # The worker releases what it held; no replay or automatic take.
             finally:
-                if holding and not (action == '_preroll' and (not error or handoff) and self._due_soon(queue_item)):
-                    self._hold_ident(False)  # Its take follows at once and releases the hold.
+                if holding and not (action == '_preroll' and (not error or handoff) and (self._due_soon(queue_item) or gap)):
+                    self._hold_ident(False)  # Its take follows at once and releases the hold (or ads fill to it).
                 # Drain a fallback request accepted during cleanup before releasing admission.
                 cancel_handled = False
                 while True:

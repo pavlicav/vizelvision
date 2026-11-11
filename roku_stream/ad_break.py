@@ -85,6 +85,11 @@ SECOND = 1_000_000_000
 RATE = 48000
 FRAME_BYTES = 8                      # F32LE stereo
 LOG = logging.getLogger(__name__)
+# During a game, its league's ident (promos with `leagues`: the hockey ident in a hockey game)
+# goes first whenever none of that league's has aired for this long. The shuffle alone dealt
+# from a bag filled before the game, without them: in November 2026 the hockey and basketball
+# idents never aired through whole NHL and NBA games.
+LEAGUE_IDENT_EVERY = 15 * 60
 
 
 def _even(value):
@@ -513,6 +518,8 @@ class AdBreak:
         self.queue_saved = [{'kind': e['kind'], 'id': e['id']} for e in self.queue]
         self.queue_order = None              # (order, the list's ids in list order): a change redraws
         self.next_promo = None
+        self.promo_aired = {}                # promo id -> when it last went on air (this run)
+        self.promo_round = set()             # promos aired in the shuffle's round (its bag)
         self.last_aired = None               # the rotation's last ad on air: list order resumes after it
         self.skip_on_air = None              # the key of the entry on air the operator skipped
         self.done, self.log = deque(), deque()
@@ -965,6 +972,8 @@ class AdBreak:
                 self.queue = [e for e in self.queue if e['key'] != entry['key']]
             if kind == 'promo':
                 self.promo_rotation.played(reel.ad['id'])
+                self.promo_aired[reel.ad['id']] = now
+                self.promo_round.add(reel.ad['id'])
                 self.break_promos.add(reel.ad['id'])
                 if self.next_promo is not None and self.next_promo['id'] == reel.ad['id']:
                     self.next_promo = None       # never the same promo twice running
@@ -1575,6 +1584,31 @@ class AdBreak:
             return Path(self.variants_folder) / variant
         return Path(self.library_folder) / promo['file']
 
+    def _join_round(self, choices):
+        """A promo that may air now but missed the shuffle's bag (it could not when the bag was
+        filled: a game's ident before the game, a holiday's on the day before) joins this round
+        at a random place, unless it aired in it already. A new round (an empty bag) starts
+        afresh. Under the lock."""
+        rotation = self.promo_rotation
+        if not rotation.bag:
+            self.promo_round = set()
+            return
+        for choice in choices:
+            if choice['id'] not in rotation.bag and choice['id'] not in self.promo_round:
+                rotation.bag.insert(rotation.rng.randrange(len(rotation.bag) + 1), choice['id'])
+
+    def _league_ident(self, choices, library, values, now):
+        """The game's own ident, when one may air and none of its league's has for
+        LEAGUE_IDENT_EVERY: of them, the one aired longest ago. None otherwise."""
+        league = (values.get('programme') or {}).get('league')
+        if not league:
+            return None
+        ours = [c for c in choices if league in (library[c['id']].get('leagues') or ())]
+        if not ours or any(now - self.promo_aired.get(p['id'], 0) < LEAGUE_IDENT_EVERY
+                           for p in library.values() if league in (p.get('leagues') or ())):
+            return None
+        return min(ours, key=lambda c: self.promo_aired.get(c['id'], 0))
+
     def _cue_promo(self):
         """Keeps the rotation's next promo (kept until it airs, is skipped or cannot air now),
         cued while breaks may come (with promos on, or channel breaks' idents)."""
@@ -1597,7 +1631,10 @@ class AdBreak:
             if entry is None:
                 choices = [{'id': p['id'], 'enabled': True, 'limit': None} for p in library.values()
                            if switched_on(settings, p['id']) and readiness(p, values) is None and p['id'] not in self.left_out]
-                pick = self.promo_rotation.pick({'ads': choices, 'order': 'shuffle'}, [], now) if choices else None
+                self._join_round(choices)
+                pick = self._league_ident(choices, library, values, now)
+                if pick is None:
+                    pick = self.promo_rotation.pick({'ads': choices, 'order': 'shuffle'}, [], now) if choices else None
                 if pick is not None:
                     entry = self.next_promo = _entry('promo', pick['id'], 'promos')
         if not (self.active or self.filling) or entry is None:

@@ -178,3 +178,11 @@ class SpokenTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+    def test_a_channel_taken_by_hand_is_named_from_the_schedule(self):
+        from types import SimpleNamespace as NS
+        slot = {'title': 'Jeopardy', 'target': {'source_id': 'tv-thing-digital', 'channel_id': 'wjla_7_1', 'quality': 'medium'}}
+        projector = Projector(queue=None, programming=NS(timeline=lambda a, b: [slot]), master=None)
+        untitled = {'title': '', 'target': {'source_id': 'tv-thing-digital', 'channel_id': 'wjla_7_1'}}
+        self.assertEqual(projector.spoken(untitled), 'Jeopardy')
+        self.assertEqual(projector.spoken({**untitled, 'target': {'source_id': 'tv-thing-digital', 'channel_id': 'wrc'}}), 'wrc')
