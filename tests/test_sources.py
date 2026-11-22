@@ -40,6 +40,50 @@ class TvThingTests(unittest.TestCase):
             self.client.get("guide/refresh/stream")
         self.assertEqual(len(self.calls), 1)
 
+    def test_digital_catalog_adds_other_markets_channels(self):
+        """2026-11-22: viviserv2's Lansing channels were in TV Thing's lineup, not its catalog."""
+        digital = {"api_version": "v1", "source": {"id": "digital"},
+                   "items": [{"id": "wrc_hd_4_1", "number": "4.1", "name": "WRC-HD"}]}
+        listing = {"api_version": "v1", "channels": [
+            {"source_id": "digital", "channel_id": "wrc_hd_4_1", "market": None, "name": "WRC-HD"},
+            {"source_id": "digital", "channel_id": "lansing/fox_47_47_1", "market": "lansing", "node": "viviserv2",
+             "number": 32, "name": "FOX 47", "section": "Michigan",
+             "detail": {"source_name": "FOX 47", "antenna_number": "47.1", "rf_channel": 28}},
+            {"source_id": "youtube-tv", "channel_id": "FOX", "market": None}]}
+
+        def open_(request, timeout):
+            self.calls.append(request.full_url)
+            if self.failure and request.full_url.endswith("/channels"):
+                raise URLError("offline")
+            return io.BytesIO(json.dumps(listing if request.full_url.endswith("/channels") else digital).encode())
+        self.client._opener = open_
+        self.failure = True
+        self.assertEqual([i["id"] for i in self.client.get("digital")["data"]["items"]], ["wrc_hd_4_1"])
+        self.now += 400
+        self.failure = False
+        items = self.client.get("digital")["data"]["items"]
+        self.assertEqual(items[1], {"id": "lansing/fox_47_47_1", "name": "FOX 47", "number": "47.1", "rf_channel": 28,
+                                    "market": "lansing", "node": "viviserv2", "tv_number": 32, "tv_name": "FOX 47",
+                                    "tv_section": "Michigan"})
+        self.assertEqual(len(items), 2)
+        items.clear()
+        self.assertEqual(len(self.client.get("digital")["data"]["items"]), 2, "the cache stays whole")
+
+    def test_a_catalog_listing_the_relayed_channels_itself_is_taken_as_it_is(self):
+        """TV Thing since 2026-11-22: the other market's channels in its catalog, relayed."""
+        digital = {"api_version": "v1", "source": {"id": "digital"}, "items": [
+            {"id": "wrc_hd_4_1", "number": "4.1", "name": "WRC-HD", "market": "dc"},
+            {"id": "lansing/fox_47_47_1", "number": "47.1", "name": "FOX 47", "market": "lansing",
+             "market_name": "Lansing", "node": "viviserv2", "relayed": True}]}
+
+        def open_(request, timeout):
+            self.calls.append(request.full_url)
+            return io.BytesIO(json.dumps(digital).encode())
+        self.client._opener = open_
+        items = self.client.get("digital")["data"]["items"]
+        self.assertEqual([i["id"] for i in items], ["wrc_hd_4_1", "lansing/fox_47_47_1"])
+        self.assertFalse([url for url in self.calls if url.endswith("/channels")], "no second request")
+
     def test_disabled_does_not_request(self):
         self.client.config = TvThingConfig()
         with self.assertRaises(SourceUnavailableError):
@@ -131,6 +175,22 @@ class SourceCatalogTests(unittest.TestCase):
         self.assertIsNone(result["channels"][1]["now"])
         self.assertEqual(result["guide"]["age_seconds"], 100)
         self.assertEqual(result["guide"]["coverage_hours"], 1)
+
+    def test_another_markets_channel_is_labelled_and_never_takes_a_guide_row_by_number(self):
+        self.payloads["digital"]["items"].append({"id": "lansing/wnem_tv_7_1", "number": "7.1", "name": "WNEM-TV",
+                                                  "market": "lansing"})
+        self.payloads["guide"]["channels"]["7.1"]["id"] = None
+        channel = self.catalog.programs("tv-thing-digital")["channels"][2]
+        self.assertEqual((channel["id"], channel["name"], channel["market"], channel["now"]),
+                         ("lansing/wnem_tv_7_1", "WNEM-TV · Lansing", "lansing", None))
+
+    def test_a_channel_of_the_home_market_keeps_its_name_and_listings(self):
+        """TV Thing names every channel's market since 2026-11-22: DC's are Washington's own."""
+        for item in self.payloads["digital"]["items"]:
+            item["market"] = "dc"
+        before = self.catalog.programs("tv-thing-digital")["channels"]
+        self.assertTrue(all("market" not in c and " · " not in c["name"] for c in before))
+        self.assertTrue(any(c["now"] for c in before))
 
     def test_our_channels_are_the_streamed_ones_of_that_section(self):
         self.payloads["sources"]["lineup"] = {

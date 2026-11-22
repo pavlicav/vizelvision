@@ -13,6 +13,10 @@ is ready by its release, and otherwise from the antenna. A target with
 Feed recovery (source_queue) also goes the other way: a station whose antenna feed keeps
 failing goes back on from YouTube TV, and a game the antenna carries (the guide names its
 teams, or sports.local_simulcast) goes back on from the antenna.
+
+Since 2026-11-22 a game on one of these networks is suggested over the air (Networks.over_air,
+sports._suggest): Washington's station, or another market's (TV Thing's viviserv2 in Lansing)
+for its own teams' regional games, unless TV Thing rates that station's reception below good.
 """
 from __future__ import annotations
 
@@ -26,6 +30,18 @@ NETWORKS = {'NBC': 'WRC', 'FOX': 'WTTG', 'ABC': 'WJLA', 'CBS': 'WUSA', 'The CW':
 # Networks only the antenna has, not YouTube TV -> their virtual channel on it (TV Thing's networks.json).
 ANTENNA_ONLY = {'ION': '66.1'}
 ANTENNA_SOURCE = 'tv-thing-digital'
+# The antenna's own market: the Washington stations above. TV Thing's second node is in another
+# (viviserv2, mid-Michigan since 2026-11-21); its tuner pool plays that market's channels over
+# the relay, and the digital catalog lists them with their market (tv_thing.py). Its network
+# stations by virtual channel, best first: Lansing's, then Flint-Saginaw's, which it also gets.
+# Numbers, not call signs: their PSIP names are brands ("FOX 47").
+HOME_MARKET = 'dc'
+MARKET_STATIONS = {'lansing': {'NBC': ('10.1', '25.1'), 'CBS': ('6.1', '5.1'), 'FOX': ('47.1', '66.1'),
+                               'ABC': ('53.1', '12.1')}}
+MARKET_NAMES = {'dc': 'Washington', 'lansing': 'Lansing'}
+# TV Thing's reception verdicts (its signal_health.py) a station is the antenna default with:
+# 'fair' (10-30% of samples errored) and 'poor' stutter. None: not rated yet.
+CLEAN_RECEPTION = (None, 'good')
 
 
 def teams(title):
@@ -64,18 +80,21 @@ class Networks:
             return None
         return name if name in NETWORKS else None
 
-    def _stations(self):
-        """{call sign: TV-Thing digital channel}, the main channel of each station."""
+    def _items(self, market=HOME_MARKET):
+        """The digital catalog's channels of one market (the home one's: market 'dc', or none)."""
         if self.tv is None or not self.tv.config.enabled:
-            return {}
+            return []
         try:
             items = self.tv.get('digital')['data']['items']
         except (RokuStreamError, KeyError, TypeError):
-            return {}  # TV-Thing unreachable: YouTube TV waits as before.
+            return []  # TV-Thing unreachable: YouTube TV waits as before.
+        return [item for item in (items if isinstance(items, list) else ()) if isinstance(item, dict)
+                and isinstance(item.get('id'), str) and item['id'] and (item.get('market') or HOME_MARKET) == market]
+
+    def _stations(self):
+        """{call sign: TV-Thing digital channel}, the main channel of each station."""
         found = {}
-        for item in items if isinstance(items, list) else []:
-            if not isinstance(item, dict) or not isinstance(item.get('id'), str) or not item['id']:
-                continue
+        for item in self._items():
             sign, number = call_sign(item.get('name')), str(item.get('number') or '')
             # 5.1 over 5.2 (BUZZR): a station's subchannels carry other networks.
             if sign in NETWORKS.values() and (sign not in found or _order(number) < _order(found[sign]['number'])):
@@ -95,17 +114,43 @@ class Networks:
         """TV-Thing's antenna channel for a network YouTube TV does not carry (ION):
         {source_id, channel_id, number, name}, or None. Its digital catalog names ION "ION", not WPXW."""
         number = ANTENNA_ONLY.get(str(network or '').strip().upper())
-        if number is None or self.tv is None or not self.tv.config.enabled:
+        if number is None:
             return None
-        try:
-            items = self.tv.get('digital')['data']['items']
-        except (RokuStreamError, KeyError, TypeError):
-            return None
-        for item in items if isinstance(items, list) else []:
-            if isinstance(item, dict) and item.get('id') and isinstance(item['id'], str) and str(item.get('number')) == number:
+        # The home market's: Lansing's 66.1 is FOX 66.
+        for item in self._items():
+            if str(item.get('number')) == number:
                 return {'source_id': ANTENNA_SOURCE, 'channel_id': item['id'], 'number': number,
                         'name': str(item.get('name') or network)}
         return None
+
+    def reception(self, market, rf_channel):
+        """How TV Thing's tuners in a market play an RF channel: 'good', 'fair' or 'poor', the
+        best of them; None when none has rated it yet or TV Thing does not answer."""
+        if rf_channel is None or self.tv is None or not self.tv.config.enabled:
+            return None
+        try:
+            tuners = self.tv.get('tuners')['data']['tuners']
+        except (RokuStreamError, KeyError, TypeError):
+            return None
+        verdicts = {(t.get('health') or {}).get(str(rf_channel)) for t in tuners
+                    if isinstance(t, dict) and t.get('market') == market and isinstance(t.get('health') or {}, dict)}
+        return next((v for v in ('good', 'fair', 'poor') if v in verdicts), None)
+
+    def over_air(self, network, market=HOME_MARKET):
+        """A market's antenna station for a network (NBC, FOX, ABC, CBS, The CW), with how it is
+        received: {source_id, channel_id, number, name, market, reception}, or None when the
+        catalog has none. Another market's: its best-received in MARKET_STATIONS order."""
+        if market == HOME_MARKET:
+            station = self.station(network)
+            items = [item for item in self._items() if station and item['id'] == station['channel_id']]
+        else:
+            numbers = MARKET_STATIONS.get(market, {}).get(network, ())
+            listed = {str(item.get('number')): item for item in self._items(market)}
+            items = [listed[n] for n in numbers if n in listed]
+        found = [{'source_id': ANTENNA_SOURCE, 'channel_id': item['id'], 'number': str(item.get('number') or ''),
+                  'name': str(item.get('name') or network), 'market': market,
+                  'reception': self.reception(market, item.get('rf_channel'))} for item in items]
+        return next((s for s in found if s['reception'] in CLEAN_RECEPTION), found[0] if found else None)
 
     def network_of(self, channel_id):
         """The YouTube TV channel carrying the same station as an antenna channel (WTTG's 5.1

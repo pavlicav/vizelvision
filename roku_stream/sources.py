@@ -10,6 +10,7 @@ from typing import Callable
 from .config import AppConfig
 from .errors import ChannelNotFoundError, ConfigError
 from .internet import SOURCE_ID as INTERNET_SOURCE_ID, internet_target
+from .networks import HOME_MARKET, MARKET_NAMES
 from .tv_thing import SourceUnavailableError, TvThingClient
 
 
@@ -234,16 +235,22 @@ class SourceCatalog:
             ):
                 continue
             number = str(item.get("number") or "")
+            # Another market's channel (relayed: TV Thing lists every channel with its market): its
+            # number is that market's (Lansing's 5.1 is WNEM, not WTTG), so the guide's rows by
+            # number are not its.
+            market = item.get("market") if digital and (item.get("market") or HOME_MARKET) != HOME_MARKET else None
             matched = by_id.get(channel_id)
-            if matched is None:
+            if matched is None and not market:
                 candidate = guide_channels.get(number, {})
                 # Never map a guide row whose explicit ID contradicts the catalog.
                 if isinstance(candidate, dict) and candidate.get("id") in (None, channel_id):
                     matched = candidate
             events = normalize_events(str(channel_id), (matched or {}).get("events"), now)
             current = next((e for e in events if e["state"] == "current"), None)
+            name = str(item.get("name") or f"Channel {number}")
             channels.append({"id": channel_id, "number": number,
-                             "name": str(item.get("name") or f"Channel {number}"),
+                             "name": f"{name} · {MARKET_NAMES.get(market, str(market).title())}" if market else name,
+                             **({"market": market} if market else {}),
                              "now": current, "upcoming": [e for e in events if e["state"] == "upcoming"]})
         generated = data.get("generated_at")
         horizon = data.get("horizon")

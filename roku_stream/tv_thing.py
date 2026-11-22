@@ -38,6 +38,10 @@ class TvThingClient:
         "status": "api/v1/status",
         # The source Roku is TV Thing's Roku lane: its YouTube TV channels.
         "youtube-tv": "api/v1/sources/youtube-tv",
+        # Every channel, whatever carries it: other markets' antenna channels for "digital".
+        "channels": "api/v1/channels",
+        # The tuner pool, with each tuner's reception verdict by RF channel (networks.reception).
+        "tuners": "api/v1/tuners",
     }
     MAX_BYTES = 4 * 1024 * 1024
 
@@ -57,8 +61,9 @@ class TvThingClient:
         if key not in ("guide", "guide-long") and data.get("api_version") != "v1":
             raise ValueError("Unsupported or missing TV-Thing API version")
         field = {"sources": "sources", "digital": "items", "analog": "items",
-                 "guide": "channels", "guide-long": "channels", "status": "lanes", "youtube-tv": "items"}[key]
-        expected = list if field in ("sources", "items") else dict
+                 "guide": "channels", "guide-long": "channels", "status": "lanes", "youtube-tv": "items",
+                 "channels": "channels", "tuners": "tuners"}[key]
+        expected = list if field in ("sources", "items") or key in ("channels", "tuners") else dict
         if not isinstance(data.get(field), expected):
             raise ValueError(f"Invalid {field} in TV-Thing response")
         if key in ("digital", "analog", "youtube-tv") and not isinstance(data.get("source"), dict):
@@ -66,12 +71,44 @@ class TvThingClient:
         return data
 
     def get(self, key: str) -> dict:
+        found = self._get(key)
+        return self._with_other_markets(found) if key == "digital" else found
+
+    def _with_other_markets(self, found: dict) -> dict:
+        """Another market's antenna channels, which TV Thing's tuner pool plays over the relay
+        (viviserv2's Lansing ones since 2026-11-21). TV Thing's digital catalog lists them itself
+        since 2026-11-22, each ``relayed`` with its market and node. Before that it listed only
+        its own antenna's: they are taken from its channel list then, after them, in the same
+        shape. Without the channel list the catalog is as it was."""
+        items = found["data"]["items"]
+        if any(isinstance(item, dict) and item.get("relayed") for item in items):
+            return found
+        try:
+            rows = self._get("channels")["data"]["channels"]
+        except SourceUnavailableError:
+            return found
+        have = {item.get("id") for item in items if isinstance(item, dict)}
+        for row in rows:
+            if not isinstance(row, dict) or row.get("source_id") != "digital" or not row.get("market"):
+                continue
+            channel_id = row.get("channel_id")
+            if not isinstance(channel_id, str) or not channel_id or channel_id in have:
+                continue
+            detail = row.get("detail") if isinstance(row.get("detail"), dict) else {}
+            items.append({"id": channel_id, "name": detail.get("source_name") or row.get("name"),
+                          "number": detail.get("antenna_number"), "rf_channel": detail.get("rf_channel"),
+                          "market": str(row["market"]), "node": row.get("node"), "tv_number": row.get("number"),
+                          "tv_name": row.get("name"), "tv_section": row.get("section")})
+            have.add(channel_id)
+        return found
+
+    def _get(self, key: str) -> dict:
         if not self.config.enabled:
             raise SourceUnavailableError("TV-Thing is not configured")
         if key not in self._PATHS:
             raise ValueError("Unsupported TV-Thing read operation")
         ttl = (self.config.guide_cache_seconds if key in ("guide", "guide-long") else
-               2.0 if key == "status" else self.config.catalog_cache_seconds)
+               2.0 if key == "status" else 60.0 if key == "tuners" else self.config.catalog_cache_seconds)
         # Per-endpoint lock coalesces simultaneous refreshes without serializing
         # guide/status/catalog requests behind one another.
         with self._locks[key]:

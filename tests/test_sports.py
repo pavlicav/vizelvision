@@ -95,6 +95,38 @@ class NflRecoveryTests(unittest.TestCase):
         self.assertIsNone(catalog.local_simulcast('nfl', 3, '2026-10-04'), 'already on a network')
         self.assertIsNone(catalog.local_simulcast('mlb', 1, '2026-10-04'))
 
+    def test_network_games_default_to_a_well_received_antenna_station(self):
+        """2026-11-22: sports default to the antenna, unless its reception is below good."""
+        lions = self.event(1, ('FOX',), '2026-11-22T18:00Z', home='DET')
+        dc = self.event(2, ('FOX',), '2026-11-22T18:00Z')
+        night = self.event(3, ('NBC',), '2026-11-23T01:20Z', home='SF')
+        cable = self.event(4, ('ESPN',), '2026-11-24T01:15Z', home='SF')
+        catalog = self.catalog(lions, dc, night, cable)
+        reception = {('FOX', 'dc'): 'fair', ('NBC', 'dc'): 'good', ('FOX', 'lansing'): 'good', ('NBC', 'lansing'): 'good'}
+        catalog.over_air = lambda network, market: (
+            {'source_id': 'tv-thing-digital', 'channel_id': f'{market}/{network}', 'number': '47.1', 'name': 'FOX 47',
+             'market': market, 'reception': reception[(network, market)]} if (network, market) in reception else None)
+
+        def games(day):
+            return {g['game_id']: g for g in catalog.games('nfl', day)['games']}
+        today, monday = games('2026-11-22'), games('2026-11-23')
+        # The Lions' regional game: Lansing's FOX over the air, not Sunday Ticket.
+        self.assertEqual(today[1]['suggested_target'], {'source_id': 'tv-thing-digital', 'channel_id': 'lansing/FOX'})
+        self.assertEqual(today[1]['note'], 'Over the air on 47.1 FOX 47 in Lansing (reception good).')
+        self.assertEqual(today[1]['roku_target']['source_id'], 'sunday-ticket')
+        # The Commanders' on FOX: FOX 5 is rated fair, so YouTube TV's FOX as before.
+        self.assertEqual(today[2]['suggested_target'], {'source_id': 'youtube-tv', 'channel_id': 'FOX'})
+        self.assertIsNone(today[2]['over_air'])
+        # A national game: Washington's station first.
+        self.assertEqual(today[3]['suggested_target'], {'source_id': 'tv-thing-digital', 'channel_id': 'dc/NBC'})
+        self.assertEqual(today[3]['roku_target'], {'source_id': 'youtube-tv', 'channel_id': 'NBC'})
+        self.assertEqual(monday[4]['suggested_target'], {'source_id': 'youtube-tv', 'channel_id': 'ESPN'})
+        # Lansing's FOX stutters too: Sunday Ticket.
+        reception[('FOX', 'lansing')] = 'poor'
+        self.assertEqual(games('2026-11-22')[1]['suggested_target']['source_id'], 'sunday-ticket')
+        catalog.over_air = None
+        self.assertEqual(games('2026-11-22')[3]['suggested_target'], {'source_id': 'youtube-tv', 'channel_id': 'NBC'})
+
     def test_sunday_ticket_lists_only_sunday_afternoon_cbs_and_fox_games(self):
         catalog = self.catalog(self.event(1, ('NFL Net',), '2026-10-04T13:30Z'),
                                self.event(2, ('CBS',), '2026-10-04T17:00Z', home='CIN'),

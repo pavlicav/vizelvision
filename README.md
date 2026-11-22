@@ -349,7 +349,11 @@ painted grid ([docs/schedule.md](docs/schedule.md)). It is available with master
   listings, a game of `YOUTUBE_TV_NFL_TEAMS`) is suggested there, and every other game on **NFL Sunday
   Ticket** (below), whose note names WUSA or FOX 5 over the antenna for a Washington or
   Baltimore game. A scheduled game moves between the two as the listings reach it
-  (`sports.py`, `programming.py`). End-of-game status comes from the MLB
+  (`sports.py`, `programming.py`). Since 2026-11-22 a game on NBC, FOX, ABC, CBS or The CW is
+  suggested **over the air** instead: Washington's station for a national game or a DC team's,
+  and Lansing's (TV Thing's second node, viviserv2, over its relay) for the Lions' regional games,
+  unless TV Thing rates that station's reception below good (`networks.over_air`). The antenna
+  channel list has Lansing's channels too, marked "· Lansing", to pick by hand. End-of-game status comes from the MLB
   Stats API, and from ESPN's public scoreboard for the other leagues (postponed or
   cancelled games also count as ended). The Sports view lists the NFL by week and the other
   leagues for the next ten days. When the game is final, the backup airs until the window ends. A game that runs past its window

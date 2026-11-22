@@ -35,14 +35,16 @@ ALIASES = {'NBC': 'NBC', 'WRC': 'NBC', 'FOX': 'FOX', 'FOX 5': 'FOX', 'ABC': 'ABC
 class FakeTv:
     def __init__(self, items=ITEMS, enabled=True, guide=None):
         self.config = TvThingConfig(enabled=enabled)
-        self.items, self.error, self.guide = items, None, guide or {}
+        self.items, self.error, self.guide, self.tuners = items, None, guide or {}, []
 
     def get(self, key):
-        assert key in ('digital', 'guide')
+        assert key in ('digital', 'guide', 'tuners')
         if self.error:
             raise self.error
         if key == 'guide':
             return {'data': {'available': True, 'channels': self.guide}, 'stale': False, 'error': None}
+        if key == 'tuners':
+            return {'data': {'tuners': self.tuners}, 'stale': False, 'error': None}
         return {'data': {'items': self.items}, 'stale': False, 'error': None}
 
 
@@ -95,6 +97,32 @@ class NetworksTests(unittest.TestCase):
         tv.error = SourceUnavailableError('TV-Thing digital request failed (URLError)')
         self.assertIsNone(networks.antenna_only('ION'))
         self.assertIsNone(Networks(SimpleNamespace(resolve_channel=resolve), FakeTv(items=[ion], enabled=False)).antenna_only('ION'))
+
+    def test_over_the_air_in_each_market_with_its_reception(self):
+        lansing = [{'id': 'lansing/fox_47_47_1', 'number': '47.1', 'name': 'FOX 47', 'rf_channel': 28, 'market': 'lansing'},
+                   {'id': 'lansing/fox_66_1', 'number': '66.1', 'name': 'FOX 66', 'rf_channel': 16, 'market': 'lansing'},
+                   {'id': 'lansing/wlns_tv_6_1', 'number': '6.1', 'name': 'WLNS-TV', 'rf_channel': 14, 'market': 'lansing'}]
+        tv = FakeTv(items=[dict(i, rf_channel=rf) for i, rf in zip(ITEMS, (34, 34, 36, 36, 7, 9, 15, 15))] + lansing)
+        tv.tuners = [{'market': 'dc', 'health': {'34': 'good', '36': 'fair'}},
+                     {'market': 'lansing', 'health': {'28': 'poor', '16': 'good'}},
+                     {'market': 'lansing', 'health': {'28': 'fair'}}]
+        networks = Networks(SimpleNamespace(resolve_channel=resolve), tv)
+        self.assertEqual(networks.over_air('NBC'), {**WRC, 'market': 'dc', 'reception': 'good'})
+        self.assertEqual(networks.over_air('FOX')['reception'], 'fair')
+        self.assertIsNone(networks.over_air('CBS')['reception'], 'not rated yet')
+        # FOX 47 is rated fair at best, so Flint's FOX 66 comes first.
+        self.assertEqual(networks.over_air('FOX', 'lansing'),
+                         {'source_id': 'tv-thing-digital', 'channel_id': 'lansing/fox_66_1', 'number': '66.1',
+                          'name': 'FOX 66', 'market': 'lansing', 'reception': 'good'})
+        self.assertEqual(networks.over_air('CBS', 'lansing')['channel_id'], 'lansing/wlns_tv_6_1')
+        self.assertIsNone(networks.over_air('ABC', 'lansing'))
+        tv.tuners[1]['health']['16'] = 'poor'
+        self.assertEqual((networks.over_air('FOX', 'lansing')['channel_id'], networks.over_air('FOX', 'lansing')['reception']),
+                         ('lansing/fox_47_47_1', 'fair'), 'none is clean: the first, as it is received')
+        # The home market's stations and ION are never another market's (Lansing's 66.1 is FOX 66).
+        self.assertIsNone(networks.antenna_only('ION'))
+        self.assertEqual({row['network']: (row['antenna'] or {}).get('channel_id') for row in networks.listing()}['FOX'],
+                         'wttg_dt_5_1')
 
     def test_mlb_game_follows_its_youtube_tv_channel(self):
         target = {'source_id': 'mlb', 'channel_id': '1', 'date': '2026-10-03'}
