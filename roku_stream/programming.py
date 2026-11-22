@@ -76,6 +76,8 @@ HISTORY = timedelta(days=7)
 GAME_CHECK = timedelta(minutes=10)  # How often scheduled games are checked against their feeds.
 GONE_AFTER = timedelta(minutes=20)  # Missing from its feed this long, a game was dropped (not a blip).
 REMOVED_KEPT = timedelta(days=2)    # How long games removed by their feeds stay listed.
+IMPLAUSIBLE_PAST = timedelta(hours=12)  # A not-yet-started game listed as starting this long ago is a bad listing.
+IMPLAUSIBLE_MOVE = timedelta(days=45)   # So is one moved further than this (postponements are days, rarely weeks).
 # A show's priority, lowest first; its rank is the index. Grid blocks, OFF AIR and entries
 # queued by hand are normal.
 PRIORITIES = ('low', 'normal', 'high')
@@ -639,6 +641,15 @@ class Programming:
         show.pop('missing_since', None)
         if game.get('cancelled'):
             return f'Cancelled on the {league} schedule', False
+        if game.get('start_time') and not game.get('start_time_tbd'):
+            listed, old = parse_time(game['start_time']), parse_time(show.get('game_start') or show['start'])
+            # 2026-11-17: ESPN's summary had Bucs at Lions (Nov 22) on 1993-01-31; the show was moved
+            # to that moment, clamped to a minute ahead, and so was over by the 22nd. A game that has
+            # not started is never long under way, nor moved by more than weeks: skip such a listing.
+            if listed < now - IMPLAUSIBLE_PAST or abs(listed - old) > IMPLAUSIBLE_MOVE:
+                log.warning('Ignoring %s game %s listed at %s (scheduled for %s)', league,
+                            info['game_pk'], game['start_time'], old.isoformat())
+                return None, True
         notes = []
         if game.get('title') and game['title'] != info['title']:
             if show['title'] == info['title']:

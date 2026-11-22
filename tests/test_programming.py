@@ -884,6 +884,17 @@ class FollowGamesTests(unittest.TestCase):
         self.assertEqual(self.queue.list(), [])  # Withdrawn; it is queued again ten minutes before 7:45.
         self.assertEqual(self.programming.follow_games(NOON + timedelta(hours=2)), [])
 
+    def test_an_implausible_listing_leaves_the_game_alone(self):
+        """2026-11-17: ESPN had Bucs at Lions (Nov 22) on 1993-01-31 for one check."""
+        show = dict(self.show(1, timedelta(days=5)))
+        for start in (timedelta(days=-12000), timedelta(hours=-13), timedelta(days=60)):
+            self.listing(1, start, game_date='1993-01-31')
+            self.assertEqual(self.programming.follow_games(NOON), [])
+            self.assertEqual(self.shows()['g1'], show)
+        # Under way a little, or postponed a few days, still moves it.
+        self.listing(1, timedelta(days=8))
+        self.assertEqual([c['text'] for c in self.programming.follow_games(NOON)], ['Moved from Mon 12:00 PM'])
+
     def test_a_series_winner_replaces_the_placeholder_unless_the_title_was_customized(self):
         self.show(1, timedelta(hours=2))
         self.show(2, timedelta(days=1), title='Game 2 on FS1')
