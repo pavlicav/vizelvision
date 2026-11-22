@@ -28,9 +28,19 @@ authInternalUsers:
         path: master
       - action: read
         path: master
+      # The low rendition (roku_stream/master_low.py), for phones on cell networks.
+      - action: publish
+        path: master_low
+      - action: read
+        path: master_low
       - action: api
 paths:
   master:
+    source: publisher
+    overridePublisher: no
+    record: no
+  # Same HLS settings (they are global). Its keyframes come every 2 s, so its segments do.
+  master_low:
     source: publisher
     overridePublisher: no
     record: no

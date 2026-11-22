@@ -76,6 +76,33 @@ class ConfigTests(unittest.TestCase):
                 with self.subTest(url=url), self.assertRaises(ConfigError):
                     load_config(path)
 
+    def test_master_low_rendition_defaults_and_bounds(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'config.json'
+            root = {'channels': [{'name': 'NBC'}], 'master': {'fps': 60, 'bitrate': 8000}}
+            path.write_text(json.dumps(root))
+            low = load_config(path).master.low
+            self.assertEqual((low.encoder, low.width, low.height, low.fps, low.bitrate, low.keyframe_seconds),
+                             ('auto', 960, 540, 30, 2000, 2))
+            self.assertEqual((low.rtsp_url, low.hls_url),
+                             ('rtsp://127.0.0.1:18554/master_low', 'http://127.0.0.1:18888/master_low/'))
+            root['master']['low'] = {'encoder': 'x264', 'width': 1280, 'height': 720, 'fps': 20, 'bitrate': 2500,
+                                     'keyframe_seconds': 1}
+            path.write_text(json.dumps(root))
+            self.assertEqual(load_config(path).master.low.fps, 20)
+            for bad in ({'encoder': 'qsv'}, {'width': 1920}, {'height': 541}, {'fps': 25}, {'fps': 90},
+                        {'bitrate': 9000}, {'keyframe_seconds': 0}, {'keyframe_seconds': 2.5},
+                        {'rtsp_url': 'rtsp://10.0.0.1:18554/master_low'}, {'hls_url': 'http://127.0.0.1:18888/master_low'},
+                        {'encoder': True}, []):
+                with self.subTest(low=bad):
+                    root['master']['low'] = bad
+                    path.write_text(json.dumps(root))
+                    with self.assertRaises(ConfigError):
+                        load_config(path)
+            root['master'] = {}   # a 30 fps, 2500 kbps master: the defaults still fit
+            path.write_text(json.dumps(root))
+            self.assertEqual(load_config(path).master.low.fps, 30)
+
     def test_roku_contribution_is_optional_and_confined_to_local_capture(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / 'config.json'

@@ -182,7 +182,7 @@ These routes use the existing HTTP API-key authorization and application prefix:
 | `POST /v1/master/take` | `{"prepared_id":"<id from status.prepared>"}` |
 | `POST /v1/master/cancel` | `{}` |
 | `POST /v1/master/fallback` | `{}` |
-| `GET /v1/master/media/<file>` | Same-origin HLS playlists and segments from the configured master path |
+| `GET /v1/master/media/<file>` | Same-origin HLS playlists and segments from the configured master path; `?quality=low` for the low rendition |
 
 Analog uses `source_id: "tv-thing-analog"` and the catalog's numeric channel ID.
 YouTube TV uses `source_id: "youtube-tv"` and a configured channel name. Baseball
@@ -202,6 +202,32 @@ browser requests cannot supply arbitrary media URLs or GStreamer descriptions.
 The media proxy restricts filenames and session/HLS query parameters, limits each
 response to 16 MiB, and permits at most six concurrent upstream reads. Media
 responses are not cached across publisher restarts.
+
+## Low rendition (cell)
+
+Beside the full output (720p60, 8 Mbps in production), master publishes a lighter
+copy to MediaMTX's `master_low` path: 960x540 at 30 fps, 2000 kbps CBR, a keyframe
+every 2 s (so 2 s segments; the full path keeps 1 s), and the same AAC. It is for
+phones on cell networks, and only for a client that asks: `?quality=low` on
+`/v1/master/media/index.m3u8`. Everyone else, TV Thing's relay in Michigan
+included, gets the full 60 fps output. A playlist answered for an explicit
+`quality` names it on every URI it references, so the player's later requests
+(and TV Thing's relay, which forwards the query) stay on that rendition. With no
+low rendition on air, a low playlist request is answered from the full path and
+names `quality=full`.
+
+The master graph tees the finished picture (after the clock, crawl, badge and
+captions) and the encoded AAC into leaky queues; scaling, the second NVENC
+encode and the second RTSP publisher run in a pipeline of their own
+(`roku_stream/master_low.py`). A failure there, such as a MediaMTX without the
+path, is logged and retried with backoff (5 s doubling to 60 s), and never stops
+or stalls the full output. `GET /v1/master` reports it as `low_rendition`.
+
+`master.low` in the config: `encoder` (`auto`: NVENC, or no low rendition when
+NVENC cannot encode; `nvenc`; `x264`, one thread; `off`), `width`, `height`,
+`fps` (must divide `master.fps`), `bitrate`, `keyframe_seconds`, `rtsp_url` and
+`hls_url`. `tests/master_low_integration.py` runs both renditions against an
+isolated MediaMTX with `deploy/mediamtx-master.yml`.
 
 ## Failure behavior
 

@@ -349,6 +349,7 @@ class MasterWorker:
                       can_prepare=healthy and (self.tv_enabled or self.roku_enabled or self.library_enabled) and not self.busy,
                       can_take=healthy and ready and not self.busy,
                       tracks=self.output.status() if self.output else {},
+                      low_rendition=getattr(self.output, "low_status", lambda: None)() if self.output else None,
                       ident=self._ident_status(), take_waits_for_ad=self._cut_waits(self.take_land))
         self._publish(recovery=({"target": self._public(self.recovering),
                                 "message": "Waiting for fresh audio/video from the same source"}
@@ -1385,7 +1386,7 @@ class MasterWorker:
                                                         height=self.config.height, fps=self.config.fps, bitrate=self.config.bitrate,
                                                         radio_url=self.config.off_air_radio_url,
                                                         radio_gain_db=self.config.off_air_radio_gain_db,
-                                                        encoder=self.config.encoder)
+                                                        encoder=self.config.encoder, low=self.config.low)
                         self.output_started = time.monotonic()
                         self.publisher_id = None
                         self.next_status = 0

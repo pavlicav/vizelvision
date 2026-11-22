@@ -1,10 +1,12 @@
 import io
 import unittest
+from email.message import Message
+from urllib.error import HTTPError
 
-from roku_stream.config import MasterConfig
+from roku_stream.config import MasterConfig, MasterLowConfig
 from roku_stream.errors import ConfigError
 from roku_stream.master import MasterStreamError
-from roku_stream.master_preview import LOCAL_WINDOW, MasterPreview, live_window, nearby
+from roku_stream.master_preview import LOCAL_WINDOW, MasterPreview, live_window, nearby, with_quality
 
 
 class MasterPreviewTests(unittest.TestCase):
@@ -34,7 +36,8 @@ class MasterPreviewTests(unittest.TestCase):
         for name in ("../index.m3u8", "%2e%2e%2findex.m3u8", "http://example.test/x.mp4", "other/index.m3u8", "x.txt"):
             with self.assertRaises(ConfigError):
                 preview.read(name)
-        for query in ("url=http://remote.test", "_HLS_msn=../x", "&".join(["_HLS_msn=1"] * 10)):
+        for query in ("url=http://remote.test", "_HLS_msn=../x", "&".join(["_HLS_msn=1"] * 10),
+                      "quality=medium", "quality=", "quality=low&quality=full", "quality=../x"):
             with self.assertRaises(ConfigError):
                 preview.read("index.m3u8", query)
 
@@ -115,3 +118,114 @@ class LiveWindowTests(unittest.TestCase):
         segment = b"#EXTINF:1.0,\nx.mp4\n" * 10
         preview = MasterPreview(MasterConfig(enabled=True), opener=lambda *a, **k: io.BytesIO(segment))
         self.assertEqual(preview.read("video1_seg1.mp4", client="127.0.0.1")[0], segment)
+
+
+INDEX = (b'#EXTM3U\n#EXT-X-VERSION:10\n#EXT-X-INDEPENDENT-SEGMENTS\n\n'
+         b'#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio",NAME="audio2",AUTOSELECT=YES,DEFAULT=YES,URI="audio2_stream.m3u8?session=s"\n\n'
+         b'#EXT-X-STREAM-INF:BANDWIDTH=2400000,CODECS="avc1.4d401f,mp4a.40.2",RESOLUTION=960x540,FRAME-RATE=30.000,AUDIO="audio"\n'
+         b'video1_stream.m3u8?session=s\n')
+FULL, LOW = "http://127.0.0.1:18888/master/", "http://127.0.0.1:18888/master_low/"
+
+
+def low_playlist(first, count):
+    """The low path's media playlist: 2 s segments."""
+    return media_playlist(first, count).replace(b"TARGETDURATION:1", b"TARGETDURATION:2").replace(b"#EXTINF:1.00000", b"#EXTINF:2.00000")
+
+
+class Upstream:
+    """MediaMTX: bodies by URL prefix; an int is an HTTP error status."""
+    def __init__(self, **bodies):
+        self.bodies, self.calls = bodies, []
+
+    def __call__(self, url, **kwargs):
+        self.calls.append(url)
+        body = self.bodies["low" if url.startswith(LOW) else "full"]
+        if isinstance(body, int):
+            raise HTTPError(url, body, "nope", Message(), io.BytesIO(b""))
+        return io.BytesIO(body)
+
+
+class QualityTests(unittest.TestCase):
+    def preview(self, settings=MasterLowConfig(), **bodies):
+        upstream = Upstream(**bodies)
+        return MasterPreview(MasterConfig(enabled=True, low=settings), opener=upstream), upstream
+
+    def test_everyone_gets_the_full_rendition_unless_they_ask(self):
+        preview, upstream = self.preview(full=INDEX, low=INDEX)
+        for client in ("127.0.0.1", "100.70.6.82", "8.8.8.8", None):   # Michigan's relay keeps 60 fps
+            raw, _ = preview.read("index.m3u8", "", client=client)
+            self.assertEqual(raw, INDEX.replace(b"VERSION:10", b"VERSION:7"))
+        self.assertTrue(all(url.startswith(FULL) for url in upstream.calls), upstream.calls)
+
+    def test_quality_low_reads_the_low_path_and_names_it_in_every_uri(self):
+        preview, upstream = self.preview(low=INDEX)
+        raw, mime = preview.read("index.m3u8", "quality=low", client="100.66.124.86")
+        self.assertEqual(upstream.calls, [LOW + "index.m3u8"])
+        self.assertEqual(mime, "application/vnd.apple.mpegurl")
+        self.assertIn(b'URI="audio2_stream.m3u8?session=s&quality=low"', raw)
+        self.assertIn(b"\nvideo1_stream.m3u8?session=s&quality=low\n", raw)
+        preview.read("video1_stream.m3u8", "session=s&quality=low")
+        self.assertEqual(upstream.calls[-1], LOW + "video1_stream.m3u8?session=s")   # quality is ours, not MediaMTX's
+
+    def test_a_low_media_playlist_names_its_init_and_segments(self):
+        preview, _ = self.preview(low=low_playlist(50, 4))
+        raw, _ = preview.read("video1_stream.m3u8", "session=s&quality=low")
+        self.assertIn(b'#EXT-X-MAP:URI="ab_video1_init.mp4?session=s&quality=low"', raw)
+        self.assertEqual(raw.count(b".mp4?session=s&quality=low\n"), 4)
+
+    def test_low_segments_come_from_the_low_path_untouched(self):
+        preview, upstream = self.preview(low=b"\x00\x00\x00\x18ftyp")
+        raw, mime = preview.read("ab_video1_seg51.mp4", "session=s&quality=low")
+        self.assertEqual((raw, mime, upstream.calls), (b"\x00\x00\x00\x18ftyp", "video/mp4", [LOW + "ab_video1_seg51.mp4?session=s"]))
+
+    def test_quality_full_is_named_too(self):
+        preview, upstream = self.preview(full=INDEX)
+        raw, _ = preview.read("index.m3u8", "quality=full", client="100.70.6.82")
+        self.assertEqual(upstream.calls, [FULL + "index.m3u8"])
+        self.assertIn(b"video1_stream.m3u8?session=s&quality=full", raw)
+
+    def test_no_low_rendition_on_air_falls_back_to_full_and_says_so(self):
+        for status in (404, 500):   # 404: no publisher on master_low; 500: MediaMTX lacks the path
+            with self.subTest(status=status):
+                preview, upstream = self.preview(full=INDEX, low=status)
+                raw, _ = preview.read("index.m3u8", "quality=low")
+                self.assertEqual(upstream.calls, [LOW + "index.m3u8", FULL + "index.m3u8"])
+                self.assertIn(b"video1_stream.m3u8?session=s&quality=full", raw)
+                self.assertNotIn(b"quality=low", raw)
+
+    def test_a_missing_low_segment_is_not_swapped_for_a_full_one(self):
+        preview, upstream = self.preview(full=b"other", low=404)
+        with self.assertRaisesRegex(MasterStreamError, "not ready"):
+            preview.read("ab_video1_seg51.mp4", "quality=low")
+        self.assertEqual(upstream.calls, [LOW + "ab_video1_seg51.mp4"])
+
+    def test_low_turned_off_serves_full(self):
+        preview, upstream = self.preview(MasterLowConfig(encoder="off"), full=INDEX)
+        raw, _ = preview.read("index.m3u8", "quality=low")
+        self.assertEqual(upstream.calls, [FULL + "index.m3u8"])
+        self.assertIn(b"&quality=full", raw)
+
+    def test_far_viewers_keep_thirty_seconds_of_two_second_segments(self):
+        preview, _ = self.preview(low=low_playlist(200, 30))
+        far, _ = preview.read("video1_stream.m3u8", "session=s&quality=low", client="100.66.124.86")
+        self.assertEqual(far.count(b"#EXTINF"), 15)
+        self.assertIn(b"#EXT-X-MEDIA-SEQUENCE:215\n", far)
+        near, _ = preview.read("video1_stream.m3u8", "session=s&quality=low", client="10.0.0.240")
+        self.assertEqual(near.count(b"#EXTINF"), LOCAL_WINDOW)
+
+
+class WithQualityTests(unittest.TestCase):
+    def test_tags_relative_uris_only_and_keeps_line_endings(self):
+        playlist = (b'#EXTM3U\r\n#EXT-X-MAP:URI="init.mp4"\r\nseg1.mp4\r\nseg2.mp4?session=s\r\n'
+                    b'https://example.test/seg3.mp4\r\n/abs/seg4.mp4\r\n\r\n')
+        self.assertEqual(with_quality(playlist, "low"),
+                         b'#EXTM3U\r\n#EXT-X-MAP:URI="init.mp4?quality=low"\r\nseg1.mp4?quality=low\r\n'
+                         b'seg2.mp4?session=s&quality=low\r\nhttps://example.test/seg3.mp4\r\n/abs/seg4.mp4\r\n\r\n')
+
+    def test_a_tagged_playlist_reads_back_through_the_allowlist(self):
+        preview = MasterPreview(MasterConfig(enabled=True), opener=lambda *a, **k: io.BytesIO(b"#EXTM3U\n"))
+        for line in with_quality(INDEX, "low").split(b"\n"):
+            for uri in ([line] if line and not line.startswith(b"#") else []):
+                name, query = uri.decode().split("?", 1)
+                preview.read(name, query)   # no ConfigError
+

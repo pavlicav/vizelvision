@@ -152,6 +152,25 @@ class TvThingConfig:
 
 
 @dataclass(frozen=True)
+class MasterLowConfig:
+    """A lighter second rendition of the master output (master_low.py), for phones on cell
+    networks: a client asks for it with ``quality=low`` (master_preview.py); everyone else,
+    TV Thing's relay in Michigan included, gets the full 60 fps output."""
+    # "auto": NVENC, or no low rendition when NVENC cannot encode. x264 would take CPU from
+    # the captures, TV Thing's transcodes and, on that fallback, the full encode itself.
+    encoder: str = "auto"   # auto | nvenc | x264 | off
+    rtsp_url: str = "rtsp://127.0.0.1:18554/master_low"
+    hls_url: str = "http://127.0.0.1:18888/master_low/"
+    width: int = 960
+    height: int = 540
+    fps: int = 30
+    bitrate: int = 2000
+    # MediaMTX cuts a segment at the first keyframe after hlsSegmentDuration (1 s), so this
+    # is the low path's segment length, while the full path keeps 1 s segments.
+    keyframe_seconds: int = 2
+
+
+@dataclass(frozen=True)
 class MasterConfig:
     enabled: bool = False
     socket_path: Path = Path("state/master.sock")
@@ -175,6 +194,7 @@ class MasterConfig:
     eas_areas: tuple[str, ...] = ("011001",)
     # api.weather.gov alert zones: DC's public forecast zone and its county (for warnings).
     nws_zones: tuple[str, ...] = ("DCZ001", "DCC001")
+    low: MasterLowConfig = field(default_factory=MasterLowConfig)
 
 
 @dataclass(frozen=True)
@@ -258,6 +278,43 @@ def _mapping(value: Any, label: str) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise ConfigError(f"{label} must be a JSON object")
     return value
+
+
+def _local_url(data: dict[str, Any], label: str, key: str, default: str, scheme: str) -> str:
+    """A service URL on this host: MediaMTX's RTSP, HLS or API."""
+    value = data.get(key, default)
+    parsed = urlsplit(value) if isinstance(value, str) else None
+    if not parsed or parsed.scheme != scheme or parsed.hostname != "127.0.0.1" or parsed.username or parsed.password or parsed.query or parsed.fragment:
+        raise ConfigError(f"{label}.{key} must be a {scheme}://127.0.0.1 URL without credentials, query or fragment")
+    try:
+        if parsed.port is None or not parsed.path or parsed.path == "/":
+            raise ValueError()
+    except ValueError as exc:
+        raise ConfigError(f"{label}.{key} requires a valid port and path") from exc
+    return value
+
+
+def _master_low(raw: dict[str, Any], master: dict[str, int]) -> MasterLowConfig:
+    encoder = raw.get("encoder", "auto")
+    if encoder not in ("auto", "nvenc", "x264", "off"):
+        raise ConfigError("master.low.encoder must be auto, nvenc, x264 or off")
+    urls = {key: _local_url(raw, "master.low", key, default, scheme)
+            for key, default, scheme in (("rtsp_url", "rtsp://127.0.0.1:18554/master_low", "rtsp"),
+                                         ("hls_url", "http://127.0.0.1:18888/master_low/", "http"))}
+    if not urls["hls_url"].endswith("/"):
+        raise ConfigError("master.low.hls_url must end with a slash")
+    numbers = {}
+    for key, default, low, high in (("width", 960, 160, master["width"]), ("height", 540, 90, master["height"]),
+                                    ("fps", 30, 10, master["fps"]), ("bitrate", 2000, 128, master["bitrate"]),
+                                    ("keyframe_seconds", 2, 1, 4)):
+        value = raw.get(key, min(default, high))
+        if type(value) is not int or not low <= value <= high or (key in ("width", "height") and value % 2):
+            raise ConfigError(f"Invalid master.low.{key}")
+        numbers[key] = value
+    if master["fps"] % numbers["fps"]:
+        # videorate drop-only keeps every Nth frame: an uneven ratio would judder.
+        raise ConfigError("master.low.fps must divide master.fps")
+    return MasterLowConfig(encoder=encoder, **urls, **numbers)
 
 
 def _number(data: dict[str, Any], key: str, default: float) -> float:
@@ -374,20 +431,10 @@ def load_config(path: str | Path) -> AppConfig:
     master_socket = Path(master_socket)
     if not master_socket.is_absolute():
         master_socket = config_path.parent / master_socket
-    master_urls = {}
-    for key, default, scheme in (("rtsp_url", "rtsp://127.0.0.1:18554/master", "rtsp"),
-                                 ("status_url", "http://127.0.0.1:19997/v3/paths/get/master", "http"),
-                                 ("hls_url", "http://127.0.0.1:18888/master/", "http")):
-        value = master_raw.get(key, default)
-        parsed = urlsplit(value) if isinstance(value, str) else None
-        if not parsed or parsed.scheme != scheme or parsed.hostname != "127.0.0.1" or parsed.username or parsed.password or parsed.query or parsed.fragment:
-            raise ConfigError(f"master.{key} must be a {scheme}://127.0.0.1 URL without credentials, query or fragment")
-        try:
-            if parsed.port is None or not parsed.path or parsed.path == "/":
-                raise ValueError()
-        except ValueError as exc:
-            raise ConfigError(f"master.{key} requires a valid port and path") from exc
-        master_urls[key] = value
+    master_urls = {key: _local_url(master_raw, "master", key, default, scheme)
+                   for key, default, scheme in (("rtsp_url", "rtsp://127.0.0.1:18554/master", "rtsp"),
+                                                ("status_url", "http://127.0.0.1:19997/v3/paths/get/master", "http"),
+                                                ("hls_url", "http://127.0.0.1:18888/master/", "http"))}
     if not master_urls["hls_url"].endswith("/"):
         raise ConfigError("master.hls_url must end with a slash")
     master_numbers = {}
@@ -428,7 +475,8 @@ def load_config(path: str | Path) -> AppConfig:
     master = MasterConfig(enabled=master_enabled, socket_path=master_socket.resolve(), **master_urls, **master_numbers,
                           off_air_radio_url=radio_url, off_air_radio_info_url=info_url,
                           off_air_radio_gain_db=float(radio_gain), encoder=encoder,
-                          eas_url=eas_url, eas_areas=tuple(eas_areas), nws_zones=tuple(nws_zones))
+                          eas_url=eas_url, eas_areas=tuple(eas_areas), nws_zones=tuple(nws_zones),
+                          low=_master_low(_mapping(master_raw.get("low"), "master.low"), master_numbers))
     library = _library(_mapping(root.get("library"), "library"))
 
     port = server_raw.get("port", 6969)

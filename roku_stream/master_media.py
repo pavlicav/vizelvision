@@ -61,14 +61,26 @@ def _nvenc_probe(gst):
         pipeline.set_state(gst.State.NULL)
 
 
-def video_encoder(gst, encoder, fps, bitrate):
+def video_encoder(gst, encoder, fps, bitrate, *, gop=None, threads=2):
+    """A keyframe every ``gop`` frames (default: each second)."""
     # x264 at 720p60 shares the CPU with capture and TV-Thing transcodes. When it falls
     # below real time, videorate pads the gap with duplicates and the output drifts
     # hours behind the clock. NVENC keeps the encode off the CPU.
+    gop = gop or fps
     if encoder == "nvenc" or (encoder == "auto" and _nvenc_works(gst)):
-        return (f"nvh264enc preset=low-latency-hq rc-mode=cbr bitrate={bitrate} gop-size={fps} "
+        return (f"nvh264enc preset=low-latency-hq rc-mode=cbr bitrate={bitrate} gop-size={gop} "
                 "zerolatency=true bframes=0")
-    return f"x264enc speed-preset=ultrafast tune=zerolatency threads=2 bitrate={bitrate} key-int-max={fps}"
+    return f"x264enc speed-preset=ultrafast tune=zerolatency threads={threads} bitrate={bitrate} key-int-max={gop}"
+
+
+def low_encoder(gst, low):
+    """The low rendition's encoder fragment, or None for no low rendition. Its "auto" is
+    NVENC or nothing: the K4200 runs a second NVENC session beside the full encode, but a
+    second x264 would take CPU from the captures, the transcodes and the full encode."""
+    if low is None or low.encoder == "off" or (low.encoder == "auto" and not _nvenc_works(gst)):
+        return None
+    return video_encoder(gst, "nvenc" if low.encoder == "auto" else low.encoder, low.fps, low.bitrate,
+                         gop=low.fps * low.keyframe_seconds, threads=1)
 
 
 class MasterMedia:
@@ -76,7 +88,8 @@ class MasterMedia:
     ad_break = None   # my ads over a muted break (ad_break.py), once configured
 
     def __init__(self, rtsp_url, *, width=1280, height=720, fps=30, bitrate=2500, radio_url=None, radio_gain_db=0.0,
-                 encoder="auto"):
+                 encoder="auto", low=None):
+        """``low``: a MasterLowConfig for the low rendition (master_low.py); None for none."""
         self.gst = gst = _gst()
         self.fps = fps
         self.width, self.height = width, height
@@ -85,6 +98,13 @@ class MasterMedia:
         card_caps = self.video_caps.replace(f"framerate={fps}/1", f"framerate={min(fps, 10)}/1")
         self.audio_caps = "audio/x-raw,format=F32LE,rate=48000,channels=2,layout=interleaved"
         queue = "queue max-size-buffers=8 max-size-bytes=0 max-size-time=500000000"
+        low_encode = low_encoder(gst, low)
+        # The low rendition's taps: the finished picture and the AAC already encoded, each
+        # through a leaky queue, so a slow or failed low pipeline never holds the output back.
+        # The full output keeps the tee's first pad, in the same thread as before.
+        low_video_tee = "! tee name=low_video_tee " if low_encode else ""
+        low_audio_tee = "! tee name=low_audio_tee " if low_encode else ""
+        low_video_caps = self.video_caps.replace(f"framerate={fps}/1", f"framerate={low.fps}/1") if low_encode else None
         graph = [
             f"input-selector name=video sync-streams=true sync-mode=clock cache-buffers=true drop-backwards=true ! {queue} "
             f"! identity single-segment=true ! videorate ! {self.video_caps} "
@@ -104,7 +124,7 @@ class MasterMedia:
             "! textoverlay name=live_captions silent=true halignment=center valignment=bottom "
             f"ypad={round(height * .16)} xpad={round(width * .08)} auto-resize=false "
             "shaded-background=true shading-value=180 draw-outline=true draw-shadow=false "
-            f"! {self.video_caps} ! {video_encoder(gst, encoder, fps, bitrate)} "
+            f"! {self.video_caps} {low_video_tee}! {video_encoder(gst, encoder, fps, bitrate)} "
             "! h264parse ! identity name=video_out ! publisher.sink_0",
             f"input-selector name=audio sync-streams=true sync-mode=clock cache-buffers=true drop-backwards=true ! {queue} "
             "! identity single-segment=true ! audiorate skip-to-first=true ! tee name=caption_audio "
@@ -112,7 +132,7 @@ class MasterMedia:
             'appsrc name=delayed_audio is-live=true format=time block=false max-buffers=16 max-bytes=0 '
             f'max-time=500000000 leaky-type=downstream caps="{self.audio_caps}" '
             f"! {queue} ! audioconvert "
-            "! avenc_aac ! aacparse ! identity name=audio_out ! publisher.sink_1",
+            f"! avenc_aac ! aacparse {low_audio_tee}! identity name=audio_out ! publisher.sink_1",
             # Leaky audio branch: a stopped/slow recognizer cannot block publication.
             "caption_audio. ! queue leaky=downstream max-size-buffers=8 max-size-bytes=0 max-size-time=250000000 "
             "! audioconvert ! audioresample ! audio/x-raw,format=F32LE,rate=16000,channels=1,layout=interleaved "
@@ -147,7 +167,22 @@ class MasterMedia:
             f'max-time=500000000 leaky-type=downstream caps="{self.audio_caps}" ! {queue} ! volume name=bed_gain volume=0 ! bed_mix.sink_1',
             f"audiomixer name=bed_mix latency=100000000 ! {self.audio_caps} ! {queue} ! audio.sink_4",
         ]
+        if low_encode:
+            graph += [
+                "low_video_tee. ! queue leaky=downstream max-size-buffers=4 max-size-bytes=0 max-size-time=0 "
+                f"! videorate drop-only=true ! {low_video_caps} "
+                "! appsink name=low_video emit-signals=true sync=false async=false max-buffers=2 drop=true",
+                "low_audio_tee. ! queue leaky=downstream max-size-buffers=32 max-size-bytes=0 max-size-time=0 "
+                "! appsink name=low_audio emit-signals=true sync=false async=false max-buffers=32 drop=true",
+            ]
         self.pipeline = gst.parse_launch(" ".join(graph))
+        self.low = None
+        if low_encode:
+            from .master_low import LowRendition
+            self.low = LowRendition(gst, low.rtsp_url, width=low.width, height=low.height, fps=low.fps,
+                                    video_caps=low_video_caps, encoder=low_encode)
+            for kind in ("video", "audio"):
+                self.pipeline.get_by_name("low_" + kind).connect("new-sample", self._low_sample, kind)
         self.pipeline.get_by_name('test_card').set_property('location', str(PATTERN))
         self.pipeline.get_by_name('card_caption').set_property('font-desc', 'DejaVu Sans Mono 11')
         self.pipeline.get_by_name('clock').set_property('font-desc', f'DejaVu Sans Bold {round(height / 22)}')
@@ -197,6 +232,21 @@ class MasterMedia:
             self.close()
             raise MasterStreamError("Cannot start master publisher")
         self.programme.start()
+        if self.low:
+            self.low.start(lambda: (self.pipeline.get_clock(), self.pipeline.get_base_time()))
+
+    def _low_sample(self, sink, kind):
+        sample = sink.emit("pull-sample")
+        if sample is not None:
+            try:
+                self.low.push(kind, sample)
+            except Exception:
+                logging.getLogger(__name__).exception("Low rendition tap failed")
+        return self.gst.FlowReturn.OK
+
+    def low_status(self):
+        """The low rendition's state (master_low.py), or None when there is none."""
+        return self.low.status() if self.low else None
 
     def set_test_card(self, card):
         # textoverlay accepts Pango markup: user captions must remain literal text.
@@ -520,6 +570,8 @@ class MasterMedia:
             pad.remove_probe(probe)
 
     def close(self):
+        if getattr(self, "low", None):
+            self.low.close()
         self.captions.close()
         self.programme.close()
         if self.ad_break:

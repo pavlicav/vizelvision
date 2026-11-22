@@ -80,5 +80,43 @@ class NvencProbeTests(unittest.TestCase):
         self.assertEqual(gst.states[-1], gst.State.NULL)
 
 
+class LowEncoderTests(unittest.TestCase):
+    """The low rendition's encode: a second NVENC session, or nothing unless x264 is asked for."""
+    def setUp(self):
+        patcher = mock.patch.object(master_media, "_NVENC_WORKS", None)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def low(self, **fields):
+        from roku_stream.config import MasterLowConfig
+        return MasterLowConfig(**fields)
+
+    def test_keyframes_every_keyframe_seconds_at_the_low_rate(self):
+        master_media._NVENC_WORKS = True
+        encoder = master_media.low_encoder(FakeGst(), self.low())
+        self.assertTrue(encoder.startswith("nvh264enc "), encoder)
+        self.assertIn(" bitrate=2000 gop-size=60 ", encoder)
+        self.assertIn("rc-mode=cbr", encoder)
+        self.assertIn(" gop-size=30 ", master_media.low_encoder(FakeGst(), self.low(keyframe_seconds=1)))
+
+    def test_auto_is_nvenc_or_no_low_rendition(self):
+        master_media._NVENC_WORKS = False
+        self.assertIsNone(master_media.low_encoder(FakeGst(), self.low()))
+        self.assertIsNone(master_media.low_encoder(FakeGst(), self.low(encoder="off")))
+        self.assertIsNone(master_media.low_encoder(FakeGst(), None))
+
+    def test_x264_only_when_asked_and_on_one_thread(self):
+        master_media._NVENC_WORKS = True
+        encoder = master_media.low_encoder(FakeGst(), self.low(encoder="x264"))
+        self.assertEqual(encoder, "x264enc speed-preset=ultrafast tune=zerolatency threads=1 bitrate=2000 key-int-max=60")
+
+    def test_the_full_encode_is_unchanged(self):
+        master_media._NVENC_WORKS = True
+        self.assertEqual(master_media.video_encoder(FakeGst(), "auto", 60, 8000),
+                         "nvh264enc preset=low-latency-hq rc-mode=cbr bitrate=8000 gop-size=60 zerolatency=true bframes=0")
+        self.assertEqual(master_media.video_encoder(FakeGst(), "x264", 60, 8000),
+                         "x264enc speed-preset=ultrafast tune=zerolatency threads=2 bitrate=8000 key-int-max=60")
+
+
 if __name__ == "__main__":
     unittest.main()
