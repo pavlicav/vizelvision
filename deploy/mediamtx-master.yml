@@ -7,7 +7,7 @@ hls: yes
 hlsAddress: 127.0.0.1:18888
 hlsVariant: fmp4
 hlsAlwaysRemux: yes
-hlsSegmentCount: 7
+hlsSegmentCount: 30
 hlsSegmentDuration: 1s
 hlsSegmentMaxSize: 8M
 hlsDirectory: ''

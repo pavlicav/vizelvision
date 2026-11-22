@@ -935,7 +935,8 @@ def handler_factory(
                     self.end_headers()
                     self.wfile.write(body)
                 elif path.startswith("/v1/master/media/"):
-                    body, content_type = master_preview.read(path[len("/v1/master/media/"):], parsed.query)
+                    body, content_type = master_preview.read(path[len("/v1/master/media/"):], parsed.query,
+                                                             client=self.client_address[0])
                     self.send_response(HTTPStatus.OK)
                     self.send_header("Content-Type", content_type)
                     self.send_header("Content-Length", str(len(body)))
